@@ -587,7 +587,11 @@ class RealtouchHRTester:
             ("Payroll Operations", self.test_payroll_operations),
             ("Audit Operations", self.test_audit_operations),
             ("Compliance Operations", self.test_compliance_operations),
-            ("AI Copilot", self.test_ai_copilot)
+            ("AI Copilot", self.test_ai_copilot),
+            ("Notifications", self.test_notifications),
+            ("Bulk Import", self.test_bulk_import),
+            ("Payroll Exports", self.test_payroll_exports),
+            ("Onboarding", self.test_onboarding)
         ]
         
         for test_name, test_func in tests:
