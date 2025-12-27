@@ -812,11 +812,37 @@ async def update_leave_request(leave_id: str, data: dict, user: User = Depends(g
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
+    # Get the leave request first
+    leave = await db.leave_requests.find_one({"leave_id": leave_id, "company_id": user.company_id}, {"_id": 0})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
     update_fields = {}
     if "status" in data:
         update_fields["status"] = data["status"]
         if data["status"] == "approved":
             update_fields["approved_by"] = user.user_id
+            # Send notification to employee
+            await create_notification(
+                user.company_id,
+                leave["employee_id"],
+                "Leave Request Approved",
+                f"Your {leave['leave_type']} leave request from {leave['start_date']} to {leave['end_date']} has been approved.",
+                "leave_approved",
+                "leave",
+                leave_id
+            )
+        elif data["status"] == "rejected":
+            # Send notification to employee
+            await create_notification(
+                user.company_id,
+                leave["employee_id"],
+                "Leave Request Rejected",
+                f"Your {leave['leave_type']} leave request from {leave['start_date']} to {leave['end_date']} has been rejected.",
+                "leave_rejected",
+                "leave",
+                leave_id
+            )
     
     await db.leave_requests.update_one({"leave_id": leave_id, "company_id": user.company_id}, {"$set": update_fields})
     await create_audit_entry(user.company_id, user, "update", "leave", leave_id, update_fields)
