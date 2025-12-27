@@ -447,6 +447,125 @@ class RealtouchHRTester:
             data=copilot_data
         )[0]
 
+    def test_notifications(self):
+        """Test notification operations"""
+        print("\n=== NOTIFICATION TESTS ===")
+        
+        # Get notifications
+        success1 = self.run_test(
+            "Get notifications",
+            "GET",
+            "notifications",
+            200
+        )[0]
+        
+        # Mark all notifications as read
+        success2 = self.run_test(
+            "Mark all notifications read",
+            "PUT",
+            "notifications/read-all",
+            200
+        )[0]
+        
+        return success1 and success2
+
+    def test_bulk_import(self):
+        """Test bulk import functionality"""
+        print("\n=== BULK IMPORT TESTS ===")
+        
+        # Get employee import template
+        success = self.run_test(
+            "Get employee import template",
+            "GET",
+            "employees/import/template",
+            200
+        )[0]
+        
+        return success
+
+    def test_payroll_exports(self):
+        """Test payroll PDF and HMRC exports"""
+        print("\n=== PAYROLL EXPORT TESTS ===")
+        
+        if not hasattr(self, 'payrun_id') or not self.payrun_id:
+            print("⚠️  Skipping export tests - no payrun created")
+            return False
+            
+        if not self.employee_id:
+            print("⚠️  Skipping export tests - no employee created")
+            return False
+        
+        # Test PDF payslip download
+        success1 = self.run_test(
+            "Download payslip PDF",
+            "GET",
+            f"payroll/runs/{self.payrun_id}/payslips/{self.employee_id}/pdf",
+            200
+        )[0]
+        
+        # Test HMRC exports
+        success2 = self.run_test(
+            "Export FPS",
+            "GET",
+            f"payroll/runs/{self.payrun_id}/export/fps",
+            200
+        )[0]
+        
+        success3 = self.run_test(
+            "Export EPS", 
+            "GET",
+            f"payroll/runs/{self.payrun_id}/export/eps",
+            200
+        )[0]
+        
+        success4 = self.run_test(
+            "Export P32",
+            "GET",
+            f"payroll/runs/{self.payrun_id}/export/p32",
+            200
+        )[0]
+        
+        return success1 and success2 and success3 and success4
+
+    def test_onboarding(self):
+        """Test onboarding wizard endpoints"""
+        print("\n=== ONBOARDING TESTS ===")
+        
+        # Get onboarding progress
+        success1 = self.run_test(
+            "Get onboarding progress",
+            "GET",
+            "onboarding/progress",
+            200
+        )[0]
+        
+        # Test quick employee creation
+        employee_data = {
+            "first_name": "Quick",
+            "last_name": "Employee",
+            "email": f"quick.employee.{int(datetime.now().timestamp())}@example.com",
+            "job_title": "Test Role",
+            "salary": 30000
+        }
+        
+        success2 = self.run_test(
+            "Quick employee creation",
+            "POST",
+            "onboarding/quick-employee",
+            200,
+            data=employee_data
+        )[0]
+        
+        # Test quick payrun creation
+        success3 = self.run_test(
+            "Quick payrun creation",
+            "POST",
+            "onboarding/quick-payrun",
+            200
+        )[0]
+        
+        return success1 and success2 and success3
+
     def run_all_tests(self):
         """Run comprehensive test suite"""
         print("🚀 Starting RealtouchHR API Test Suite")
