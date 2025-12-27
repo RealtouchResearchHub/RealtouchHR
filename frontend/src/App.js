@@ -10,6 +10,7 @@ import RegisterPage from './components/pages/RegisterPage';
 import AuthCallback from './components/pages/AuthCallback';
 import Dashboard from './components/pages/Dashboard';
 import EmployeesPage from './components/pages/EmployeesPage';
+import EmployeeDetail from './components/pages/EmployeeDetail';
 import LeavePage from './components/pages/LeavePage';
 import DocumentsPage from './components/pages/DocumentsPage';
 import SchedulingPage from './components/pages/SchedulingPage';
@@ -17,6 +18,8 @@ import PayrollPage from './components/pages/PayrollPage';
 import PayRunDetail from './components/pages/PayRunDetail';
 import AuditPage from './components/pages/AuditPage';
 import SettingsPage from './components/pages/SettingsPage';
+import BulkImportPage from './components/pages/BulkImportPage';
+import OnboardingWizard from './components/pages/OnboardingWizard';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
