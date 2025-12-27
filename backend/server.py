@@ -921,12 +921,15 @@ async def update_leave_request(leave_id: str, data: dict, user: User = Depends(g
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
     
+    # Get employee email for notification
+    employee = await db.employees.find_one({"employee_id": leave["employee_id"]}, {"_id": 0})
+    
     update_fields = {}
     if "status" in data:
         update_fields["status"] = data["status"]
         if data["status"] == "approved":
             update_fields["approved_by"] = user.user_id
-            # Send notification to employee
+            # Send in-app notification
             await create_notification(
                 user.company_id,
                 leave["employee_id"],
@@ -936,8 +939,21 @@ async def update_leave_request(leave_id: str, data: dict, user: User = Depends(g
                 "leave",
                 leave_id
             )
+            # Send email notification
+            if employee and employee.get("email"):
+                await send_email_notification(
+                    employee["email"],
+                    "Leave Request Approved - RealtouchHR",
+                    generate_email_template(
+                        "Your Leave Request Has Been Approved! ✓",
+                        f"Great news! Your {leave['leave_type']} leave request has been approved.<br><br>"
+                        f"<strong>Dates:</strong> {leave['start_date']} to {leave['end_date']}<br>"
+                        f"<strong>Days:</strong> {leave.get('days', 'N/A')}",
+                        None, None
+                    )
+                )
         elif data["status"] == "rejected":
-            # Send notification to employee
+            # Send in-app notification
             await create_notification(
                 user.company_id,
                 leave["employee_id"],
@@ -947,6 +963,19 @@ async def update_leave_request(leave_id: str, data: dict, user: User = Depends(g
                 "leave",
                 leave_id
             )
+            # Send email notification
+            if employee and employee.get("email"):
+                await send_email_notification(
+                    employee["email"],
+                    "Leave Request Update - RealtouchHR",
+                    generate_email_template(
+                        "Leave Request Not Approved",
+                        f"Unfortunately, your {leave['leave_type']} leave request was not approved.<br><br>"
+                        f"<strong>Dates:</strong> {leave['start_date']} to {leave['end_date']}<br><br>"
+                        f"Please contact your manager if you have any questions.",
+                        None, None
+                    )
+                )
     
     await db.leave_requests.update_one({"leave_id": leave_id, "company_id": user.company_id}, {"$set": update_fields})
     await create_audit_entry(user.company_id, user, "update", "leave", leave_id, update_fields)
