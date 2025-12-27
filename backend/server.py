@@ -2138,6 +2138,661 @@ async def quick_create_payrun(user: User = Depends(get_current_user)):
         "message": "Congratulations! You've completed the quick setup. Your first payroll preview is ready!"
     }
 
+# ==================== EMAIL HELPER ====================
+
+async def send_email_notification(to_email: str, subject: str, html_content: str):
+    """Send email notification using Resend"""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not configured, skipping email")
+        return None
+    
+    try:
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content
+        }
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Email sent to {to_email}: {result.get('id')}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return None
+
+def generate_email_template(title: str, body: str, action_url: str = None, action_text: str = None) -> str:
+    """Generate HTML email template"""
+    action_button = ""
+    if action_url and action_text:
+        action_button = f'''
+        <tr>
+            <td style="padding: 20px 0;">
+                <a href="{action_url}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">{action_text}</a>
+            </td>
+        </tr>
+        '''
+    
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <tr>
+                <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 30px; border-radius: 12px 12px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 24px;">RealtouchHR</h1>
+                </td>
+            </tr>
+            <tr>
+                <td style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px;">
+                    <h2 style="color: #1f2937; margin: 0 0 20px 0;">{title}</h2>
+                    <p style="color: #4b5563; line-height: 1.6; margin: 0 0 20px 0;">{body}</p>
+                    {action_button}
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                    <p style="color: #9ca3af; font-size: 12px; margin: 0;">This email was sent by RealtouchHR. If you have questions, please contact your HR administrator.</p>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    '''
+
+# ==================== MULTI-CURRENCY ROUTES ====================
+
+@api_router.get("/currencies", response_model=List[CurrencyInfo])
+async def get_supported_currencies():
+    """Get list of all supported currencies"""
+    return [
+        CurrencyInfo(code=code, **info)
+        for code, info in SUPPORTED_CURRENCIES.items()
+    ]
+
+@api_router.get("/currencies/{currency_code}")
+async def get_currency_info(currency_code: str):
+    """Get info for a specific currency"""
+    code = currency_code.upper()
+    if code not in SUPPORTED_CURRENCIES:
+        raise HTTPException(status_code=404, detail=f"Currency {code} not supported")
+    
+    info = SUPPORTED_CURRENCIES[code]
+    return CurrencyInfo(code=code, **info)
+
+@api_router.post("/currencies/convert", response_model=CurrencyConversion)
+async def convert_currency(from_currency: str, to_currency: str, amount: float):
+    """Convert amount between currencies"""
+    from_code = from_currency.upper()
+    to_code = to_currency.upper()
+    
+    if from_code not in SUPPORTED_CURRENCIES:
+        raise HTTPException(status_code=400, detail=f"Currency {from_code} not supported")
+    if to_code not in SUPPORTED_CURRENCIES:
+        raise HTTPException(status_code=400, detail=f"Currency {to_code} not supported")
+    
+    # Convert via GBP as base
+    gbp_amount = amount * SUPPORTED_CURRENCIES[from_code]["rate_to_gbp"]
+    converted = gbp_amount / SUPPORTED_CURRENCIES[to_code]["rate_to_gbp"]
+    rate = SUPPORTED_CURRENCIES[from_code]["rate_to_gbp"] / SUPPORTED_CURRENCIES[to_code]["rate_to_gbp"]
+    
+    return CurrencyConversion(
+        from_currency=from_code,
+        to_currency=to_code,
+        amount=amount,
+        converted_amount=round(converted, 2),
+        rate=round(rate, 6)
+    )
+
+@api_router.put("/company/currency")
+async def update_company_currency(data: dict, user: User = Depends(get_current_user)):
+    """Update company's default currency"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    currency = data.get("currency", "GBP").upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(status_code=400, detail=f"Currency {currency} not supported")
+    
+    await db.companies.update_one(
+        {"company_id": user.company_id},
+        {"$set": {"default_currency": currency}}
+    )
+    
+    await create_audit_entry(user.company_id, user, "update", "company", user.company_id, {"default_currency": currency})
+    
+    return {"message": f"Default currency updated to {currency}"}
+
+# ==================== PAYROLL HEALTH CHECK ROUTES ====================
+
+@api_router.get("/payroll/health-check/{payrun_id}", response_model=PayrollHealthCheckResult)
+async def run_payroll_health_check(payrun_id: str, user: User = Depends(get_current_user)):
+    """Run comprehensive health check before processing payroll"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    employees = await db.employees.find({"company_id": user.company_id, "status": "active"}, {"_id": 0}).to_list(1000)
+    payslips = await db.payslips.find({"payrun_id": payrun_id}, {"_id": 0}).to_list(1000)
+    
+    issues = []
+    critical_count = 0
+    warning_count = 0
+    
+    for emp in employees:
+        emp_name = f"{emp['first_name']} {emp['last_name']}"
+        emp_id = emp["employee_id"]
+        
+        # Missing Critical Data
+        if not emp.get("ni_number"):
+            issues.append(HealthCheckIssue(
+                severity="critical",
+                category="missing_data",
+                employee_id=emp_id,
+                employee_name=emp_name,
+                title="Missing NI Number",
+                description=f"{emp_name} does not have a National Insurance number on file.",
+                action_required="Add NI number before processing payroll"
+            ))
+            critical_count += 1
+        
+        if not emp.get("tax_code"):
+            issues.append(HealthCheckIssue(
+                severity="warning",
+                category="missing_data",
+                employee_id=emp_id,
+                employee_name=emp_name,
+                title="Missing Tax Code",
+                description=f"{emp_name} does not have a tax code. Default 1257L will be used.",
+                action_required="Verify tax code with HMRC or employee's P45"
+            ))
+            warning_count += 1
+        
+        if not emp.get("bank_account") or not emp.get("bank_sort_code"):
+            issues.append(HealthCheckIssue(
+                severity="critical",
+                category="banking",
+                employee_id=emp_id,
+                employee_name=emp_name,
+                title="Missing Bank Details",
+                description=f"{emp_name} does not have complete bank details for payment.",
+                action_required="Add bank account number and sort code"
+            ))
+            critical_count += 1
+        
+        if not emp.get("salary"):
+            issues.append(HealthCheckIssue(
+                severity="critical",
+                category="missing_data",
+                employee_id=emp_id,
+                employee_name=emp_name,
+                title="No Salary Defined",
+                description=f"{emp_name} does not have a salary configured.",
+                action_required="Set annual salary for employee"
+            ))
+            critical_count += 1
+        
+        # Anomaly Detection
+        if emp.get("salary"):
+            monthly_gross = emp["salary"] / 12
+            
+            # Check for unusually low salary (below minimum wage equivalent)
+            if emp["salary"] < 12000:  # Roughly below min wage for full time
+                issues.append(HealthCheckIssue(
+                    severity="warning",
+                    category="anomaly",
+                    employee_id=emp_id,
+                    employee_name=emp_name,
+                    title="Salary Below Threshold",
+                    description=f"{emp_name}'s annual salary (£{emp['salary']:,.0f}) may be below minimum wage for full-time work.",
+                    action_required="Verify if employee is part-time or salary is correct"
+                ))
+                warning_count += 1
+            
+            # Check for salary changes in historical data (simplified)
+            history = await db.salary_history.find_one({"employee_id": emp_id}, {"_id": 0})
+            if history and history.get("previous_salary"):
+                change_pct = abs(emp["salary"] - history["previous_salary"]) / history["previous_salary"] * 100
+                if change_pct > 20:
+                    issues.append(HealthCheckIssue(
+                        severity="warning",
+                        category="anomaly",
+                        employee_id=emp_id,
+                        employee_name=emp_name,
+                        title="Large Salary Change",
+                        description=f"{emp_name}'s salary changed by {change_pct:.1f}% since last period.",
+                        action_required="Verify salary change is intentional"
+                    ))
+                    warning_count += 1
+    
+    # Compliance Checks
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    if not company.get("paye_reference"):
+        issues.append(HealthCheckIssue(
+            severity="warning",
+            category="compliance",
+            title="Missing PAYE Reference",
+            description="Company does not have a PAYE Employer Reference Number configured.",
+            action_required="Add PAYE reference in Company Settings for HMRC submissions"
+        ))
+        warning_count += 1
+    
+    # Calculate overall status and score
+    if critical_count > 0:
+        overall_status = "fail"
+        score = max(0, 100 - (critical_count * 20) - (warning_count * 5))
+        can_proceed = False
+    elif warning_count > 3:
+        overall_status = "warning"
+        score = max(50, 100 - (warning_count * 10))
+        can_proceed = True
+    elif warning_count > 0:
+        overall_status = "warning"
+        score = 100 - (warning_count * 5)
+        can_proceed = True
+    else:
+        overall_status = "pass"
+        score = 100
+        can_proceed = True
+    
+    return PayrollHealthCheckResult(
+        payrun_id=payrun_id,
+        check_date=datetime.now(timezone.utc).isoformat(),
+        overall_status=overall_status,
+        score=score,
+        issues=issues,
+        can_proceed=can_proceed
+    )
+
+# ==================== HMRC RTI ROUTES ====================
+
+@api_router.post("/hmrc/rti/submit")
+async def submit_rti(data: RTISubmissionRequest, user: User = Depends(get_current_user)):
+    """Submit RTI data to HMRC (test mode or live)"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    pay_run = await db.pay_runs.find_one({"payrun_id": data.payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    # Run health check first
+    health_check = await run_payroll_health_check(data.payrun_id, user)
+    if not health_check.can_proceed and not data.test_mode:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Payroll health check failed with {len([i for i in health_check.issues if i.severity == 'critical'])} critical issues. Please resolve before submission."
+        )
+    
+    submission_id = f"rti_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Get company and employee data for submission
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    payslips = await db.payslips.find({"payrun_id": data.payrun_id}, {"_id": 0}).to_list(1000)
+    employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
+    emp_map = {e["employee_id"]: e for e in employees}
+    
+    # Build RTI XML/Data structure (simplified for demo)
+    rti_data = {
+        "employer": {
+            "paye_reference": company.get("paye_reference", ""),
+            "accounts_office_reference": company.get("accounts_office_ref", ""),
+            "name": company.get("name", "")
+        },
+        "tax_year": "2024-25",
+        "submission_type": data.submission_type,
+        "employees": []
+    }
+    
+    for payslip in payslips:
+        emp = emp_map.get(payslip["employee_id"], {})
+        rti_data["employees"].append({
+            "ni_number": emp.get("ni_number", ""),
+            "first_name": emp.get("first_name", ""),
+            "last_name": emp.get("last_name", ""),
+            "tax_code": emp.get("tax_code", "1257L"),
+            "gross_pay": payslip.get("gross_pay", 0),
+            "tax_deducted": payslip.get("tax_deduction", 0),
+            "ni_contributions": payslip.get("ni_deduction", 0),
+            "payment_date": pay_run.get("pay_date", "")
+        })
+    
+    # In test mode, simulate HMRC response
+    if data.test_mode:
+        hmrc_response = {
+            "status": "accepted",
+            "correlation_id": f"TEST-{uuid.uuid4().hex[:8]}",
+            "message": "Test submission accepted",
+            "timestamp": now.isoformat()
+        }
+        status = "accepted"
+    else:
+        # In production, this would call HMRC's Government Gateway API
+        # For now, we simulate the submission
+        hmrc_response = {
+            "status": "pending",
+            "correlation_id": f"HMRC-{uuid.uuid4().hex[:12]}",
+            "message": "Submission received - awaiting HMRC processing",
+            "timestamp": now.isoformat(),
+            "note": "HMRC RTI API integration requires Government Gateway credentials"
+        }
+        status = "submitted"
+    
+    # Store submission record
+    submission_doc = {
+        "submission_id": submission_id,
+        "company_id": user.company_id,
+        "payrun_id": data.payrun_id,
+        "submission_type": data.submission_type,
+        "status": status,
+        "test_mode": data.test_mode,
+        "rti_data": rti_data,
+        "hmrc_response": hmrc_response,
+        "correlation_id": hmrc_response.get("correlation_id"),
+        "submitted_at": now.isoformat(),
+        "created_at": now.isoformat()
+    }
+    await db.rti_submissions.insert_one(submission_doc)
+    
+    # Update pay run status
+    if not data.test_mode:
+        await db.pay_runs.update_one(
+            {"payrun_id": data.payrun_id},
+            {"$set": {"rti_status": status, "rti_submission_id": submission_id}}
+        )
+    
+    await create_audit_entry(
+        user.company_id, user, "submit", "rti", submission_id,
+        {"type": data.submission_type, "test_mode": data.test_mode, "payrun": data.payrun_id}
+    )
+    
+    return {
+        "submission_id": submission_id,
+        "status": status,
+        "hmrc_response": hmrc_response,
+        "message": f"RTI {data.submission_type} {'test ' if data.test_mode else ''}submission {'accepted' if data.test_mode else 'sent to HMRC'}"
+    }
+
+@api_router.get("/hmrc/rti/submissions")
+async def get_rti_submissions(user: User = Depends(get_current_user)):
+    """Get all RTI submissions for the company"""
+    if not user.company_id:
+        return []
+    
+    submissions = await db.rti_submissions.find(
+        {"company_id": user.company_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return submissions
+
+@api_router.get("/hmrc/rti/submissions/{submission_id}")
+async def get_rti_submission(submission_id: str, user: User = Depends(get_current_user)):
+    """Get details of a specific RTI submission"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    submission = await db.rti_submissions.find_one(
+        {"submission_id": submission_id, "company_id": user.company_id},
+        {"_id": 0}
+    )
+    
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    return submission
+
+# ==================== EMPLOYEE SELF-SERVICE ROUTES ====================
+
+@api_router.get("/self-service/profile", response_model=SelfServiceProfile)
+async def get_self_service_profile(user: User = Depends(get_current_user)):
+    """Get employee's own profile for self-service"""
+    # Find employee record linked to this user
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        # Create a basic profile from user data
+        return SelfServiceProfile(
+            employee_id=user.user_id,
+            first_name=user.name.split()[0] if user.name else "",
+            last_name=" ".join(user.name.split()[1:]) if user.name and len(user.name.split()) > 1 else "",
+            email=user.email,
+            can_edit_personal=True,
+            can_view_payslips=True,
+            can_request_leave=True
+        )
+    
+    return SelfServiceProfile(
+        employee_id=employee["employee_id"],
+        first_name=employee["first_name"],
+        last_name=employee["last_name"],
+        email=employee["email"],
+        job_title=employee.get("job_title"),
+        department=employee.get("department"),
+        start_date=employee.get("start_date"),
+        can_edit_personal=True,
+        can_view_payslips=True,
+        can_request_leave=True
+    )
+
+@api_router.put("/self-service/profile")
+async def update_self_service_profile(data: dict, user: User = Depends(get_current_user)):
+    """Update employee's own profile (limited fields)"""
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee profile not found")
+    
+    # Only allow updating specific fields
+    allowed_fields = ["phone", "address", "emergency_contact", "emergency_phone"]
+    update_fields = {k: v for k, v in data.items() if k in allowed_fields}
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.employees.update_one(
+        {"employee_id": employee["employee_id"]},
+        {"$set": update_fields}
+    )
+    
+    return {"message": "Profile updated successfully"}
+
+@api_router.get("/self-service/payslips", response_model=List[SelfServicePayslip])
+async def get_self_service_payslips(user: User = Depends(get_current_user)):
+    """Get employee's own payslips"""
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        return []
+    
+    # Get all payslips for this employee
+    payslips = await db.payslips.find(
+        {"employee_id": employee["employee_id"]},
+        {"_id": 0}
+    ).to_list(100)
+    
+    result = []
+    for payslip in payslips:
+        # Get pay run info
+        pay_run = await db.pay_runs.find_one({"payrun_id": payslip["payrun_id"]}, {"_id": 0})
+        if pay_run:
+            result.append(SelfServicePayslip(
+                payrun_id=payslip["payrun_id"],
+                period_start=pay_run.get("period_start", ""),
+                period_end=pay_run.get("period_end", ""),
+                pay_date=pay_run.get("pay_date", ""),
+                gross_pay=payslip.get("gross_pay", 0),
+                net_pay=payslip.get("net_pay", 0),
+                status=pay_run.get("status", "")
+            ))
+    
+    return sorted(result, key=lambda x: x.pay_date, reverse=True)
+
+@api_router.get("/self-service/payslips/{payrun_id}/pdf")
+async def download_self_service_payslip(payrun_id: str, user: User = Depends(get_current_user)):
+    """Download own payslip as PDF"""
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Get payslip
+    payslip = await db.payslips.find_one(
+        {"payrun_id": payrun_id, "employee_id": employee["employee_id"]},
+        {"_id": 0}
+    )
+    
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Get pay run and company
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id}, {"_id": 0})
+    company = await db.companies.find_one({"company_id": pay_run.get("company_id")}, {"_id": 0})
+    
+    # Generate PDF
+    pdf_bytes = generate_payslip_pdf(payslip, company or {}, pay_run)
+    
+    filename = f"payslip_{pay_run.get('period_end', 'download')}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/self-service/leave")
+async def get_self_service_leave(user: User = Depends(get_current_user)):
+    """Get employee's own leave requests and balance"""
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        return {"requests": [], "balance": {"annual": 25, "used": 0, "remaining": 25}}
+    
+    # Get leave requests
+    leaves = await db.leave_requests.find(
+        {"employee_id": employee["employee_id"]},
+        {"_id": 0}
+    ).to_list(100)
+    
+    for leave in leaves:
+        if isinstance(leave.get("created_at"), str):
+            leave["created_at"] = datetime.fromisoformat(leave["created_at"])
+    
+    # Calculate leave balance
+    approved_leaves = [l for l in leaves if l.get("status") == "approved"]
+    used_days = sum(l.get("days", 0) for l in approved_leaves)
+    annual_allowance = 25  # Default UK statutory
+    
+    return {
+        "requests": leaves,
+        "balance": {
+            "annual": annual_allowance,
+            "used": used_days,
+            "remaining": annual_allowance - used_days
+        }
+    }
+
+@api_router.post("/self-service/leave")
+async def create_self_service_leave(data: LeaveRequestCreate, user: User = Depends(get_current_user)):
+    """Create leave request as employee"""
+    employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
+    
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    leave_id = f"leave_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Calculate days
+    start = datetime.fromisoformat(data.start_date)
+    end = datetime.fromisoformat(data.end_date)
+    days = (end - start).days + 1
+    
+    leave_doc = {
+        "leave_id": leave_id,
+        "employee_id": employee["employee_id"],
+        "company_id": employee["company_id"],
+        "leave_type": data.leave_type,
+        "start_date": data.start_date,
+        "end_date": data.end_date,
+        "days": days,
+        "reason": data.reason,
+        "status": "pending",
+        "created_at": now.isoformat()
+    }
+    await db.leave_requests.insert_one(leave_doc)
+    
+    # Send email notification to approvers
+    company = await db.companies.find_one({"company_id": employee["company_id"]}, {"_id": 0})
+    owner = await db.users.find_one({"user_id": company.get("owner_id")}, {"_id": 0})
+    
+    if owner and owner.get("email"):
+        email_body = f"{employee['first_name']} {employee['last_name']} has requested {data.leave_type} leave from {data.start_date} to {data.end_date} ({days} days)."
+        if data.reason:
+            email_body += f"<br><br>Reason: {data.reason}"
+        
+        await send_email_notification(
+            owner["email"],
+            f"Leave Request: {employee['first_name']} {employee['last_name']}",
+            generate_email_template(
+                "New Leave Request",
+                email_body,
+                None,
+                None
+            )
+        )
+    
+    return {"leave_id": leave_id, "message": "Leave request submitted"}
+
+# ==================== EMAIL NOTIFICATION ROUTES ====================
+
+@api_router.post("/email/test")
+async def send_test_email(email: str, user: User = Depends(get_current_user)):
+    """Send a test email"""
+    result = await send_email_notification(
+        email,
+        "RealtouchHR Test Email",
+        generate_email_template(
+            "Test Email Successful!",
+            "This is a test email from RealtouchHR. If you received this, your email notifications are configured correctly.",
+            None,
+            None
+        )
+    )
+    
+    if result:
+        return {"message": "Test email sent successfully", "email_id": result.get("id")}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send email. Check RESEND_API_KEY configuration.")
+
+@api_router.put("/company/email-settings")
+async def update_email_settings(data: dict, user: User = Depends(get_current_user)):
+    """Update company email notification settings"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    settings = {
+        "email_notifications": {
+            "leave_requests": data.get("leave_requests", True),
+            "leave_approvals": data.get("leave_approvals", True),
+            "payroll_ready": data.get("payroll_ready", True),
+            "payslip_available": data.get("payslip_available", True)
+        }
+    }
+    
+    await db.companies.update_one(
+        {"company_id": user.company_id},
+        {"$set": settings}
+    )
+    
+    return {"message": "Email settings updated"}
+
 # Include the router
 app.include_router(api_router)
 
