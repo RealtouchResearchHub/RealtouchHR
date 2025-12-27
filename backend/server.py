@@ -341,6 +341,78 @@ class OnboardingProgress(BaseModel):
     first_payrun_created: bool = False
     completed: bool = False
 
+# HMRC RTI Models
+class RTISubmission(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    submission_id: str
+    company_id: str
+    payrun_id: str
+    submission_type: str  # FPS, EPS, EYU, NVR
+    status: str  # draft, submitted, accepted, rejected
+    hmrc_response: Optional[Dict[str, Any]] = None
+    correlation_id: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    created_at: datetime
+
+class RTISubmissionRequest(BaseModel):
+    payrun_id: str
+    submission_type: str = "FPS"
+    test_mode: bool = True
+
+# Payroll Health Check Models
+class HealthCheckIssue(BaseModel):
+    severity: str  # critical, warning, info
+    category: str  # missing_data, anomaly, compliance, banking
+    employee_id: Optional[str] = None
+    employee_name: Optional[str] = None
+    title: str
+    description: str
+    action_required: str
+
+class PayrollHealthCheckResult(BaseModel):
+    payrun_id: str
+    check_date: str
+    overall_status: str  # pass, warning, fail
+    score: int
+    issues: List[HealthCheckIssue]
+    can_proceed: bool
+
+# Multi-Currency Models
+class CurrencyInfo(BaseModel):
+    code: str
+    symbol: str
+    name: str
+    rate_to_gbp: float
+
+class CurrencyConversion(BaseModel):
+    from_currency: str
+    to_currency: str
+    amount: float
+    converted_amount: float
+    rate: float
+
+# Employee Self-Service Models
+class SelfServiceProfile(BaseModel):
+    employee_id: str
+    first_name: str
+    last_name: str
+    email: str
+    job_title: Optional[str] = None
+    department: Optional[str] = None
+    start_date: Optional[str] = None
+    can_edit_personal: bool = True
+    can_view_payslips: bool = True
+    can_request_leave: bool = True
+
+class SelfServicePayslip(BaseModel):
+    payrun_id: str
+    period_start: str
+    period_end: str
+    pay_date: str
+    gross_pay: float
+    net_pay: float
+    status: str
+
 # ==================== AUTH HELPERS ====================
 
 def create_jwt_token(user_id: str, email: str) -> str:
