@@ -15,6 +15,8 @@ import bcrypt
 import httpx
 import io
 import csv
+import asyncio
+import resend
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -35,8 +37,38 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-change-in-production')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DAYS = 7
 
+# Resend Email Configuration
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
+# Currency Configuration - ISO 4217 codes with symbols and exchange rates
+SUPPORTED_CURRENCIES = {
+    "GBP": {"symbol": "£", "name": "British Pound", "rate_to_gbp": 1.0},
+    "USD": {"symbol": "$", "name": "US Dollar", "rate_to_gbp": 0.79},
+    "EUR": {"symbol": "€", "name": "Euro", "rate_to_gbp": 0.85},
+    "CAD": {"symbol": "C$", "name": "Canadian Dollar", "rate_to_gbp": 0.58},
+    "AUD": {"symbol": "A$", "name": "Australian Dollar", "rate_to_gbp": 0.52},
+    "JPY": {"symbol": "¥", "name": "Japanese Yen", "rate_to_gbp": 0.0053},
+    "CHF": {"symbol": "Fr", "name": "Swiss Franc", "rate_to_gbp": 0.89},
+    "INR": {"symbol": "₹", "name": "Indian Rupee", "rate_to_gbp": 0.0094},
+    "SGD": {"symbol": "S$", "name": "Singapore Dollar", "rate_to_gbp": 0.59},
+    "AED": {"symbol": "د.إ", "name": "UAE Dirham", "rate_to_gbp": 0.22},
+    "HKD": {"symbol": "HK$", "name": "Hong Kong Dollar", "rate_to_gbp": 0.10},
+    "NZD": {"symbol": "NZ$", "name": "New Zealand Dollar", "rate_to_gbp": 0.48},
+    "ZAR": {"symbol": "R", "name": "South African Rand", "rate_to_gbp": 0.043},
+    "SEK": {"symbol": "kr", "name": "Swedish Krona", "rate_to_gbp": 0.074},
+    "NOK": {"symbol": "kr", "name": "Norwegian Krone", "rate_to_gbp": 0.071},
+    "DKK": {"symbol": "kr", "name": "Danish Krone", "rate_to_gbp": 0.11},
+    "PLN": {"symbol": "zł", "name": "Polish Zloty", "rate_to_gbp": 0.20},
+    "MXN": {"symbol": "$", "name": "Mexican Peso", "rate_to_gbp": 0.039},
+    "BRL": {"symbol": "R$", "name": "Brazilian Real", "rate_to_gbp": 0.13},
+    "CNY": {"symbol": "¥", "name": "Chinese Yuan", "rate_to_gbp": 0.11},
+}
+
 # Create the main app
-app = FastAPI(title="RealtouchHR API", version="1.0.0")
+app = FastAPI(title="RealtouchHR API", version="2.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
