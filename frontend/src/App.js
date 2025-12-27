@@ -27,7 +27,7 @@ import MainLayout from './components/layout/MainLayout';
 import './App.css';
 
 // Protected Route Component
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, showLayout = true }) {
     const { user, loading } = useAuth();
     const location = useLocation();
 
@@ -41,6 +41,10 @@ function ProtectedRoute({ children }) {
 
     if (!user) {
         return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (!showLayout) {
+        return children;
     }
 
     return <MainLayout>{children}</MainLayout>;
