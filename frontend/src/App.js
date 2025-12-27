@@ -1,54 +1,113 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { Toaster } from './components/ui/sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Pages
+import LoginPage from './components/pages/LoginPage';
+import RegisterPage from './components/pages/RegisterPage';
+import AuthCallback from './components/pages/AuthCallback';
+import Dashboard from './components/pages/Dashboard';
+import EmployeesPage from './components/pages/EmployeesPage';
+import LeavePage from './components/pages/LeavePage';
+import DocumentsPage from './components/pages/DocumentsPage';
+import SchedulingPage from './components/pages/SchedulingPage';
+import PayrollPage from './components/pages/PayrollPage';
+import PayRunDetail from './components/pages/PayRunDetail';
+import AuditPage from './components/pages/AuditPage';
+import SettingsPage from './components/pages/SettingsPage';
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
+// Layout
+import MainLayout from './components/layout/MainLayout';
+
+import './App.css';
+
+// Protected Route Component
+function ProtectedRoute({ children }) {
+    const { user, loading } = useAuth();
+    const location = useLocation();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
     }
-  };
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
 
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+    return <MainLayout>{children}</MainLayout>;
+}
+
+// Public Route - redirects to dashboard if authenticated
+function PublicRoute({ children }) {
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (user) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return children;
+}
+
+// App Router with session_id detection
+function AppRouter() {
+    const location = useLocation();
+
+    // Check URL fragment (not query params) for session_id - synchronous check
+    if (location.hash?.includes('session_id=')) {
+        return <AuthCallback />;
+    }
+
+    return (
+        <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+            
+            {/* Protected Routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+            <Route path="/employees/:id" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+            <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
+            <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+            <Route path="/scheduling" element={<ProtectedRoute><SchedulingPage /></ProtectedRoute>} />
+            <Route path="/payroll" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
+            <Route path="/payroll/new" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
+            <Route path="/payroll/:id" element={<ProtectedRoute><PayRunDetail /></ProtectedRoute>} />
+            <Route path="/audit" element={<ProtectedRoute><AuditPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            
+            {/* Default redirect */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+    );
+}
 
 function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
-  );
+    return (
+        <ThemeProvider>
+            <AuthProvider>
+                <BrowserRouter>
+                    <AppRouter />
+                    <Toaster position="top-right" richColors />
+                </BrowserRouter>
+            </AuthProvider>
+        </ThemeProvider>
+    );
 }
 
 export default App;
