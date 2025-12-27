@@ -309,14 +309,36 @@ export default function PayRunDetail() {
                 </CardContent>
             </Card>
 
+            {/* HMRC Exports */}
+            <Card data-testid="hmrc-exports">
+                <CardHeader>
+                    <CardTitle>HMRC Export Pack</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground mb-4">
+                        Download HMRC-ready reports. Note: These are CSV exports for review. RTI submission integration coming in Stage 2.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                        <Button variant="outline" onClick={handleExportFPS} data-testid="export-fps-btn">
+                            <Download className="w-4 h-4 mr-2" />
+                            FPS (Full Payment Submission)
+                        </Button>
+                        <Button variant="outline" onClick={handleExportEPS} data-testid="export-eps-btn">
+                            <Download className="w-4 h-4 mr-2" />
+                            EPS (Employer Payment Summary)
+                        </Button>
+                        <Button variant="outline" onClick={handleExportP32} data-testid="export-p32-btn">
+                            <Download className="w-4 h-4 mr-2" />
+                            P32 Report
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Payslips Table */}
             <Card data-testid="payslips-table">
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Payslips Preview</CardTitle>
-                    <Button variant="outline" size="sm" data-testid="export-payslips-btn">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export CSV
-                    </Button>
                 </CardHeader>
                 <CardContent>
                     {payslips.length === 0 ? (
