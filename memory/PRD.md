@@ -30,9 +30,9 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - AI Copilot with human-in-the-loop
 - Light/dark mode with user preference
 
-## What's Been Implemented (December 27, 2025)
+## What's Been Implemented
 
-### Stage 1 MVP - Complete
+### Stage 1 MVP - Complete (December 27, 2025)
 - ✅ Authentication (JWT + Google OAuth via Emergent)
 - ✅ Dashboard with Compliance Score and Next Best Action
 - ✅ Employee Management (CRUD, compliance scoring)
@@ -44,52 +44,83 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - ✅ Settings (company, compliance tasks, theme)
 - ✅ AI Copilot sidebar (GPT-4o integration)
 - ✅ Light/Dark mode toggle
-- ✅ UK payroll calculations (PAYE, NI, pension)
+
+### Phase 2 Features - Complete (December 27, 2025)
+- ✅ Employee Detail Page with edit functionality
+- ✅ CSV Bulk Import (employees and timesheets)
+- ✅ PDF Payslip Generation (individual downloads)
+- ✅ HMRC Export Pack (FPS, EPS, P32 CSV exports)
+- ✅ Leave Approval Notifications
+- ✅ In-app Notifications System
+- ✅ Time-to-First-Payroll Onboarding Wizard
 
 ### Backend APIs
 - /api/auth/* - Authentication routes
 - /api/company - Company management
 - /api/employees - Employee CRUD
+- /api/employees/import - CSV bulk import
+- /api/employees/import/template - Download CSV template
 - /api/leave - Leave management
 - /api/documents - Document management
 - /api/shifts - Shift/rota management
 - /api/timesheets - Timesheet management
+- /api/timesheets/import - CSV bulk import
 - /api/payroll/runs - Payroll runs
+- /api/payroll/runs/:id/payslips/:empId/pdf - PDF payslip download
+- /api/payroll/runs/:id/export/fps - FPS export
+- /api/payroll/runs/:id/export/eps - EPS export
+- /api/payroll/runs/:id/export/p32 - P32 report
 - /api/audit - Audit log
 - /api/compliance/* - Compliance tasks and score
 - /api/copilot/chat - AI Copilot
+- /api/notifications - Notifications
+- /api/onboarding/* - Onboarding wizard
+
+### Frontend Pages
+- /login, /register - Authentication
+- /onboarding - Onboarding wizard
+- /dashboard - Main dashboard
+- /employees - Employee list
+- /employees/:id - Employee detail & edit
+- /leave - Leave management
+- /documents - Documents
+- /scheduling - Shifts & rotas
+- /payroll - Payroll hub
+- /payroll/:id - Pay run detail with exports
+- /import - Bulk import
+- /audit - Audit log
+- /settings - Settings
 
 ### Tech Stack
-- Backend: FastAPI + MongoDB (motor async)
+- Backend: FastAPI + MongoDB (motor async) + reportlab (PDF)
 - Frontend: React + Shadcn UI + Tailwind CSS
 - Auth: JWT + Emergent Google OAuth
 - AI: OpenAI GPT-4o (via Emergent LLM key)
 
 ## Prioritized Backlog
 
-### P0 - Critical (Stage 2)
-- [ ] HMRC RTI submission integration
-- [ ] Full employee self-service portal
-- [ ] Bulk employee import from CSV
-- [ ] Pay element configuration (allowances, deductions)
+### P0 - Critical (Stage 2 - HMRC Integration)
+- [ ] HMRC RTI API submission (FPS/EPS)
+- [ ] Real-time validation against HMRC rules
+- [ ] Tax code verification
 
 ### P1 - High Priority
+- [ ] Full employee self-service portal
 - [ ] Multi-entity/company support
 - [ ] SCIM/SAML SSO integration
 - [ ] Advanced RBAC with custom roles
-- [ ] Overtime rules engine
 - [ ] Working time directive checks
 
 ### P2 - Medium Priority
-- [ ] Mobile responsive improvements
-- [ ] Email notifications
-- [ ] PDF payslip generation
-- [ ] Evidence locker exports
+- [ ] Mobile responsive optimizations
+- [ ] Email notifications (SendGrid/Resend)
 - [ ] Holiday calendar integration
+- [ ] Pension auto-enrollment workflow
+- [ ] Student loan deductions
 
 ## Next Tasks
-1. Implement employee profile detail view
-2. Add bulk payroll import from CSV
-3. Implement PDF payslip generation
-4. Add email notifications for approvals
-5. HMRC export pack generation
+1. HMRC RTI API integration for live submission
+2. Email notifications via SendGrid
+3. Employee self-service dashboard
+4. Multi-currency support
+5. Advanced reporting & analytics
