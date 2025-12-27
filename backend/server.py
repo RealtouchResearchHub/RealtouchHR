@@ -278,6 +278,37 @@ class CopilotResponse(BaseModel):
     suggestions: List[str] = []
     requires_approval: bool = False
 
+# Bulk Import Models
+class BulkImportResult(BaseModel):
+    success_count: int
+    error_count: int
+    errors: List[str] = []
+    imported_ids: List[str] = []
+
+# Notification Models
+class Notification(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    notification_id: str
+    company_id: str
+    user_id: str
+    title: str
+    message: str
+    notification_type: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    read: bool = False
+    created_at: datetime
+
+# Onboarding Wizard Models
+class OnboardingProgress(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    company_id: str
+    step: int
+    completed_steps: List[str] = []
+    first_employee_added: bool = False
+    first_payrun_created: bool = False
+    completed: bool = False
+
 # ==================== AUTH HELPERS ====================
 
 def create_jwt_token(user_id: str, email: str) -> str:
