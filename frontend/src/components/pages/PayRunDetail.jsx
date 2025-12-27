@@ -81,6 +81,86 @@ export default function PayRunDetail() {
         }
     };
 
+    const handleDownloadPayslip = async (employeeId) => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/api/payroll/runs/${id}/payslips/${employeeId}/pdf`,
+                { withCredentials: true, responseType: 'blob' }
+            );
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `payslip_${employeeId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('Payslip downloaded');
+        } catch (error) {
+            toast.error('Failed to download payslip');
+        }
+    };
+
+    const handleExportFPS = async () => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/api/payroll/runs/${id}/export/fps`,
+                { withCredentials: true, responseType: 'blob' }
+            );
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `fps_export_${payRun.period_end}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('FPS export downloaded');
+        } catch (error) {
+            toast.error('Failed to export FPS');
+        }
+    };
+
+    const handleExportEPS = async () => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/api/payroll/runs/${id}/export/eps`,
+                { withCredentials: true, responseType: 'blob' }
+            );
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `eps_export_${payRun.period_end}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('EPS export downloaded');
+        } catch (error) {
+            toast.error('Failed to export EPS');
+        }
+    };
+
+    const handleExportP32 = async () => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/api/payroll/runs/${id}/export/p32`,
+                { withCredentials: true, responseType: 'blob' }
+            );
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `p32_report_${payRun.period_end}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('P32 report downloaded');
+        } catch (error) {
+            toast.error('Failed to export P32');
+        }
+    };
+
     const getStepIndex = (status) => {
         return payrollSteps.findIndex(s => s.id === status);
     };
