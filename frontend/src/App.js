@@ -80,10 +80,14 @@ function AppRouter() {
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
             
+            {/* Onboarding Wizard - accessible after login */}
+            <Route path="/onboarding" element={<ProtectedRoute showLayout={false}><OnboardingWizard /></ProtectedRoute>} />
+            
             {/* Protected Routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
-            <Route path="/employees/:id" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+            <Route path="/employees/new" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+            <Route path="/employees/:id" element={<ProtectedRoute><EmployeeDetail /></ProtectedRoute>} />
             <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
             <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
             <Route path="/scheduling" element={<ProtectedRoute><SchedulingPage /></ProtectedRoute>} />
@@ -92,6 +96,7 @@ function AppRouter() {
             <Route path="/payroll/:id" element={<ProtectedRoute><PayRunDetail /></ProtectedRoute>} />
             <Route path="/audit" element={<ProtectedRoute><AuditPage /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/import" element={<ProtectedRoute><BulkImportPage /></ProtectedRoute>} />
             
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />
