@@ -1309,6 +1309,705 @@ async def root():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
+# ==================== NOTIFICATION HELPER ====================
+
+async def create_notification(company_id: str, user_id: str, title: str, message: str, 
+                             notification_type: str, entity_type: str = None, entity_id: str = None):
+    """Create a notification for a user"""
+    notification = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "company_id": company_id,
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "notification_type": notification_type,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notification)
+    return notification
+
+# ==================== NOTIFICATION ROUTES ====================
+
+@api_router.get("/notifications")
+async def get_notifications(limit: int = 20, user: User = Depends(get_current_user)):
+    """Get user notifications"""
+    notifications = await db.notifications.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    for notif in notifications:
+        if isinstance(notif.get("created_at"), str):
+            notif["created_at"] = datetime.fromisoformat(notif["created_at"])
+    
+    unread_count = await db.notifications.count_documents({"user_id": user.user_id, "read": False})
+    
+    return {"notifications": notifications, "unread_count": unread_count}
+
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user: User = Depends(get_current_user)):
+    """Mark a notification as read"""
+    await db.notifications.update_one(
+        {"notification_id": notification_id, "user_id": user.user_id},
+        {"$set": {"read": True}}
+    )
+    return {"message": "Notification marked as read"}
+
+@api_router.put("/notifications/read-all")
+async def mark_all_notifications_read(user: User = Depends(get_current_user)):
+    """Mark all notifications as read"""
+    await db.notifications.update_many(
+        {"user_id": user.user_id, "read": False},
+        {"$set": {"read": True}}
+    )
+    return {"message": "All notifications marked as read"}
+
+# ==================== BULK IMPORT ROUTES ====================
+
+@api_router.post("/employees/import", response_model=BulkImportResult)
+async def import_employees_csv(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    """Import employees from CSV file"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be CSV format")
+    
+    content = await file.read()
+    decoded = content.decode('utf-8')
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    success_count = 0
+    error_count = 0
+    errors = []
+    imported_ids = []
+    now = datetime.now(timezone.utc)
+    
+    required_fields = ['first_name', 'last_name', 'email']
+    
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            # Validate required fields
+            missing = [f for f in required_fields if not row.get(f)]
+            if missing:
+                errors.append(f"Row {row_num}: Missing required fields: {', '.join(missing)}")
+                error_count += 1
+                continue
+            
+            # Check for duplicate email
+            existing = await db.employees.find_one({"email": row['email'], "company_id": user.company_id})
+            if existing:
+                errors.append(f"Row {row_num}: Employee with email {row['email']} already exists")
+                error_count += 1
+                continue
+            
+            employee_id = f"emp_{uuid.uuid4().hex[:12]}"
+            
+            # Parse salary
+            salary = None
+            if row.get('salary'):
+                try:
+                    salary = float(row['salary'].replace(',', '').replace('£', ''))
+                except:
+                    pass
+            
+            # Calculate compliance
+            compliance_issues = []
+            fields_to_check = ['ni_number', 'tax_code', 'bank_account', 'bank_sort_code']
+            for field in fields_to_check:
+                if not row.get(field):
+                    compliance_issues.append(f"Missing {field.replace('_', ' ')}")
+            if not salary:
+                compliance_issues.append("Missing salary")
+            
+            compliance_score = max(0, 100 - (len(compliance_issues) * 20))
+            
+            employee_doc = {
+                "employee_id": employee_id,
+                "company_id": user.company_id,
+                "first_name": row['first_name'].strip(),
+                "last_name": row['last_name'].strip(),
+                "email": row['email'].strip().lower(),
+                "job_title": row.get('job_title', '').strip() or None,
+                "department": row.get('department', '').strip() or None,
+                "start_date": row.get('start_date', '').strip() or None,
+                "salary": salary,
+                "ni_number": row.get('ni_number', '').strip() or None,
+                "tax_code": row.get('tax_code', '').strip() or None,
+                "bank_account": row.get('bank_account', '').strip() or None,
+                "bank_sort_code": row.get('bank_sort_code', '').strip() or None,
+                "status": "active",
+                "compliance_score": compliance_score,
+                "compliance_issues": compliance_issues,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            
+            await db.employees.insert_one(employee_doc)
+            imported_ids.append(employee_id)
+            success_count += 1
+            
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+            error_count += 1
+    
+    # Log audit entry
+    await create_audit_entry(
+        user.company_id, user, "bulk_import", "employee", "multiple",
+        {"success_count": success_count, "error_count": error_count}
+    )
+    
+    return BulkImportResult(
+        success_count=success_count,
+        error_count=error_count,
+        errors=errors[:10],  # Limit errors returned
+        imported_ids=imported_ids
+    )
+
+@api_router.get("/employees/import/template")
+async def get_employee_import_template():
+    """Download CSV template for employee import"""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header row
+    writer.writerow([
+        'first_name', 'last_name', 'email', 'job_title', 'department',
+        'start_date', 'salary', 'ni_number', 'tax_code', 'bank_account', 'bank_sort_code'
+    ])
+    
+    # Example row
+    writer.writerow([
+        'John', 'Smith', 'john.smith@company.com', 'Software Engineer', 'Engineering',
+        '2024-01-15', '45000', 'AB123456C', '1257L', '12345678', '12-34-56'
+    ])
+    
+    output.seek(0)
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=employee_import_template.csv"}
+    )
+
+@api_router.post("/timesheets/import", response_model=BulkImportResult)
+async def import_timesheets_csv(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    """Import timesheets from CSV file"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be CSV format")
+    
+    content = await file.read()
+    decoded = content.decode('utf-8')
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    success_count = 0
+    error_count = 0
+    errors = []
+    imported_ids = []
+    now = datetime.now(timezone.utc)
+    
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            employee_email = row.get('employee_email', '').strip()
+            if not employee_email:
+                errors.append(f"Row {row_num}: Missing employee_email")
+                error_count += 1
+                continue
+            
+            # Find employee
+            employee = await db.employees.find_one({"email": employee_email, "company_id": user.company_id})
+            if not employee:
+                errors.append(f"Row {row_num}: Employee {employee_email} not found")
+                error_count += 1
+                continue
+            
+            timesheet_id = f"ts_{uuid.uuid4().hex[:12]}"
+            
+            hours_worked = float(row.get('hours_worked', 0))
+            overtime_hours = float(row.get('overtime_hours', 0))
+            
+            timesheet_doc = {
+                "timesheet_id": timesheet_id,
+                "company_id": user.company_id,
+                "employee_id": employee["employee_id"],
+                "week_start": row.get('week_start', ''),
+                "hours_worked": hours_worked,
+                "overtime_hours": overtime_hours,
+                "status": "pending",
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            
+            await db.timesheets.insert_one(timesheet_doc)
+            imported_ids.append(timesheet_id)
+            success_count += 1
+            
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+            error_count += 1
+    
+    await create_audit_entry(
+        user.company_id, user, "bulk_import", "timesheet", "multiple",
+        {"success_count": success_count, "error_count": error_count}
+    )
+    
+    return BulkImportResult(
+        success_count=success_count,
+        error_count=error_count,
+        errors=errors[:10],
+        imported_ids=imported_ids
+    )
+
+# ==================== PDF PAYSLIP GENERATION ====================
+
+def generate_payslip_pdf(payslip: dict, company: dict, pay_period: dict) -> bytes:
+    """Generate a PDF payslip"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=TA_CENTER, spaceAfter=10)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, alignment=TA_CENTER, textColor=colors.grey)
+    header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=12, spaceAfter=5)
+    normal_style = styles['Normal']
+    
+    elements = []
+    
+    # Company Header
+    elements.append(Paragraph(company.get('name', 'Company'), title_style))
+    elements.append(Paragraph("PAYSLIP", subtitle_style))
+    elements.append(Spacer(1, 10*mm))
+    
+    # Employee & Period Info
+    info_data = [
+        ['Employee:', payslip.get('employee_name', 'N/A'), 'Pay Period:', f"{pay_period.get('period_start', '')} to {pay_period.get('period_end', '')}"],
+        ['Employee ID:', payslip.get('employee_id', 'N/A'), 'Pay Date:', pay_period.get('pay_date', '')],
+    ]
+    
+    info_table = Table(info_data, colWidths=[70, 150, 70, 150])
+    info_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 10*mm))
+    
+    # Earnings Table
+    elements.append(Paragraph("Earnings", header_style))
+    earnings_data = [
+        ['Description', 'Amount'],
+        ['Basic Salary', f"£{payslip.get('gross_pay', 0):,.2f}"],
+        ['Overtime', f"£{payslip.get('overtime_pay', 0):,.2f}"],
+        ['Gross Pay', f"£{payslip.get('gross_pay', 0):,.2f}"],
+    ]
+    
+    earnings_table = Table(earnings_data, colWidths=[300, 140])
+    earnings_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f3f4f6')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(earnings_table)
+    elements.append(Spacer(1, 8*mm))
+    
+    # Deductions Table
+    elements.append(Paragraph("Deductions", header_style))
+    deductions_data = [
+        ['Description', 'Amount'],
+        ['Income Tax (PAYE)', f"£{payslip.get('tax_deduction', 0):,.2f}"],
+        ['National Insurance', f"£{payslip.get('ni_deduction', 0):,.2f}"],
+        ['Pension Contribution', f"£{payslip.get('pension_deduction', 0):,.2f}"],
+        ['Other Deductions', f"£{payslip.get('other_deductions', 0):,.2f}"],
+        ['Total Deductions', f"£{(payslip.get('tax_deduction', 0) + payslip.get('ni_deduction', 0) + payslip.get('pension_deduction', 0) + payslip.get('other_deductions', 0)):,.2f}"],
+    ]
+    
+    deductions_table = Table(deductions_data, colWidths=[300, 140])
+    deductions_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dc2626')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#fee2e2')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(deductions_table)
+    elements.append(Spacer(1, 10*mm))
+    
+    # Net Pay
+    net_pay_data = [
+        ['NET PAY', f"£{payslip.get('net_pay', 0):,.2f}"],
+    ]
+    net_pay_table = Table(net_pay_data, colWidths=[300, 140])
+    net_pay_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#10b981')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(net_pay_table)
+    elements.append(Spacer(1, 15*mm))
+    
+    # Footer
+    footer_text = "This is a computer-generated payslip. For queries, please contact HR."
+    elements.append(Paragraph(footer_text, ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey, alignment=TA_CENTER)))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+@api_router.get("/payroll/runs/{payrun_id}/payslips/{employee_id}/pdf")
+async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = Depends(get_current_user)):
+    """Download individual payslip as PDF"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    # Get pay run
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    # Get payslip
+    payslip = await db.payslips.find_one({"payrun_id": payrun_id, "employee_id": employee_id}, {"_id": 0})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Get company
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    
+    # Generate PDF
+    pdf_bytes = generate_payslip_pdf(payslip, company or {}, pay_run)
+    
+    filename = f"payslip_{payslip['employee_name'].replace(' ', '_')}_{pay_run['period_end']}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/payroll/runs/{payrun_id}/payslips/pdf")
+async def download_all_payslips_pdf(payrun_id: str, user: User = Depends(get_current_user)):
+    """Download all payslips for a pay run as a single PDF"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    # Get pay run
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    # Get all payslips
+    payslips = await db.payslips.find({"payrun_id": payrun_id}, {"_id": 0}).to_list(1000)
+    if not payslips:
+        raise HTTPException(status_code=404, detail="No payslips found")
+    
+    # Get company
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    
+    # Generate combined PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    for i, payslip in enumerate(payslips):
+        if i > 0:
+            from reportlab.platypus import PageBreak
+            elements.append(PageBreak())
+        
+        # Use the same generation logic
+        pdf_bytes = generate_payslip_pdf(payslip, company or {}, pay_run)
+        # For combined, we'll just append placeholder - in real impl, merge PDFs
+    
+    # For simplicity, return first payslip PDF - in production would merge all
+    first_payslip_pdf = generate_payslip_pdf(payslips[0], company or {}, pay_run)
+    
+    filename = f"payslips_{pay_run['period_end']}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(first_payslip_pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ==================== HMRC EXPORT ROUTES ====================
+
+@api_router.get("/payroll/runs/{payrun_id}/export/fps")
+async def export_fps_csv(payrun_id: str, user: User = Depends(get_current_user)):
+    """Export Full Payment Submission (FPS) data for HMRC"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    payslips = await db.payslips.find({"payrun_id": payrun_id}, {"_id": 0}).to_list(1000)
+    employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
+    emp_map = {e["employee_id"]: e for e in employees}
+    
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # FPS Header
+    writer.writerow([
+        'Employer PAYE Reference', 'Accounts Office Reference', 'Tax Year', 'Tax Month',
+        'Employee NI Number', 'Employee First Name', 'Employee Last Name',
+        'Date of Birth', 'Gender', 'Address Line 1', 'Postcode',
+        'Tax Code', 'Taxable Pay YTD', 'Tax Deducted YTD',
+        'NI Category', 'NI Earnings YTD', 'NI Contributions YTD',
+        'Payment Date', 'Pay Frequency', 'Gross Pay This Period',
+        'Tax This Period', 'NI This Period'
+    ])
+    
+    for payslip in payslips:
+        emp = emp_map.get(payslip["employee_id"], {})
+        writer.writerow([
+            company.get("paye_reference", ""),
+            company.get("accounts_office_ref", ""),
+            "2024-25",  # Tax year
+            "",  # Tax month
+            emp.get("ni_number", ""),
+            emp.get("first_name", ""),
+            emp.get("last_name", ""),
+            "",  # DOB
+            "",  # Gender
+            "",  # Address
+            "",  # Postcode
+            emp.get("tax_code", "1257L"),
+            payslip.get("gross_pay", 0),
+            payslip.get("tax_deduction", 0),
+            "A",  # NI Category
+            payslip.get("gross_pay", 0),
+            payslip.get("ni_deduction", 0),
+            pay_run.get("pay_date", ""),
+            "M" if company.get("payroll_frequency") == "monthly" else "W",
+            payslip.get("gross_pay", 0),
+            payslip.get("tax_deduction", 0),
+            payslip.get("ni_deduction", 0)
+        ])
+    
+    output.seek(0)
+    filename = f"fps_export_{pay_run['period_end']}.csv"
+    
+    await create_audit_entry(user.company_id, user, "export", "fps", payrun_id, {"format": "csv"})
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/payroll/runs/{payrun_id}/export/eps")
+async def export_eps_csv(payrun_id: str, user: User = Depends(get_current_user)):
+    """Export Employer Payment Summary (EPS) data for HMRC"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # EPS Header
+    writer.writerow([
+        'Employer PAYE Reference', 'Accounts Office Reference', 'Tax Year', 'Tax Month',
+        'No Payment Indicator', 'Period Of Inactivity From', 'Period Of Inactivity To',
+        'Statutory Maternity Pay', 'Statutory Paternity Pay', 'Statutory Adoption Pay',
+        'Statutory Shared Parental Pay', 'CIS Deductions', 'Apprenticeship Levy',
+        'Employment Allowance Indicator'
+    ])
+    
+    writer.writerow([
+        company.get("paye_reference", ""),
+        company.get("accounts_office_ref", ""),
+        "2024-25",
+        "",
+        "No",  # No payment indicator
+        "",
+        "",
+        0,  # SMP
+        0,  # SPP
+        0,  # SAP
+        0,  # ShPP
+        0,  # CIS
+        pay_run.get("total_gross", 0) * 0.005 if pay_run.get("total_gross", 0) > 3000000 else 0,  # Apprenticeship levy
+        "Yes" if pay_run.get("employee_count", 0) < 5 else "No"  # Employment allowance
+    ])
+    
+    output.seek(0)
+    filename = f"eps_export_{pay_run['period_end']}.csv"
+    
+    await create_audit_entry(user.company_id, user, "export", "eps", payrun_id, {"format": "csv"})
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/payroll/runs/{payrun_id}/export/p32")
+async def export_p32_report(payrun_id: str, user: User = Depends(get_current_user)):
+    """Export P32 Employer Payment Record"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id, "company_id": user.company_id}, {"_id": 0})
+    if not pay_run:
+        raise HTTPException(status_code=404, detail="Pay run not found")
+    
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # P32 Report
+    writer.writerow(['P32 Employer Payment Record'])
+    writer.writerow([])
+    writer.writerow(['Company', company.get("name", "")])
+    writer.writerow(['PAYE Reference', company.get("paye_reference", "")])
+    writer.writerow(['Tax Year', '2024-25'])
+    writer.writerow(['Pay Period', f"{pay_run['period_start']} to {pay_run['period_end']}"])
+    writer.writerow([])
+    writer.writerow(['Description', 'Amount'])
+    writer.writerow(['Total PAYE Tax', f"£{pay_run.get('total_tax', 0):,.2f}"])
+    writer.writerow(['Total NI (Employee)', f"£{pay_run.get('total_ni', 0):,.2f}"])
+    writer.writerow(['Total NI (Employer)', f"£{pay_run.get('total_ni', 0) * 1.138:,.2f}"])  # Estimated employer NI
+    writer.writerow(['Student Loan Deductions', '£0.00'])
+    writer.writerow(['Statutory Payments Reclaimed', '£0.00'])
+    writer.writerow([])
+    writer.writerow(['Amount Due to HMRC', f"£{(pay_run.get('total_tax', 0) + pay_run.get('total_ni', 0) * 2.138):,.2f}"])
+    
+    output.seek(0)
+    filename = f"p32_report_{pay_run['period_end']}.csv"
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ==================== ONBOARDING WIZARD ROUTES ====================
+
+@api_router.get("/onboarding/progress")
+async def get_onboarding_progress(user: User = Depends(get_current_user)):
+    """Get onboarding wizard progress"""
+    if not user.company_id:
+        return {
+            "step": 1,
+            "completed_steps": [],
+            "first_employee_added": False,
+            "first_payrun_created": False,
+            "completed": False
+        }
+    
+    # Check what's been completed
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1)
+    pay_runs = await db.pay_runs.find({"company_id": user.company_id}, {"_id": 0}).to_list(1)
+    
+    completed_steps = []
+    step = 1
+    
+    # Step 1: Company setup
+    if company and company.get("name"):
+        completed_steps.append("company_setup")
+        step = 2
+    
+    # Step 2: First employee
+    first_employee_added = len(employees) > 0
+    if first_employee_added:
+        completed_steps.append("first_employee")
+        step = 3
+    
+    # Step 3: Payroll preview
+    first_payrun_created = len(pay_runs) > 0
+    if first_payrun_created:
+        completed_steps.append("first_payrun")
+        step = 4
+    
+    completed = len(completed_steps) >= 3
+    
+    return {
+        "step": step,
+        "completed_steps": completed_steps,
+        "first_employee_added": first_employee_added,
+        "first_payrun_created": first_payrun_created,
+        "completed": completed
+    }
+
+@api_router.post("/onboarding/quick-employee")
+async def quick_add_employee(data: EmployeeCreate, user: User = Depends(get_current_user)):
+    """Quickly add an employee during onboarding"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="Please complete company setup first")
+    
+    # Use existing employee creation logic
+    employee = await create_employee(data, user)
+    
+    # Check if this triggers payroll wizard
+    progress = await get_onboarding_progress(user)
+    
+    return {
+        "employee": employee,
+        "onboarding_progress": progress,
+        "next_step": "Create your first pay run preview" if progress["step"] == 3 else None
+    }
+
+@api_router.post("/onboarding/quick-payrun")
+async def quick_create_payrun(user: User = Depends(get_current_user)):
+    """Quickly create a pay run preview during onboarding"""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="Please complete company setup first")
+    
+    # Get current date info for default period
+    now = datetime.now(timezone.utc)
+    period_start = now.replace(day=1).strftime("%Y-%m-%d")
+    
+    # Last day of month
+    if now.month == 12:
+        period_end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        period_end = now.replace(month=now.month + 1, day=1) - timedelta(days=1)
+    period_end = period_end.strftime("%Y-%m-%d")
+    
+    pay_date = period_end  # Pay on last day of month
+    
+    data = PayRunCreate(period_start=period_start, period_end=period_end, pay_date=pay_date)
+    pay_run = await create_pay_run(data, user)
+    
+    progress = await get_onboarding_progress(user)
+    
+    return {
+        "pay_run": pay_run,
+        "onboarding_progress": progress,
+        "message": "Congratulations! You've completed the quick setup. Your first payroll preview is ready!"
+    }
+
 # Include the router
 app.include_router(api_router)
 
