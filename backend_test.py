@@ -10,6 +10,7 @@ class RealtouchHRTester:
         self.user_id = None
         self.company_id = None
         self.employee_id = None
+        self.payrun_id = None  # Add payrun_id for export tests
         self.tests_run = 0
         self.tests_passed = 0
         self.failed_tests = []
