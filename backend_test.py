@@ -368,6 +368,7 @@ class RealtouchHRTester:
         
         if success and 'payrun_id' in response:
             payrun_id = response['payrun_id']
+            self.payrun_id = payrun_id  # Store for export tests
             
             # Get pay runs
             self.run_test(
