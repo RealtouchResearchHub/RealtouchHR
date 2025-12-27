@@ -156,6 +156,9 @@ export default function MainLayout({ children }) {
                         <div className="flex-1" />
 
                         <div className="flex items-center gap-2">
+                            {/* Notifications */}
+                            <NotificationsPopover />
+
                             {/* Theme toggle */}
                             <Button
                                 variant="ghost"
