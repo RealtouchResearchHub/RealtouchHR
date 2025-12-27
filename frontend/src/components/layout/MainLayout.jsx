@@ -27,10 +27,12 @@ import {
     X,
     Bot,
     ChevronRight,
-    Building2
+    Building2,
+    Upload
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
+import NotificationsPopover from '../shared/NotificationsPopover';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -39,6 +41,7 @@ const navigation = [
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
+    { name: 'Import', href: '/import', icon: Upload },
     { name: 'Audit Log', href: '/audit', icon: Shield },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
