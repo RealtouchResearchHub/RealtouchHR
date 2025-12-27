@@ -366,8 +366,13 @@ export default function PayRunDetail() {
                                         <TableCell className="text-right">{formatCurrency(slip.pension_deduction)}</TableCell>
                                         <TableCell className="text-right font-semibold">{formatCurrency(slip.net_pay)}</TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon">
-                                                <FileText className="w-4 h-4" />
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon"
+                                                onClick={() => handleDownloadPayslip(slip.employee_id)}
+                                                data-testid={`download-payslip-${slip.employee_id}`}
+                                            >
+                                                <Download className="w-4 h-4" />
                                             </Button>
                                         </TableCell>
                                     </TableRow>
