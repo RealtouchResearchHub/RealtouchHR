@@ -1,0 +1,172 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "RealtouchHR",
+      "persona": "The Modern Architect",
+      "vibe": "Compliance Confidence. Structured, Calm, Assured, Enterprise-Grade but Human.",
+      "principles": [
+        "Fusion: Swiss Precision (Grids) + Organic Warmth (Paper textures, soft shadows)",
+        "Emotion: Confidence. Every interaction should feel stable and verified.",
+        "Content: Data is the hero. Compliance status is the narrative.",
+        "Zoom In: Focus on the 'Next Best Action'. Don't overwhelm.",
+        "Negative Space: Luxury is space. Don't cram the dashboard."
+      ]
+    },
+    "typography": {
+      "fonts": {
+        "heading": "Plus Jakarta Sans, sans-serif",
+        "body": "Inter, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "usage": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight text-foreground",
+        "h2": "text-3xl font-semibold tracking-tight text-foreground/90",
+        "h3": "text-2xl font-medium tracking-tight text-foreground/90",
+        "body_large": "text-lg leading-relaxed text-muted-foreground",
+        "body_default": "text-base leading-relaxed text-foreground/80",
+        "caption": "text-sm font-medium text-muted-foreground tracking-wide uppercase",
+        "code": "font-mono text-xs bg-muted px-1 py-0.5 rounded text-primary"
+      },
+      "imports": [
+        "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');"
+      ]
+    },
+    "colors": {
+      "palette": {
+        "primary": {
+          "name": "Indigo Trust",
+          "hex": "#4F46E5",
+          "tailwind": "bg-indigo-600 hover:bg-indigo-700 text-white"
+        },
+        "secondary": {
+          "name": "Emerald Compliance",
+          "hex": "#10B981",
+          "tailwind": "bg-emerald-500 hover:bg-emerald-600 text-white"
+        },
+        "accent": {
+          "name": "Slate Foundation",
+          "hex": "#F8FAFC",
+          "tailwind": "bg-slate-50 text-slate-900"
+        },
+        "destructive": {
+          "name": "Rose Risk",
+          "hex": "#E11D48",
+          "tailwind": "bg-rose-600 text-white"
+        }
+      },
+      "theme_strategy": {
+        "light": {
+          "background": "hsl(210, 40%, 98%)",
+          "card": "hsl(0, 0%, 100%)",
+          "text": "hsl(222, 47%, 11%)",
+          "border": "hsl(214, 32%, 91%)"
+        },
+        "dark": {
+          "background": "hsl(222, 47%, 11%)",
+          "card": "hsl(217, 33%, 17%)",
+          "text": "hsl(210, 40%, 98%)",
+          "border": "hsl(217, 33%, 22%)"
+        }
+      },
+      "rules": [
+        "NEVER use gradients for text.",
+        "Use 'Emerald' ONLY for Compliance Success/High Score.",
+        "Use 'Rose' ONLY for Compliance Risk/Errors.",
+        "Primary Indigo is for Actions (Buttons, Links, Active States).",
+        "Backgrounds should never be pure white (#FFFFFF) in light mode, use a very subtle cool tint."
+      ]
+    },
+    "layout": {
+      "spacing": {
+        "container_padding": "p-6 md:p-12 lg:p-16",
+        "section_gap": "gap-8 md:gap-12",
+        "item_gap": "gap-4"
+      },
+      "grids": {
+        "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+        "bento_hero": "col-span-full md:col-span-8 row-span-2",
+        "bento_sidebar": "col-span-full md:col-span-4 row-span-2",
+        "bento_item": "col-span-full md:col-span-4"
+      },
+      "containers": {
+        "card": "rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300",
+        "panel": "rounded-2xl border border-border bg-card shadow-sm p-6"
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "rounded-full px-8 py-6 font-semibold shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all hover:-translate-y-0.5",
+        "secondary": "rounded-full px-6 py-6 font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        "ghost": "rounded-full px-4 hover:bg-accent hover:text-accent-foreground"
+      },
+      "inputs": {
+        "default": "h-12 rounded-lg border-input bg-background/50 px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      },
+      "cards": {
+        "compliance_score": "relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-background border border-emerald-100 dark:border-emerald-900/50 p-8",
+        "next_action": "rounded-2xl bg-indigo-600 text-white p-8 shadow-xl shadow-indigo-900/20 relative overflow-hidden"
+      }
+    },
+    "visual_enhancers": {
+      "glassmorphism": "bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/20 shadow-sm",
+      "neumorphism": "shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:shadow-none",
+      "gradients": {
+        "subtle_glow": "bg-gradient-to-tr from-indigo-500/10 via-transparent to-emerald-500/10"
+      },
+      "animation": {
+        "hover_lift": "transition-transform duration-300 ease-out hover:-translate-y-1",
+        "fade_in": "animate-in fade-in duration-500 slide-in-from-bottom-4"
+      }
+    },
+    "assets": {
+      "images": {
+        "hero_bg": {
+          "url": "https://images.unsplash.com/photo-1758448511255-ac2a24a135d7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwb2ZmaWNlJTIwaW50ZXJpb3IlMjBicmlnaHR8ZW58MHx8fHwxNzY2ODcwMTg4fDA&ixlib=rb-4.1.0&q=85",
+          "alt": "Modern Enterprise Lobby",
+          "usage": "Landing Page Hero Background, Login Screen Background"
+        },
+        "team_culture": {
+          "url": "https://images.unsplash.com/photo-1757405934467-21fc25c60660?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHNtaWxpbmclMjBkaXZlcnNlJTIwb2ZmaWNlfGVufDB8fHx8MTc2Njg3MDE4N3ww&ixlib=rb-4.1.0&q=85",
+          "alt": "Diverse Team Laughing",
+          "usage": "About Page, Company Culture Section"
+        },
+        "testimonial_1": {
+          "url": "https://images.unsplash.com/photo-1675526607070-f5cbd71dde92?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHNtaWxpbmclMjBkaXZlcnNlJTIwb2ZmaWNlfGVufDB8fHx8MTc2Njg3MDE4N3ww&ixlib=rb-4.1.0&q=85",
+          "alt": "Professional Woman Smiling",
+          "usage": "Testimonial Avatar, User Profile Placeholder"
+        },
+        "testimonial_2": {
+          "url": "https://images.unsplash.com/photo-1717435805712-f47048c1b1c0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHNtaWxpbmclMjBkaXZlcnNlJTIwb2ZmaWNlfGVufDB8fHx8MTc2Njg3MDE4N3ww&ixlib=rb-4.1.0&q=85",
+          "alt": "Professional Man at Desk",
+          "usage": "Manager Profile, Case Study"
+        },
+        "logo_abstract_1": {
+          "url": "https://images.unsplash.com/photo-1628760584600-6c31148991e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHx0ZWNoJTIwY29tcGFueSUyMGxvZ28lMjB2ZWN0b3IlMjBtaW5pbWFsfGVufDB8fHx8MTc2Njg3MDE5MHww&ixlib=rb-4.1.0&q=85",
+          "alt": "Abstract Blue Oval Logo",
+          "usage": "Partner Logo, Integration Icon"
+        },
+        "logo_abstract_2": {
+          "url": "https://images.unsplash.com/photo-1750049790142-2db418e5745c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwzfHx0ZWNoJTIwY29tcGFueSUyMGxvZ28lMjB2ZWN0b3IlMjBtaW5pbWFsfGVufDB8fHx8MTc2Njg3MDE5MHww&ixlib=rb-4.1.0&q=85",
+          "alt": "Gradient Ribbon Logo",
+          "usage": "Sponsor Logo, Feature Icon"
+        }
+      },
+      "icons": {
+        "library": "lucide-react",
+        "style": "Stroke width 1.5px, rounded line joins"
+      }
+    },
+    "universal_guidelines": [
+      "DO NOT use 'Inter' for Headings. Use 'Plus Jakarta Sans'.",
+      "DO NOT use gradients for text. It looks cheap.",
+      "DO NOT use 'Tile Farm' layouts (grids of equal cards). Use 'Bento' grids with varied spans.",
+      "ALWAYS use 'sonner' for toasts.",
+      "ALWAYS add 'data-testid' to interactive elements.",
+      "Compliance Score must be visible on the Dashboard at all times.",
+      "Next Best Action must be the most prominent element on the Dashboard.",
+      "Use 'Glassmorphism' for sticky headers and overlays.",
+      "Ensure all text has sufficient contrast (APCA/WCAG AA).",
+      "Use 2-3x more spacing than typical designs. 'p-8' is the new 'p-4'."
+    ]
+  }
+}
