@@ -1411,9 +1411,9 @@ Current context:
         issues=len(compliance.get("issues", [])) if compliance else 0
     )
     
-    # Use OpenAI for response (with Emergent key)
+    # Use emergentintegrations for AI response
     try:
-        from openai import OpenAI
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
         
         api_key = os.environ.get('EMERGENT_LLM_KEY')
         if not api_key:
@@ -1423,19 +1423,18 @@ Current context:
                 requires_approval=False
             )
         
-        client = OpenAI(api_key=api_key)
+        # Create chat instance with system message
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"copilot_{user.user_id}",
+            system_message=system_prompt
+        ).with_model("openai", "gpt-4o")
         
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": data.message}
-            ],
-            max_tokens=1000,
-            temperature=0.7
-        )
+        # Create user message
+        user_message = UserMessage(text=data.message)
         
-        ai_response = response.choices[0].message.content
+        # Get response
+        ai_response = await chat.send_message(user_message)
         
         # Check if response requires approval
         requires_approval = any(keyword in data.message.lower() for keyword in ["approve", "submit", "run payroll", "terminate", "pay", "salary change"])
