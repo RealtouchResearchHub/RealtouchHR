@@ -1,0 +1,603 @@
+<analysis>**original_problem_statement:**
+The user wants to build a next-generation HR, Payroll, and Compliance SaaS platform named 'RealtouchHR', designed for the UK market with global extensibility.
+
+**PRODUCT REQUIREMENTS:**
+- **Core Differentiation:** Compliance Autopilot with risk scoring, a One guided payroll flow, and AI copilots for various tasks.
+- **Conversion Target:** A seamless onboarding experience that allows a user to get to a payroll preview in under 10 minutes.
+- **Security:** Strong Role-Based Access Control (RBAC), immutable audit logs, GDPR compliance, and robust security practices.
+- **Modules Required:**
+    - A) Core HR (employee records, leave, documents, e-sign)
+    - B) Time & Scheduling (rotas, clock-ins, timesheets)
+    - C) Payroll (UK-first, pay runs, payslips, audit log)
+    - D) Compliance & Audit (rules engine, risk scoring)
+- **Staged Delivery:** The project is broken down into 5 stages, starting with a foundational MVP.
+- **User Choices for MVP:**
+    - **Scope:** Full Stage 1 MVP (Core HR, Time & Scheduling, UK Payroll Preview, Audit Log).
+    - **Authentication:** Both JWT (email/password) and Google social login.
+    - **AI Features:** Integrate AI copilots for onboarding, compliance, payroll guidance, and document drafting, with human-in-the-loop approvals.
+    - **Design:** Auto light/dark mode support.
+    - **Architecture:** Modular, GitHub-ready, and auditable.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A substantial full-stack application has been built, featuring a FastAPI backend and a React/Shadcn UI frontend.
+
+- **Completed Features:**
+    - **Authentication:** JWT-based user registration and login.
+    - **Core HR:** Employee creation, listing, and detailed profile pages.
+    - **Time & Scheduling:** Basic pages and components are in place.
+    - **Payroll:** A guided payroll flow with pay run creation, employee payslip generation, PDF payslip downloads, and HMRC-ready CSV exports.
+    - **Onboarding:** A multi-step wizard to guide new users.
+    - **Data Management:** CSV bulk import for employees.
+    - **UI/UX:** A complete dashboard with a Next Best Action banner, Compliance Score, navigation sidebar, AI Copilot access, and toast notifications. A light/dark theme toggle is implemented.
+    - **Backend:** A single  file contains all models, API endpoints, and business logic for the implemented features.
+
+- **Partially Implemented Features:**
+    - **Email Notifications:** The  library is installed, and backend logic exists to send emails for leave approvals, but it is not fully tested end-to-end.
+    - **Multi-currency, HMRC RTI Submission, Payroll Health Check, Employee Self-Service:** Backend models and API endpoints have been created, along with corresponding frontend page components, but they are not fully wired up or tested.
+
+**Last working item**:
+    - Last item agent was working: The user reported that the AI Copilot feature is not working. The agent acknowledged the issue and was about to start debugging it. The user also asked for confirmation about the payslip download functionality and a comprehensive overview of the platform's capabilities.
+    - Status: IN PROGRESS
+    - Agent Testing Done: N
+    - Which testing method agent to use? backend testing agent. The agent should start by testing the  endpoint using  to isolate the problem. The fix will likely be in  where the OpenAI API is called.
+    - User Testing Done: Y
+
+**All Pending/In progress Issue list**:
+  - Issue 1: AI Copilot fails to answer questions. (P0)
+  - Issue 2: Verify and demonstrate payslip download functionality to the user. (P1)
+  - Issue 3: Provide a comprehensive overview of the solution's capabilities as requested by the user. (P1)
+
+  **Issues Detail:**
+  - Issue 1:
+     - **Description:** The user reported that the AI Copilot is not providing answers to questions.
+     - **Attempted fixes:** None yet. The agent acknowledged the problem just before the session ended.
+     - **Next debug checklist:**
+        1.  Check backend logs for errors related to the  endpoint using ==> /var/log/supervisor/backend.err.log <==
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2949]
+INFO:     Started server process [2979]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2979]
+INFO:     Started server process [3052]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3052]
+INFO:     Started server process [3089]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3089]
+INFO:     Stopping reloader process [1160]
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [3573] using WatchFiles
+INFO:     Started server process [3575]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-12-27 22:14:53,292 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2025-12-27 22:14:53,293 - server - ERROR - AI Copilot error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-emerg******************8C22. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'code': 'invalid_api_key', 'param': None}, 'status': 401}
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [47] using WatchFiles
+INFO:     Started server process [84]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [84]
+INFO:     Started server process [287]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [287]
+INFO:     Started server process [378]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [378]
+INFO:     Started server process [450]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [450]
+INFO:     Started server process [549]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [42] using WatchFiles
+INFO:     Started server process [80]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-01-14 22:45:07,213 - httpx - INFO - HTTP Request: GET https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data "HTTP/1.1 200 OK"
+2026-01-14 22:58:54,336 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-01-14 22:58:54,336 - server - ERROR - AI Copilot error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-emerg******************8C22. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'code': 'invalid_api_key', 'param': None}, 'status': 401}
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [48] using WatchFiles
+INFO:     Started server process [77]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-01-14 23:18:34,548 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-01-14 23:18:34,549 - server - ERROR - AI Copilot error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-emerg******************8C22. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'code': 'invalid_api_key', 'param': None}, 'status': 401}
+INFO:     Will watch for changes in these directories: ['/app/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [42] using WatchFiles
+INFO:     Started server process [83]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+
+==> /var/log/supervisor/backend.out.log <==
+INFO:     10.64.131.242:50136 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:40418 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35044 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:40426 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35044 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     10.64.131.242:50136 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.131.242:50150 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:40426 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:40434 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:40434 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.131.242:46528 - "GET /api/payroll/runs HTTP/1.1" 200 OK
+INFO:     10.64.131.242:46528 - "GET /api/payroll/runs HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35636 - "GET /api/documents HTTP/1.1" 200 OK
+INFO:     10.64.131.242:43948 - "GET /api/documents HTTP/1.1" 200 OK
+INFO:     10.64.131.242:43948 - "GET /api/shifts HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35636 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35636 - "GET /api/shifts HTTP/1.1" 200 OK
+INFO:     10.64.135.88:42386 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:42386 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:35636 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.131.242:43948 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.131.242:48680 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.131.242:48688 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     10.64.135.87:54750 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.135.87:54750 - "GET /api/employees HTTP/1.1" 200 OK
+INFO:     10.64.135.88:55248 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+INFO:     10.64.131.242:48688 - "GET /api/leave HTTP/1.1" 200 OK
+INFO:     10.64.135.88:56746 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:57334 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.26:39250 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.38:38598 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.38:57798 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:52608 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.129.134:37676 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.9:35828 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.48:40038 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.48:54162 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:57780 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.9:56648 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.21:52794 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:38426 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.9:43966 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.129.134:49096 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.26:53252 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:38192 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:54064 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:59260 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:46876 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:38872 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:45158 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.129.134:59250 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.48:60578 - "POST /api/copilot/chat HTTP/1.1" 200 OK
+INFO:     10.64.137.138:49532 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:34966 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:45084 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:43080 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:41218 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:54282 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:57592 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:50714 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:44148 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:38562 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:56326 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:60874 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:48150 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:55820 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:37482 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:41634 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:51150 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:55212 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:52254 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:44436 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:36796 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:57154 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:47480 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.26:34204 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.38:40412 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.26:40334 - "POST /api/copilot/chat HTTP/1.1" 200 OK
+INFO:     10.64.135.26:46734 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:59386 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:34970 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:45004 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:38360 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:42524 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:43352 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:43208 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:38898 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:46710 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:36464 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.88:48860 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.254:35216 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:55000 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:50248 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.254:36476 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.254:52780 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:55890 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.242:53390 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:54144 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.131.254:54946 - "GET /api/notifications HTTP/1.1" 200 OK
+INFO:     10.64.135.87:51576 - "GET /api/notifications HTTP/1.1" 200 OK.
+        2.  Inspect the  function in .
+        3.  Verify that the OpenAI API key is correctly loaded from environment variables.
+        4.  Test the endpoint directly with  to see the raw response or error.
+        5.  Ensure the request payload and the call to the usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit library are correct.
+     - **Why fix this issue and what will be achieved with the fix?** The AI Copilot is a core-differentiating feature of the product. Fixing it is critical for meeting the product vision and user expectations.
+     - **Status:** IN PROGRESS
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?** Backend
+     - **Blocked on other issue:** None
+
+  - Issue 2:
+     - **Description:** The user asked if payslips can be downloaded. This feature was implemented and passed tests in a previous iteration, but the user is asking for confirmation.
+     - **Next debug checklist:**
+        1.  Create a test user and a pay run.
+        2.  Navigate to the Pay Run Detail page on the frontend.
+        3.  Click the Download Payslip button for an employee.
+        4.  Confirm a PDF file is downloaded and is not corrupted.
+     - **Why fix this issue and what will be achieved with the fix?** To confirm functionality for the user and build confidence.
+     - **Status:** NOT STARTED
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?** Frontend
+     - **Blocked on other issue:** None
+
+  - Issue 3:
+     - **Description:** The user requested a detailed overview of what the solution can do.
+     - **Next debug checklist:**
+        1.  After fixing the AI copilot and verifying payslip downloads, the agent should formulate a clear, comprehensive summary of all implemented features.
+        2.  Present this summary to the user in a structured format.
+     - **Why fix this issue and what will be achieved with the fix?** To address the user's direct request and provide clarity on the project's progress.
+     - **Status:** NOT STARTED
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?** N/A
+     - **Blocked on other issue:** Issue 1, Issue 2
+
+**In progress Task List**:
+  - Task 1: Complete and Test Phase 3 Features
+     - **Where to resume:** The backend routes and frontend components for HMRC Submission, Multi-Currency, Employee Self-Service, and Payroll Health Check have been created but need to be fully integrated, wired up to the UI, and tested end-to-end.
+     - **What will be achieved with this?** This will complete another major set of features requested by the user, moving the project closer to an enterprise-ready state.
+     - **Status:** IN PROGRESS
+     - **Should Test frontend/backend/both after fix?** Both
+     - **Blocked on something:** Blocked on resolving the pending issues first.
+
+**Upcoming and Future Tasks**
+    **Upcoming Tasks (P1):**
+    - Implement Google social login as originally requested.
+    - Fully implement and test Resend email notifications for leave approvals and other events.
+    - Implement the full Compliance Autopilot rules engine and confidence scoring logic.
+
+    **Future Tasks (P2):**
+    - Stage 4: Abstract for multi-country support (localisation, currency, holidays).
+    - Stage 5: Implement advanced enterprise features like advanced RBAC, SCIM/SAML, multi-entity payroll.
+
+**Completed work in this session**
+- **Stage 1 MVP:**
+  - Full user authentication (JWT).
+  - Dashboard with key widgets (Next Action, Compliance Score).
+  - Core HR (Employee Directory & Profiles).
+  - Leave & Absence management pages.
+  - Document management pages.
+  - Time & Scheduling pages.
+  - Foundational Payroll page and Audit Log.
+
+- **Phase 2 Features:**
+  - Implemented employee profile detail page with editing.
+  - Added CSV bulk import for employees.
+  - Enabled PDF payslip generation and download from the  component.
+  - Created an onboarding wizard ().
+  - Added a notifications popover ().
+
+**Earlier issues found/mentioned but not fixed**
+   - Issue 1:
+     - **Description:** The  library failed to install multiple times.
+     - **Debug checklist:** This issue was bypassed by using the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit SDK directly. The root cause (e.g., package name typo  vs , or pypi repository issue) was never identified. This also led to the Google Social Login feature being skipped.
+     - **Why to solve this issue and what will be achieved with this?** The  library is intended to handle specific platform integrations like Emergent-managed Google Auth. Fixing this would allow the implementation of all originally requested features.
+     - **Should Test frontend/backend/both after fix:** Backend
+     - **Is recurring issue?** Y
+
+**Known issue recurrence from previous fork**
+  - N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Backend:** FastAPI, Pydantic, Motor (async MongoDB), JWT
+- **Frontend:** React, Tailwind CSS, Shadcn UI
+- **Database:** MongoDB
+- **Integrations:** OpenAI (for AI Copilot), Resend (for email), ReportLab (for PDF generation)
+- **Architecture:** Monolithic backend, component-based React frontend.
+
+**key DB schema**
+Defined as Pydantic models in :
+- : {email, hashed_password, full_name, role, company_id}
+- : {name, settings}
+- : {first_name, last_name, email, job_title, salary, personal_details, bank_details}
+- : {employee_id, start_date, end_date, leave_type, status}
+- : {company_id, period_start, period_end, status, payslips}
+- : {user_id, action, entity, entity_id, details, timestamp}
+
+**changes in tech stack**
+- The agent pivoted from the intended  library to the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit SDK due to installation failures. This means the Emergent LLM Key is not being used for the AI copilot.
+
+**All files of reference**
+- : The single most critical file, containing all backend logic, models, and API endpoints.
+- : The main entry point for the frontend, defining all routes.
+- : Directory containing all major page components.
+- : Manages user authentication state on the frontend.
+- : The Product Requirements Document.
+- : The latest test report confirming existing features work.
+
+**Areas that need refactoring**:
+- The  file is over 2000 lines long and is becoming a monolith. It urgently needs to be refactored into smaller, domain-specific modules (e.g., , , ) to improve maintainability and scalability.
+
+**key api endpoints**
+- , 
+-  (GET, POST),  (GET, PUT)
+-  (GET, POST),  (GET)
+-  (GET)
+-  (POST)
+-  (POST)
+-  (GET)
+
+**Critical Info for New Agent**
+- The immediate priority is to fix the **AI Copilot** as reported by the user.
+- After fixing the bug, you must **verify payslip downloads** and provide the user with a **comprehensive overview** of all working features.
+- The **Google Social Login** feature was requested but missed due to an  installation issue. This should be re-attempted.
+- The backend in  is a monolith and should be refactored into smaller modules when an opportunity arises.
+- The  library is not being used. The agent fell back to the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit python package.
+
+**documents and test reports created in this job**
+- 
+- 
+- 
+- 
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User:** Reports the AI Copilot is not working, asks if payslips can be downloaded, and requests a comprehensive overview of the solution's capabilities.
+2.  **Agent:** Acknowledges the issues and states the intention to fix the AI Copilot first.
+
+**Project Health Check:**
+- **Broken:** The AI Copilot feature is currently non-functional.
+- **Mocked:** Backend logic for Phase 3 features (HMRC, multi-currency, self-service, emails) is present but not fully integrated or tested.
+
+**3rd Party Integrations**
+- **OpenAI GPT-4o:** Used for the AI Copilot. Implemented via the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit Python SDK. **Does not use Emergent LLM Key.**
+- **Resend:** Used for email notifications. Implemented via the  Python SDK. Requires a user-provided API key, which has not been requested yet.
+- **Emergent-managed Google Auth:** Planned but **NOT IMPLEMENTED** due to an installation issue with the required library.
+
+**Testing status**
+  - Testing agent used after significant changes: YES
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: []
+  - Known regressions: AI Copilot was likely working implicitly before but is now explicitly reported as broken.
+
+**Credentials to test flow:**
+Users can be created via the registration form on the UI. No default credentials exist.
+
+**What agent forgot to execute**
+- **Google Social Login:** This was a confirmed requirement from the user in the initial clarification step but was skipped after the  library failed to install. The agent did not circle back to this or inform the user it was being omitted.</analysis>
