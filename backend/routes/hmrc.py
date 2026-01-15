@@ -327,6 +327,112 @@ class HMRCService:
         if month < 4 or (month == 4 and day < 6):
             return f"{str(year-1)[2:]}-{str(year)[2:]}"
         return f"{str(year)[2:]}-{str(year+1)[2:]}"
+    
+    async def generate_fps_xml(self, company: dict, payrun: dict, employees: list, payslips: list, credentials: dict) -> str:
+        """Generate FPS XML for HMRC submission (simplified test version)"""
+        # In production, this would generate proper HMRC-compliant XML
+        # For test mode, we generate a simplified XML structure
+        tax_year = self.get_tax_year(payrun.get("pay_date", datetime.now().isoformat()[:10]))
+        tax_month = self.get_tax_month(payrun.get("pay_date", datetime.now().isoformat()[:10]))
+        
+        xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<IRenvelope xmlns="http://www.govtalk.gov.uk/taxation/PAYE/RTI/FullPaymentSubmission/15-16/1">
+  <IRheader>
+    <Keys>
+      <Key Type="TaxOfficeNumber">{company.get('paye_reference', '').split('/')[0] if company.get('paye_reference') else ''}</Key>
+      <Key Type="TaxOfficeReference">{company.get('paye_reference', '').split('/')[1] if company.get('paye_reference') and '/' in company.get('paye_reference', '') else ''}</Key>
+    </Keys>
+    <PeriodEnd>{payrun.get('period_end', '')}</PeriodEnd>
+    <Sender>Employer</Sender>
+  </IRheader>
+  <FullPaymentSubmission>
+    <EmpRefs>
+      <OfficeNo>{company.get('paye_reference', '').split('/')[0] if company.get('paye_reference') else ''}</OfficeNo>
+      <PayeRef>{company.get('paye_reference', '').split('/')[1] if company.get('paye_reference') and '/' in company.get('paye_reference', '') else ''}</PayeRef>
+      <AORef>{company.get('accounts_office_reference', '')}</AORef>
+    </EmpRefs>
+    <RelatedTaxYear>{tax_year}</RelatedTaxYear>"""
+        
+        for i, ps in enumerate(payslips):
+            emp = next((e for e in employees if e.get("employee_id") == ps.get("employee_id")), {})
+            xml_content += f"""
+    <Employee>
+      <EmployeeDetails>
+        <NINO>{emp.get('ni_number', '')}</NINO>
+        <Name>
+          <Fore>{emp.get('first_name', '')}</Fore>
+          <Sur>{emp.get('last_name', '')}</Sur>
+        </Name>
+      </EmployeeDetails>
+      <Employment>
+        <PayId>{emp.get('employee_id', '')}</PayId>
+        <PayFreq>M1</PayFreq>
+        <PMnth>{tax_month}</PMnth>
+        <PaymentToADate>{ps.get('gross_pay', 0):.2f}</PaymentToADate>
+        <TaxablePay>{ps.get('gross_pay', 0):.2f}</TaxablePay>
+        <TotalTax>{ps.get('tax_deduction', 0):.2f}</TotalTax>
+        <NILettersAndValues>
+          <NILetter>A</NILetter>
+          <GrossEarningsForNICs>{ps.get('gross_pay', 0):.2f}</GrossEarningsForNICs>
+          <EmpeeContribnsInPd>{ps.get('ni_deduction', 0):.2f}</EmpeeContribnsInPd>
+        </NILettersAndValues>
+      </Employment>
+    </Employee>"""
+        
+        xml_content += """
+  </FullPaymentSubmission>
+</IRenvelope>"""
+        
+        return xml_content
+    
+    async def generate_eps_xml(self, company: dict, tax_month: int, tax_year: str, eps_data: dict, credentials: dict) -> str:
+        """Generate EPS XML for HMRC submission (simplified test version)"""
+        xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<IRenvelope xmlns="http://www.govtalk.gov.uk/taxation/PAYE/RTI/EmployerPaymentSummary/15-16/1">
+  <IRheader>
+    <Keys>
+      <Key Type="TaxOfficeNumber">{company.get('paye_reference', '').split('/')[0] if company.get('paye_reference') else ''}</Key>
+      <Key Type="TaxOfficeReference">{company.get('paye_reference', '').split('/')[1] if company.get('paye_reference') and '/' in company.get('paye_reference', '') else ''}</Key>
+    </Keys>
+    <Sender>Employer</Sender>
+  </IRheader>
+  <EmployerPaymentSummary>
+    <EmpRefs>
+      <OfficeNo>{company.get('paye_reference', '').split('/')[0] if company.get('paye_reference') else ''}</OfficeNo>
+      <PayeRef>{company.get('paye_reference', '').split('/')[1] if company.get('paye_reference') and '/' in company.get('paye_reference', '') else ''}</PayeRef>
+      <AORef>{company.get('accounts_office_reference', '')}</AORef>
+    </EmpRefs>
+    <RelatedTaxYear>{tax_year}</RelatedTaxYear>
+    <RecoverableAmountsYTD>
+      <SMPRecovered>{eps_data.get('smp_recovered', 0):.2f}</SMPRecovered>
+      <SPPRecovered>{eps_data.get('spp_recovered', 0):.2f}</SPPRecovered>
+      <SAPRecovered>{eps_data.get('sap_recovered', 0):.2f}</SAPRecovered>
+      <ShPPRecovered>{eps_data.get('shpp_recovered', 0):.2f}</ShPPRecovered>
+      <NICCompensationOnSMP>{eps_data.get('nic_compensation', 0):.2f}</NICCompensationOnSMP>
+      <CISDeductionsSuffered>{eps_data.get('cis_deductions', 0):.2f}</CISDeductionsSuffered>
+    </RecoverableAmountsYTD>"""
+        
+        if eps_data.get('final_submission'):
+            xml_content += """
+    <FinalSubmission>
+      <BecauseSchemeCeased>yes</BecauseSchemeCeased>
+    </FinalSubmission>"""
+        
+        xml_content += """
+  </EmployerPaymentSummary>
+</IRenvelope>"""
+        
+        return xml_content
+    
+    async def poll_submission_status(self, poll_url: str) -> Dict[str, Any]:
+        """Poll HMRC for submission status (test mode returns mock response)"""
+        # In production, this would make an actual HTTP request to HMRC
+        # For test mode, we return a mock accepted response
+        return {
+            "status": "accepted",
+            "message": "Submission accepted by HMRC (TEST MODE)",
+            "timestamp": now_iso()
+        }
 
 
 hmrc_service = HMRCService(use_production=False)
