@@ -6,16 +6,89 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from datetime import datetime, timezone, timedelta
 import httpx
 import logging
+import os
+import sys
 
-from models import (
-    UserCreate, UserLogin, User, TokenResponse, UserRole
-)
-from utils import (
-    db, hash_password, verify_password, create_jwt_token, 
-    generate_user_id, generate_company_id, now_utc, now_iso,
-    JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_DAYS
-)
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pydantic import BaseModel, EmailStr, ConfigDict
+from typing import Optional
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+from pathlib import Path
+import bcrypt
 import jwt
+import uuid
+
+# Load environment
+ROOT_DIR = Path(__file__).parent.parent
+load_dotenv(ROOT_DIR / '.env')
+
+# MongoDB connection
+mongo_url = os.environ.get('MONGO_URL')
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ.get('DB_NAME')]
+
+# JWT Config
+JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-change-in-production')
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_DAYS = 7
+
+# ==================== MODELS ====================
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    company_name: Optional[str] = None
+    role: str = "owner"
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    role: str = "owner"
+    company_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    theme_preference: str = "light"
+    created_at: datetime
+
+class TokenResponse(BaseModel):
+    token: str
+    user: User
+
+# ==================== HELPERS ====================
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+def create_jwt_token(user_id: str, email: str, role: str = "owner") -> str:
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "role": role,
+        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def generate_user_id() -> str:
+    return f"user_{uuid.uuid4().hex[:12]}"
+
+def generate_company_id() -> str:
+    return f"company_{uuid.uuid4().hex[:12]}"
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 logger = logging.getLogger(__name__)
 
