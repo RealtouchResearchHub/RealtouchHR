@@ -2,22 +2,167 @@
 RealtouchHR - Employee Self-Service Routes
 Portal for employees to view payslips, request leave, update details
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from datetime import datetime, timezone
 from typing import List, Optional
 import io
 import logging
+import os
+import sys
+import uuid
 
-from models import (
-    User, SelfServiceProfile, SelfServicePayslip, SelfServiceProfileUpdate,
-    LeaveRequest, LeaveRequestCreate, LeaveBalance
-)
-from utils import db, generate_leave_id, now_utc, now_iso, days_between
-from routes.auth import get_current_user
-from services.email_service import email_service, leave_approval_email
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pydantic import BaseModel, ConfigDict
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+from pathlib import Path
+import jwt
+
+# Load environment
+ROOT_DIR = Path(__file__).parent.parent
+load_dotenv(ROOT_DIR / '.env')
+
+# MongoDB connection
+mongo_url = os.environ.get('MONGO_URL')
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ.get('DB_NAME')]
+
+# JWT Config
+JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-change-in-production')
+JWT_ALGORITHM = "HS256"
 
 logger = logging.getLogger(__name__)
+
+# ==================== MODELS ====================
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    role: str = "owner"
+    company_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    theme_preference: str = "light"
+    created_at: datetime
+
+class SelfServiceProfile(BaseModel):
+    employee_id: str
+    first_name: str
+    last_name: str
+    email: str
+    job_title: Optional[str] = None
+    department: Optional[str] = None
+    start_date: Optional[str] = None
+    can_edit_personal: bool = True
+    can_view_payslips: bool = True
+    can_request_leave: bool = True
+
+class SelfServicePayslip(BaseModel):
+    payrun_id: str
+    period_start: str
+    period_end: str
+    pay_date: str
+    gross_pay: float
+    net_pay: float
+    status: str
+
+class SelfServiceProfileUpdate(BaseModel):
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_sort_code: Optional[str] = None
+
+class LeaveRequestCreate(BaseModel):
+    leave_type: str
+    start_date: str
+    end_date: str
+    reason: Optional[str] = None
+
+class LeaveRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    leave_id: str
+    employee_id: str
+    company_id: str
+    leave_type: str
+    start_date: str
+    end_date: str
+    days: int
+    reason: Optional[str] = None
+    status: str = "pending"
+    approved_by: Optional[str] = None
+    created_at: datetime
+
+class LeaveBalance(BaseModel):
+    employee_id: str
+    year: int
+    annual_entitlement: int = 28
+    used: int = 0
+    pending: int = 0
+    remaining: int = 28
+
+# ==================== HELPERS ====================
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def generate_leave_id() -> str:
+    return f"leave_{uuid.uuid4().hex[:12]}"
+
+def days_between(start_date: str, end_date: str) -> int:
+    start = datetime.fromisoformat(start_date)
+    end = datetime.fromisoformat(end_date)
+    return (end - start).days + 1
+
+async def get_current_user(request: Request) -> User:
+    """Get current authenticated user"""
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    if not session:
+        try:
+            payload = jwt.decode(session_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_doc = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0})
+            if not user_doc:
+                raise HTTPException(status_code=401, detail="User not found")
+            if isinstance(user_doc.get("created_at"), str):
+                user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+            return User(**user_doc)
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now_utc():
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    if isinstance(user_doc.get("created_at"), str):
+        user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+    return User(**user_doc)
 
 router = APIRouter(prefix="/self-service", tags=["Employee Self-Service"])
 
