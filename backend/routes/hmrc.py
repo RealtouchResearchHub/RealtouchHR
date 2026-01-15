@@ -2,20 +2,160 @@
 RealtouchHR - HMRC RTI Routes
 Full Payment Submission (FPS) and Employer Payment Summary (EPS)
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
+import os
+import sys
+import uuid
 
-from models import (
-    User, RTISubmission, RTISubmissionRequest, PayrollHealthCheckResult, 
-    HealthCheckIssue, EPSData
-)
-from utils import db, generate_submission_id, now_utc, now_iso
-from routes.auth import get_current_user, require_payroll
-from services.hmrc_service import hmrc_service, RTIValidator, RTIStatus
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pydantic import BaseModel, ConfigDict
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+from pathlib import Path
+import jwt
+
+# Load environment
+ROOT_DIR = Path(__file__).parent.parent
+load_dotenv(ROOT_DIR / '.env')
+
+# MongoDB connection
+mongo_url = os.environ.get('MONGO_URL')
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ.get('DB_NAME')]
+
+# JWT Config
+JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-change-in-production')
+JWT_ALGORITHM = "HS256"
 
 logger = logging.getLogger(__name__)
+
+# ==================== MODELS ====================
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    role: str = "owner"
+    company_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    theme_preference: str = "light"
+    created_at: datetime
+
+class RTISubmission(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    submission_id: str
+    company_id: str
+    payrun_id: Optional[str] = None
+    submission_type: str
+    status: str
+    validation_errors: List[Dict[str, Any]] = []
+    validation_warnings: List[Dict[str, Any]] = []
+    hmrc_response: Optional[Dict[str, Any]] = None
+    correlation_id: Optional[str] = None
+    poll_url: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    created_at: datetime
+
+class RTISubmissionRequest(BaseModel):
+    payrun_id: str
+    submission_type: str = "FPS"
+    test_mode: bool = True
+
+class HealthCheckIssue(BaseModel):
+    severity: str
+    category: str
+    employee_id: Optional[str] = None
+    employee_name: Optional[str] = None
+    title: str
+    description: str
+    action_required: str
+
+class PayrollHealthCheckResult(BaseModel):
+    payrun_id: str
+    check_date: str
+    overall_status: str
+    score: int
+    issues: List[HealthCheckIssue]
+    can_proceed: bool
+
+class EPSData(BaseModel):
+    no_payment_dates: Optional[List[str]] = None
+    period_of_inactivity: Optional[Dict[str, str]] = None
+    smp_recovered: float = 0
+    spp_recovered: float = 0
+    sap_recovered: float = 0
+    shpp_recovered: float = 0
+    nic_compensation: float = 0
+    cis_deductions: float = 0
+    final_submission: bool = False
+    cessation_date: Optional[str] = None
+
+# ==================== HELPERS ====================
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def generate_submission_id() -> str:
+    return f"rti_{uuid.uuid4().hex[:12]}"
+
+async def get_current_user(request: Request) -> User:
+    """Get current authenticated user"""
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    if not session:
+        try:
+            payload = jwt.decode(session_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_doc = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0})
+            if not user_doc:
+                raise HTTPException(status_code=401, detail="User not found")
+            if isinstance(user_doc.get("created_at"), str):
+                user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+            return User(**user_doc)
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now_utc():
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    if isinstance(user_doc.get("created_at"), str):
+        user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+    return User(**user_doc)
+
+async def require_payroll(request: Request) -> User:
+    """Require payroll admin or above"""
+    user = await get_current_user(request)
+    if user.role not in ["owner", "admin", "payroll_admin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return user
 
 router = APIRouter(prefix="/hmrc", tags=["HMRC RTI"])
 
