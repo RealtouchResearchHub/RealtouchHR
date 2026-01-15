@@ -48,8 +48,8 @@ export default function ComplianceScore({ score = 100, size = 'lg', showLabel = 
                     />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={cn("font-bold font-['Plus_Jakarta_Sans']", text, getComplianceColor(score))}>
-                        {score}%
+                    <span className={cn("font-bold font-['Plus_Jakarta_Sans']", text, getComplianceColor(validScore))}>
+                        {validScore}%
                     </span>
                 </div>
             </div>
