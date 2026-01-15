@@ -20,6 +20,8 @@ import AuditPage from './components/pages/AuditPage';
 import SettingsPage from './components/pages/SettingsPage';
 import BulkImportPage from './components/pages/BulkImportPage';
 import OnboardingWizard from './components/pages/OnboardingWizard';
+import SelfServicePortal from './components/pages/SelfServicePortal';
+import HMRCDashboard from './components/pages/HMRCDashboard';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
