@@ -103,6 +103,8 @@ function AppRouter() {
             <Route path="/audit" element={<ProtectedRoute><AuditPage /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><BulkImportPage /></ProtectedRoute>} />
+            <Route path="/self-service" element={<ProtectedRoute><SelfServicePortal /></ProtectedRoute>} />
+            <Route path="/hmrc" element={<ProtectedRoute><HMRCDashboard /></ProtectedRoute>} />
             
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />
