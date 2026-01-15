@@ -42,7 +42,7 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - ✅ Payroll Hub (guided flow, pay runs, payslips preview)
 - ✅ Audit Log (immutable timeline)
 - ✅ Settings (company, compliance tasks, theme)
-- ✅ AI Copilot sidebar (GPT-4o integration)
+- ✅ AI Copilot sidebar (GPT-4o via emergentintegrations)
 - ✅ Light/Dark mode toggle
 
 ### Phase 2 Features - Complete (December 27, 2025)
@@ -54,8 +54,13 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - ✅ In-app Notifications System
 - ✅ Time-to-First-Payroll Onboarding Wizard
 
+### Bug Fixes - January 14, 2026
+- ✅ Fixed AI Copilot - Now using emergentintegrations library with GPT-4o
+- ✅ Verified payslip PDF download working
+- ✅ Verified Google Social Login working
+
 ### Backend APIs
-- /api/auth/* - Authentication routes
+- /api/auth/* - Authentication routes (JWT + Google OAuth)
 - /api/company - Company management
 - /api/employees - Employee CRUD
 - /api/employees/import - CSV bulk import
@@ -72,7 +77,7 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - /api/payroll/runs/:id/export/p32 - P32 report
 - /api/audit - Audit log
 - /api/compliance/* - Compliance tasks and score
-- /api/copilot/chat - AI Copilot
+- /api/copilot/chat - AI Copilot (GPT-4o)
 - /api/notifications - Notifications
 - /api/onboarding/* - Onboarding wizard
 
@@ -95,7 +100,7 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - Backend: FastAPI + MongoDB (motor async) + reportlab (PDF)
 - Frontend: React + Shadcn UI + Tailwind CSS
 - Auth: JWT + Emergent Google OAuth
-- AI: OpenAI GPT-4o (via Emergent LLM key)
+- AI: OpenAI GPT-4o (via emergentintegrations with Emergent LLM key)
 
 ## Prioritized Backlog
 
@@ -118,9 +123,17 @@ Build a next-generation HR + Payroll + Compliance SaaS platform (UK-first) with:
 - [ ] Pension auto-enrollment workflow
 - [ ] Student loan deductions
 
-## Next Tasks
-1. HMRC RTI API integration for live submission
-2. Email notifications via SendGrid
-3. Employee self-service dashboard
-4. Multi-currency support
-5. Advanced reporting & analytics
+### P3 - Refactoring
+- [ ] Break down server.py monolith into modules
+- [ ] Add comprehensive unit tests
+- [ ] Implement rate limiting
+- [ ] Add API documentation (Swagger/OpenAPI)
+
+## Test Reports
+- /app/test_reports/iteration_1.json
+- /app/test_reports/iteration_2.json
+- /app/test_reports/iteration_3.json (Latest - 100% pass rate)
+
+## Test Credentials
+- Email: test@example.com
+- Password: Test123!
