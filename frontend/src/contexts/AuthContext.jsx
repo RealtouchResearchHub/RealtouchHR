@@ -106,6 +106,9 @@ export function AuthProvider({ children }) {
         }
     };
 
+    // Get token from localStorage for components that need it
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
     const value = {
         user,
         company,
@@ -117,7 +120,8 @@ export function AuthProvider({ children }) {
         logout,
         updatePreferences,
         refreshCompany,
-        isAuthenticated: !!user
+        isAuthenticated: !!user,
+        token
     };
 
     return (
