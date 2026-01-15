@@ -28,7 +28,9 @@ import {
     Bot,
     ChevronRight,
     Building2,
-    Upload
+    Upload,
+    UserCircle,
+    Send
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -41,8 +43,10 @@ const navigation = [
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
+    { name: 'HMRC RTI', href: '/hmrc', icon: Send },
     { name: 'Import', href: '/import', icon: Upload },
     { name: 'Audit Log', href: '/audit', icon: Shield },
+    { name: 'Self-Service', href: '/self-service', icon: UserCircle },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
