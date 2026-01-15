@@ -39,7 +39,7 @@ export default function ComplianceScore({ score = 100, size = 'lg', showLabel = 
                         strokeLinecap="round"
                         className={cn(
                             "transition-all duration-1000 ease-out",
-                            score >= 90 ? "stroke-emerald-500" : score >= 70 ? "stroke-amber-500" : "stroke-rose-500"
+                            validScore >= 90 ? "stroke-emerald-500" : validScore >= 70 ? "stroke-amber-500" : "stroke-rose-500"
                         )}
                         style={{
                             strokeDasharray: circumference * (ring / 120),
