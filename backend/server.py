@@ -2821,15 +2821,18 @@ async def update_email_settings(data: dict, user: User = Depends(get_current_use
     
     return {"message": "Email settings updated"}
 
+# Import and include modular routes BEFORE including api_router in app
+try:
+    from routes.hmrc import router as hmrc_router
+    from routes.self_service import router as self_service_router
+    api_router.include_router(hmrc_router)
+    api_router.include_router(self_service_router)
+    logging.info("Modular routes loaded successfully")
+except Exception as e:
+    logging.error(f"Failed to load modular routes: {e}")
+
 # Include the router
 app.include_router(api_router)
-
-# Import and include modular routes
-from routes.hmrc import router as hmrc_router
-from routes.self_service import router as self_service_router
-
-api_router.include_router(hmrc_router)
-api_router.include_router(self_service_router)
 
 # CORS Middleware
 app.add_middleware(
