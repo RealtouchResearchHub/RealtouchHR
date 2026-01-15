@@ -157,6 +157,181 @@ async def require_payroll(request: Request) -> User:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return user
 
+
+# ==================== RTI VALIDATION ====================
+
+class RTIStatus:
+    DRAFT = "draft"
+    VALIDATING = "validating"
+    VALIDATED = "validated"
+    SUBMITTING = "submitting"
+    SUBMITTED = "submitted"
+    POLLING = "polling"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    ERROR = "error"
+
+
+class RTIValidator:
+    """Validates payroll data against HMRC RTI rules"""
+    
+    @staticmethod
+    def validate_ni_number(ni: str) -> Optional[Dict]:
+        """Validate National Insurance number format"""
+        if not ni:
+            return {"code": "NI001", "field": "ni_number", "message": "National Insurance number is required", "severity": "error"}
+        
+        import re
+        ni_clean = ni.upper().replace(' ', '')
+        pattern = r'^(?!BG|GB|NK|KN|TN|NT|ZZ)[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]$'
+        
+        if not re.match(pattern, ni_clean):
+            return {"code": "NI002", "field": "ni_number", "message": f"Invalid NI number format: {ni}", "severity": "error"}
+        return None
+    
+    @staticmethod
+    def validate_tax_code(tax_code: str) -> Optional[Dict]:
+        """Validate tax code format"""
+        if not tax_code:
+            return {"code": "TAX001", "field": "tax_code", "message": "Tax code is required", "severity": "warning"}
+        
+        import re
+        code_clean = tax_code.upper().replace(' ', '')
+        pattern = r'^(S)?(\d{1,4}[LMNPTY]|BR|D[01]|NT|0T|K\d+)$'
+        
+        if not re.match(pattern, code_clean):
+            return {"code": "TAX002", "field": "tax_code", "message": f"Invalid tax code format: {tax_code}", "severity": "warning"}
+        return None
+    
+    @staticmethod
+    def validate_employee_for_fps(employee: dict) -> List[Dict]:
+        """Validate employee data for FPS submission"""
+        errors = []
+        
+        if not employee.get("first_name"):
+            errors.append({"code": "EMP001", "field": "first_name", "message": "First name is required", "severity": "error"})
+        if not employee.get("last_name"):
+            errors.append({"code": "EMP002", "field": "last_name", "message": "Last name is required", "severity": "error"})
+        
+        ni_error = RTIValidator.validate_ni_number(employee.get("ni_number", ""))
+        if ni_error:
+            errors.append(ni_error)
+        
+        tax_error = RTIValidator.validate_tax_code(employee.get("tax_code", ""))
+        if tax_error:
+            errors.append(tax_error)
+        
+        salary = employee.get("salary", 0)
+        if not salary or salary <= 0:
+            errors.append({"code": "EMP003", "field": "salary", "message": "Valid salary is required", "severity": "error"})
+        
+        return errors
+    
+    @staticmethod
+    def validate_company_for_rti(company: dict) -> List[Dict]:
+        """Validate company data for RTI submission"""
+        errors = []
+        
+        import re
+        paye_ref = company.get("paye_reference", "")
+        if not paye_ref:
+            errors.append({"code": "COMP001", "field": "paye_reference", "message": "PAYE reference is required for RTI", "severity": "error"})
+        elif not re.match(r'^\d{3}/[A-Z0-9]+$', paye_ref.upper()):
+            errors.append({"code": "COMP002", "field": "paye_reference", "message": f"Invalid PAYE reference format: {paye_ref}", "severity": "error"})
+        
+        aor = company.get("accounts_office_reference", "")
+        if not aor:
+            errors.append({"code": "COMP003", "field": "accounts_office_reference", "message": "Accounts Office Reference is required for RTI", "severity": "error"})
+        
+        return errors
+
+
+class HMRCService:
+    """HMRC RTI Submission Service"""
+    
+    def __init__(self, use_production: bool = False):
+        self.use_production = use_production
+        self.base_url = "https://transaction-engine.tax.service.gov.uk/submission" if use_production else "https://test-transaction-engine.tax.service.gov.uk/submission"
+    
+    async def validate_fps(self, company: dict, payrun: dict, employees: list, payslips: list) -> Dict[str, Any]:
+        """Validate data for FPS submission"""
+        errors = []
+        warnings = []
+        
+        company_errors = RTIValidator.validate_company_for_rti(company)
+        for err in company_errors:
+            if err.get("severity") == "error":
+                errors.append(err)
+            else:
+                warnings.append(err)
+        
+        for emp in employees:
+            emp_errors = RTIValidator.validate_employee_for_fps(emp)
+            for err in emp_errors:
+                if err.get("severity") == "error":
+                    errors.append(err)
+                else:
+                    warnings.append(err)
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "employee_count": len(employees),
+            "total_pay": sum(ps.get("gross_pay", 0) for ps in payslips)
+        }
+    
+    async def submit_to_hmrc(self, xml_content: str, submission_type: str = "FPS") -> Dict[str, Any]:
+        """Submit XML to HMRC Gateway (test mode)"""
+        correlation_id = str(uuid.uuid4())
+        
+        if self.use_production:
+            return {
+                "success": False,
+                "error": "Production submission requires HMRC Gateway credentials",
+                "correlation_id": correlation_id
+            }
+        
+        return {
+            "success": True,
+            "correlation_id": correlation_id,
+            "poll_url": f"{self.base_url}/poll/{correlation_id}",
+            "status": "submitted",
+            "message": "Submission received. This is a TEST submission.",
+            "timestamp": now_iso()
+        }
+    
+    def get_tax_month(self, date_str: str) -> int:
+        """Get HMRC tax month from a date"""
+        date = datetime.fromisoformat(date_str)
+        month = date.month
+        day = date.day
+        
+        if month == 4 and day >= 6:
+            return 1
+        elif month > 4:
+            return month - 3
+        elif month < 4:
+            return month + 9
+        elif month == 4 and day < 6:
+            return 12
+        return 1
+    
+    def get_tax_year(self, date_str: str) -> str:
+        """Get HMRC tax year from a date"""
+        date = datetime.fromisoformat(date_str)
+        year = date.year
+        month = date.month
+        day = date.day
+        
+        if month < 4 or (month == 4 and day < 6):
+            return f"{str(year-1)[2:]}-{str(year)[2:]}"
+        return f"{str(year)[2:]}-{str(year+1)[2:]}"
+
+
+hmrc_service = HMRCService(use_production=False)
+
+
 router = APIRouter(prefix="/hmrc", tags=["HMRC RTI"])
 
 
