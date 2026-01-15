@@ -728,7 +728,7 @@ async def submit_fps(
         "company_id": user.company_id,
         "payrun_id": request.payrun_id,
         "submission_type": "FPS",
-        "status": RTIStatus.VALIDATING.value,
+        "status": RTIStatus.VALIDATING,
         "validation_errors": [],
         "validation_warnings": validation.get("warnings", []),
         "test_mode": request.test_mode,
@@ -751,7 +751,7 @@ async def submit_fps(
         # Store XML for reference
         await db.rti_submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED.value}}
+            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED}}
         )
         
         # Submit to HMRC (test mode)
@@ -763,7 +763,7 @@ async def submit_fps(
                     {"submission_id": submission_id},
                     {
                         "$set": {
-                            "status": RTIStatus.SUBMITTED.value,
+                            "status": RTIStatus.SUBMITTED,
                             "correlation_id": result.get("correlation_id"),
                             "poll_url": result.get("poll_url"),
                             "hmrc_response": result,
@@ -795,7 +795,7 @@ async def submit_fps(
             else:
                 await db.rti_submissions.update_one(
                     {"submission_id": submission_id},
-                    {"$set": {"status": RTIStatus.ERROR.value, "hmrc_response": result}}
+                    {"$set": {"status": RTIStatus.ERROR, "hmrc_response": result}}
                 )
                 return {
                     "success": False,
@@ -816,7 +816,7 @@ async def submit_fps(
         logger.error(f"FPS submission error: {e}")
         await db.rti_submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {"status": RTIStatus.ERROR.value, "error": str(e)}}
+            {"$set": {"status": RTIStatus.ERROR, "error": str(e)}}
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -864,7 +864,7 @@ async def submit_eps(
         "company_id": user.company_id,
         "payrun_id": None,
         "submission_type": "EPS",
-        "status": RTIStatus.VALIDATING.value,
+        "status": RTIStatus.VALIDATING,
         "tax_month": tax_month,
         "tax_year": tax_year,
         "eps_data": eps_data.dict(),
@@ -886,7 +886,7 @@ async def submit_eps(
         
         await db.rti_submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED.value}}
+            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED}}
         )
         
         # Submit (test mode only for now)
@@ -897,7 +897,7 @@ async def submit_eps(
                 {"submission_id": submission_id},
                 {
                     "$set": {
-                        "status": RTIStatus.SUBMITTED.value,
+                        "status": RTIStatus.SUBMITTED,
                         "correlation_id": result.get("correlation_id"),
                         "hmrc_response": result,
                         "submitted_at": now.isoformat()
@@ -995,7 +995,7 @@ async def poll_submission_status(
     result = await hmrc_service.poll_submission_status(poll_url)
     
     # Update status
-    new_status = RTIStatus.ACCEPTED.value if result.get("status") == "accepted" else submission.get("status")
+    new_status = RTIStatus.ACCEPTED if result.get("status") == "accepted" else submission.get("status")
     
     await db.rti_submissions.update_one(
         {"submission_id": submission_id},
@@ -1003,7 +1003,7 @@ async def poll_submission_status(
             "$set": {
                 "status": new_status,
                 "poll_response": result,
-                "accepted_at": datetime.now(timezone.utc).isoformat() if new_status == RTIStatus.ACCEPTED.value else None
+                "accepted_at": datetime.now(timezone.utc).isoformat() if new_status == RTIStatus.ACCEPTED else None
             }
         }
     )
