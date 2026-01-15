@@ -738,7 +738,13 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
     if not user.company_id:
         raise HTTPException(status_code=404, detail="No company found")
     
-    update_fields = {k: v for k, v in data.items() if k in ["name", "industry", "size", "address", "payroll_frequency", "setup_completed"]}
+    # Allow updating HMRC-related fields for RTI submissions
+    allowed_fields = [
+        "name", "industry", "size", "address", "payroll_frequency", "setup_completed",
+        "paye_reference", "accounts_office_reference", "corporation_tax_reference",
+        "hmrc_sender_id", "hmrc_password"
+    ]
+    update_fields = {k: v for k, v in data.items() if k in allowed_fields}
     
     if update_fields:
         await db.companies.update_one({"company_id": user.company_id}, {"$set": update_fields})
