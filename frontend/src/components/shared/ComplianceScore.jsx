@@ -1,9 +1,12 @@
 import React from 'react';
 import { cn, getComplianceColor, getComplianceBg } from '../../lib/utils';
 
-export default function ComplianceScore({ score, size = 'lg', showLabel = true }) {
+export default function ComplianceScore({ score = 100, size = 'lg', showLabel = true }) {
+    // Ensure score is a valid number between 0-100
+    const validScore = typeof score === 'number' && !isNaN(score) ? Math.max(0, Math.min(100, score)) : 100;
+    
     const circumference = 2 * Math.PI * 45;
-    const strokeDashoffset = circumference - (score / 100) * circumference;
+    const strokeDashoffset = circumference - (validScore / 100) * circumference;
 
     const sizes = {
         sm: { ring: 60, stroke: 6, text: 'text-lg' },
