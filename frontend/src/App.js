@@ -22,6 +22,7 @@ import BulkImportPage from './components/pages/BulkImportPage';
 import OnboardingWizard from './components/pages/OnboardingWizard';
 import SelfServicePortal from './components/pages/SelfServicePortal';
 import HMRCDashboard from './components/pages/HMRCDashboard';
+import HMRCSubmissionPage from './components/pages/HMRCSubmissionPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
