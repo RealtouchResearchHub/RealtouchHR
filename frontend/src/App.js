@@ -106,6 +106,7 @@ function AppRouter() {
             <Route path="/import" element={<ProtectedRoute><BulkImportPage /></ProtectedRoute>} />
             <Route path="/self-service" element={<ProtectedRoute><SelfServicePortal /></ProtectedRoute>} />
             <Route path="/hmrc" element={<ProtectedRoute><HMRCDashboard /></ProtectedRoute>} />
+            <Route path="/rti-sync" element={<ProtectedRoute><HMRCSubmissionPage /></ProtectedRoute>} />
             
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />
