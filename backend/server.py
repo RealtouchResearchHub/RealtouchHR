@@ -2831,8 +2831,10 @@ async def update_email_settings(data: dict, user: User = Depends(get_current_use
 try:
     from routes.hmrc import router as hmrc_router
     from routes.self_service import router as self_service_router
+    from routes.rti_sync import router as rti_sync_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
+    api_router.include_router(rti_sync_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")
