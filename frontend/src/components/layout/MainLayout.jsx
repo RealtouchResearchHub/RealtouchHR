@@ -44,8 +44,9 @@ const navigation = [
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
     { name: 'HMRC RTI', href: '/hmrc', icon: Send },
+    { name: 'RTI Sync', href: '/rti-sync', icon: Shield },
     { name: 'Import', href: '/import', icon: Upload },
-    { name: 'Audit Log', href: '/audit', icon: Shield },
+    { name: 'Audit Log', href: '/audit', icon: Building2 },
     { name: 'Self-Service', href: '/self-service', icon: UserCircle },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
