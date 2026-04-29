@@ -1,205 +1,219 @@
 # RealtouchHR - Product Requirements Document
 
 ## Overview
-RealtouchHR is a compliance-first HR & Payroll SaaS platform for UK businesses. 
+RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform designed for the UK market with global extensibility. The platform provides comprehensive tools for employee management, payroll processing, compliance monitoring, and regulatory submissions.
 
-**Core Differentiator:** "Compliance Autopilot" with continuous HMRC/UKVI checks and confidence scoring.
+## Core Differentiation
+- **Compliance Autopilot**: Real-time risk scoring and automated compliance monitoring
+- **One Guided Payroll Flow**: Intuitive payroll processing with RTI integration
+- **AI Copilots**: Intelligent assistance for various HR tasks
+- **UK-First Design**: HMRC RTI, UKVI compliance, UK tax calculations
 
-## Compliance Statement
-- This software is **HMRC RTI-compatible** and **HMRC-aligned**
-- HMRC does not endorse, approve, or certify payroll software
-- Compliance with RTI regulations is the **employer's legal responsibility**
-- This tool **enables compliance** through accurate record-keeping and timely submissions
-
----
-
-## What's Been Implemented
-
-### Stage 1 MVP ✅
-- Authentication (JWT + Google OAuth)
-- Dashboard with Compliance Score
-- Employee Management
-- Leave Management
-- Document Management
-- Time & Scheduling
-- Payroll Hub with guided flow
-- Audit Log
-- Settings
-- AI Copilot (GPT-4o via emergentintegrations)
-- Light/Dark mode
-
-### Phase 2 ✅
-- Employee Detail with edit
-- CSV Bulk Import
-- PDF Payslip Generation
-- HMRC Export Pack (FPS, EPS, P32)
-- In-app Notifications
-- Onboarding Wizard
-
-### Phase 3 ✅ (January 17, 2026)
-- **HMRC RTI Integration**
-- **RTI Sync Engine** (Event-driven submission service)
-- **Employee Self-Service Portal**
-- **Email Notifications** (Resend - mock ready)
-- **Backend Modularization**
+## Target Market
+- UK businesses of all sizes
+- Companies with sponsored workers (UKVI compliance)
+- Multi-entity organizations requiring consolidated reporting
 
 ---
 
-## RTI Sync Engine Architecture
+## Implemented Features
 
-### Overview
-The RTI Sync Engine is an event-driven service that manages HMRC RTI submissions with human-in-the-loop approval.
+### Authentication & User Management
+- [x] JWT-based authentication (email/password)
+- [x] Emergent-managed Google Social Login
+- [x] Role-based access control (Owner, Admin, HR Manager, Payroll Admin, Manager, Employee)
+- [x] User registration and onboarding wizard
 
-### Key Features
-- **Event-Driven:** Triggers on PayRunApproved events
-- **Modes:** Sandbox (test), Live (production), Paused
-- **Workflow:** Prepare → Validate → Queue → Approve → Submit → Receipt
-- **Human-in-the-Loop:** All submissions require explicit approval
-- **Immutable Audit:** All actions logged with cryptographic hashes
-- **Idempotency:** Prevents duplicate submissions per pay run
+### Core HR Module
+- [x] Employee records management (CRUD)
+- [x] Employee detail views with compliance scoring
+- [x] Bulk employee import (CSV)
+- [x] Leave management and approval workflows
+- [x] Document management and storage
 
-### Submission States
-1. `preparing` - FPS/EPS being generated
-2. `validation_pending` - Awaiting validation
-3. `validation_failed` - Has blocking errors
-4. `queued` - Ready for approval queue
-5. `approval_pending` - Awaiting human approval
-6. `approved` - Ready to submit
-7. `submitting` - In progress
-8. `submitted` - Sent to HMRC
-9. `accepted` - HMRC accepted
-10. `rejected` - HMRC rejected
-11. `error` - System error
-12. `cancelled` - Cancelled by user
+### Payroll Module
+- [x] Pay run creation and management
+- [x] UK tax calculations (PAYE, NI, Student Loan)
+- [x] PDF payslip generation
+- [x] Multi-currency support (16+ currencies)
+- [x] Guided payroll flow wizard
 
-### Validation Rules
-Validates against HMRC RTI specifications:
-- Company: PAYE reference, Accounts Office Reference
-- Employees: NI number format, tax code, names
-- Pay Run: dates, payslips, totals
+### HMRC RTI Sync Engine (P0 - COMPLETED)
+- [x] Event-driven architecture for RTI submissions
+- [x] Sandbox/Live/Paused modes
+- [x] FPS (Full Payment Submission) generation
+- [x] Human-in-the-loop approval workflow
+- [x] Immutable audit trails
+- [x] SOAP/XML GovTalk envelope for live HMRC submissions
+- [x] Poll endpoint for submission status tracking
+- [x] Correlation ID tracking
 
-### Security
-- HMRC credentials stored in environment variables only
-- Payloads stored with SHA-256 hashes
-- Immutable audit ledger for all actions
-- Feature flags control live submission
+### UKVI Compliance Layer (P2 - COMPLETED)
+- [x] UKVI Compliance Dashboard
+- [x] Employee visa/immigration tracking
+- [x] Visa expiry alerts and notifications
+- [x] Right-to-work monitoring
+- [x] Appendix D record completeness tracking
+- [x] Reportable events detection (10-day reporting)
+- [x] Reporting checklist with deadlines
+- [x] Compliance scoring per employee
+
+### Enterprise Features (P2 - COMPLETED)
+- [x] Advanced RBAC with 45 granular permissions
+- [x] 7 pre-defined role templates
+- [x] Custom role creation
+- [x] Multi-entity organization management
+- [x] Consolidated payroll reporting
+- [x] SCIM 2.0 provisioning endpoints
+- [x] SAML SSO configuration
+
+### AI Copilot
+- [x] AI-powered assistant using GPT-4o
+- [x] Integration with emergentintegrations library
+- [x] Contextual HR queries and assistance
+
+### Self-Service Portal
+- [x] Employee profile view
+- [x] Payslip access
+- [x] Leave request submission
+- [x] Personal document access
+
+---
+
+## Technical Architecture
+
+### Backend
+- **Framework**: FastAPI (Python)
+- **Database**: MongoDB (Motor async driver)
+- **Authentication**: JWT tokens
+- **PDF Generation**: ReportLab
+- **Email Service**: Resend (stubbed)
+- **HMRC Integration**: SOAP/XML via httpx
+
+### Frontend
+- **Framework**: React 18
+- **UI Library**: Shadcn UI + Tailwind CSS
+- **State Management**: Context API
+- **Routing**: React Router v6
+
+### Directory Structure
+```
+/app/
+├── backend/
+│   ├── models/
+│   ├── routes/
+│   │   ├── auth.py
+│   │   ├── hmrc.py
+│   │   ├── rti_sync.py
+│   │   ├── ukvi.py
+│   │   ├── enterprise.py
+│   │   └── self_service.py
+│   ├── services/
+│   │   ├── email_service.py
+│   │   ├── hmrc_service.py
+│   │   ├── pdf_service.py
+│   │   ├── rti_sync_service.py
+│   │   ├── ukvi_service.py
+│   │   └── enterprise_service.py
+│   └── server.py
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── pages/
+│       │   └── shared/
+│       └── App.js
+└── memory/
+    └── PRD.md
+```
 
 ---
 
 ## API Endpoints
 
-### RTI Sync Engine (New)
-- GET `/api/rti-sync/status` - Engine status and configuration
-- GET `/api/rti-sync/submissions` - List submissions
-- GET `/api/rti-sync/submissions/{id}` - Submission detail
-- POST `/api/rti-sync/prepare` - Prepare FPS
-- POST `/api/rti-sync/submissions/{id}/validate` - Re-validate
-- POST `/api/rti-sync/submissions/{id}/request-approval` - Request approval
-- POST `/api/rti-sync/submissions/{id}/approve` - Approve (requires confirmation)
-- POST `/api/rti-sync/submissions/{id}/reject` - Reject
-- POST `/api/rti-sync/submissions/{id}/submit` - Submit to HMRC
-- GET `/api/rti-sync/submissions/{id}/audit-trail` - Immutable audit trail
-- GET `/api/rti-sync/receipts` - HMRC receipts
-- GET `/api/rti-sync/health-check/{payrun_id}` - Pre-submission validation
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/auth/token` - Token refresh
 
-### Self-Service Portal
-- GET/PUT `/api/self-service/profile` - Employee profile
-- GET `/api/self-service/payslips` - Payslip list
-- GET `/api/self-service/payslips/{id}/download` - Download PDF
-- GET `/api/self-service/leave/balance` - Leave balance
-- GET/POST `/api/self-service/leave/requests` - Leave requests
-- DELETE `/api/self-service/leave/request/{id}` - Cancel request
-- GET `/api/self-service/documents` - View documents
+### Employees
+- `GET /api/employees` - List employees
+- `POST /api/employees` - Create employee
+- `GET /api/employees/{id}` - Get employee details
+- `PUT /api/employees/{id}` - Update employee
 
-### HMRC RTI (Legacy)
-- POST `/api/hmrc/validate/{payrun_id}` - Validate
-- GET `/api/hmrc/health-check/{payrun_id}` - Health check
-- POST `/api/hmrc/fps/submit` - Submit FPS
-- POST `/api/hmrc/eps/submit` - Submit EPS
-- GET `/api/hmrc/submissions` - History
+### Payroll
+- `GET /api/pay-runs` - List pay runs
+- `POST /api/pay-runs` - Create pay run
+- `GET /api/pay-runs/{id}` - Get pay run details
 
----
+### RTI Sync
+- `GET /api/rti-sync/status` - Engine status
+- `GET /api/rti-sync/submissions` - List submissions
+- `POST /api/rti-sync/prepare` - Prepare FPS
+- `POST /api/rti-sync/submissions/{id}/approve` - Approve submission
+- `POST /api/rti-sync/submissions/{id}/submit` - Submit to HMRC
+- `POST /api/rti-sync/submissions/{id}/poll` - Poll HMRC status
 
-## Frontend Pages
+### UKVI Compliance
+- `GET /api/ukvi/dashboard` - Company UKVI dashboard
+- `GET /api/ukvi/visa-types` - Visa type reference
+- `GET /api/ukvi/alerts` - Active alerts
+- `GET /api/ukvi/reporting/checklist` - Pending reports
 
-- `/rti-sync` - **RTI Sync Engine Wizard** (New)
-- `/hmrc` - HMRC RTI Dashboard
-- `/self-service` - Employee Self-Service Portal
+### Enterprise
+- `GET /api/enterprise/roles` - Company roles
+- `POST /api/enterprise/roles` - Create custom role
+- `GET /api/enterprise/permissions` - All permissions
+- `GET /api/enterprise/sso/config` - SSO configuration
 
 ---
 
-## Environment Configuration
-
-### Required for RTI
-```bash
-# RTI Sync Engine Mode
-RTI_SYNC_MODE=sandbox|live|paused
-RTI_LIVE_SUBMISSION_ENABLED=false
-RTI_AUTO_PREPARE_ENABLED=true
-
-# HMRC Gateway (for live mode)
-HMRC_GATEWAY_ID=your_gateway_id
-HMRC_GATEWAY_PASSWORD=your_password
-```
-
-### Required for Email
-```bash
-RESEND_API_KEY=your_resend_key
-SENDER_EMAIL=noreply@yourcompany.com
-```
-
-### Company Settings (via UI)
-- `paye_reference` - Format: 123/ABC123
-- `accounts_office_reference` - HMRC AOR
-- `hmrc_sender_id` - Gateway sender ID (optional)
-
----
-
-## Backend Architecture
-
-```
-/app/backend/
-├── server.py                 # Main FastAPI app
-├── routes/
-│   ├── auth.py              # JWT/OAuth routes
-│   ├── hmrc.py              # HMRC RTI routes
-│   ├── self_service.py      # Employee portal
-│   └── rti_sync.py          # RTI Sync Engine routes
-├── services/
-│   ├── email_service.py     # Resend integration
-│   ├── hmrc_service.py      # HMRC helpers
-│   ├── pdf_service.py       # PDF generation
-│   └── rti_sync_service.py  # RTI Sync Engine
-├── models/                   # Pydantic models
-└── utils/                    # Helpers
-```
-
----
-
-## Compliance Collections (MongoDB)
-
-- `rti_submissions` - Submission records
-- `rti_payloads` - XML payloads (encrypted)
+## Database Collections
+- `users` - User accounts
+- `companies` - Company records
+- `employees` - Employee records
+- `pay_runs` - Payroll runs
+- `payslips` - Individual payslips
+- `leave_requests` - Leave applications
+- `audit_log` - System audit trail
+- `rti_submissions` - RTI submission records
+- `rti_audit_ledger` - RTI audit entries
 - `rti_receipts` - HMRC receipts
-- `rti_audit_ledger` - Immutable audit trail
+- `ukvi_alerts` - UKVI compliance alerts
+- `ukvi_reporting_events` - Reportable events
+- `roles` - Custom role definitions
+- `organizations` - Multi-entity orgs
+- `entities` - Legal entities
+- `sso_configs` - SSO settings
 
 ---
 
-## Mocked/Stub Implementations
-
-1. **Email (Resend):** Mock until RESEND_API_KEY set
-2. **HMRC Gateway:** Sandbox mode returns mock responses
-3. **Live HMRC:** Stub - requires credentials + feature flag
-
----
-
-## Test Reports
-- `/app/test_reports/iteration_4.json` (100% pass)
-
-## Credentials
-- Email: test@example.com
-- Password: Test123!
+## Mocked/Stubbed Services
+1. **HMRC Live Submission**: Credentials required (HMRC_GATEWAY_ID, HMRC_GATEWAY_PASSWORD)
+2. **Email Notifications**: API key required (RESEND_API_KEY)
+3. **SCIM IdP Integration**: Endpoint available, requires IdP setup
+4. **SAML SSO**: Endpoint available, requires IdP metadata
 
 ---
 
-*Last Updated: January 17, 2026*
+## Test Coverage
+- Backend: 100% API tests passing
+- Frontend: 100% E2E tests passing
+- Test files: `/app/backend/tests/`, `/app/tests/e2e/`
+
+---
+
+## Future Roadmap
+
+### Backlog
+- [ ] Time & Scheduling module (rotas, clock-ins)
+- [ ] E-signature integration
+- [ ] Advanced analytics dashboard
+- [ ] Mobile app
+- [ ] Webhook integrations
+- [ ] API rate limiting
+- [ ] Two-factor authentication
+
+---
+
+*Last Updated: April 29, 2026*

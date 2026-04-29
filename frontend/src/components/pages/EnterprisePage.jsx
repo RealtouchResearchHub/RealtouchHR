@@ -137,6 +137,7 @@ export default function EnterprisePage() {
             size="sm"
             onClick={() => setActiveTab(tab.id)}
             className="gap-2"
+            data-testid={`enterprise-tab-${tab.id}`}
           >
             <tab.icon className="w-4 h-4" />
             {tab.label}

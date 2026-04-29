@@ -173,6 +173,7 @@ export default function UKVICompliancePage() {
             size="sm"
             onClick={() => setActiveTab(tab)}
             className="capitalize"
+            data-testid={`ukvi-tab-${tab}`}
           >
             {tab}
           </Button>
