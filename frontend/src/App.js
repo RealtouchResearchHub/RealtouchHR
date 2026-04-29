@@ -23,6 +23,8 @@ import OnboardingWizard from './components/pages/OnboardingWizard';
 import SelfServicePortal from './components/pages/SelfServicePortal';
 import HMRCDashboard from './components/pages/HMRCDashboard';
 import HMRCSubmissionPage from './components/pages/HMRCSubmissionPage';
+import UKVICompliancePage from './components/pages/UKVICompliancePage';
+import EnterprisePage from './components/pages/EnterprisePage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -107,6 +109,8 @@ function AppRouter() {
             <Route path="/self-service" element={<ProtectedRoute><SelfServicePortal /></ProtectedRoute>} />
             <Route path="/hmrc" element={<ProtectedRoute><HMRCDashboard /></ProtectedRoute>} />
             <Route path="/rti-sync" element={<ProtectedRoute><HMRCSubmissionPage /></ProtectedRoute>} />
+            <Route path="/ukvi" element={<ProtectedRoute><UKVICompliancePage /></ProtectedRoute>} />
+            <Route path="/enterprise" element={<ProtectedRoute><EnterprisePage /></ProtectedRoute>} />
             
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />

@@ -920,12 +920,20 @@ class RTISyncEngine:
         Send XML to HMRC Government Gateway.
         
         In SANDBOX mode: Returns mock response
-        In LIVE mode: Sends to actual HMRC endpoint (requires credentials)
+        In LIVE mode: Sends to actual HMRC endpoint via SOAP/XML (requires credentials)
+        
+        HMRC RTI uses Government Gateway web services (SOAP-based).
+        Endpoints:
+          - Sandbox: https://test-transaction-engine.tax.service.gov.uk/submission
+          - Live: https://transaction-engine.tax.service.gov.uk/submission
         """
+        import httpx
+        from xml.etree import ElementTree as ET
+        
         correlation_id = str(uuid.uuid4())
         
         if self.mode == RTISyncMode.SANDBOX:
-            # Sandbox mock response
+            # Sandbox mock response - simulates HMRC test environment
             return {
                 "success": True,
                 "correlation_id": correlation_id,
@@ -936,9 +944,10 @@ class RTISyncEngine:
             }
         
         elif self.mode == RTISyncMode.LIVE:
-            # Live submission - requires HMRC credentials
+            # Live submission - requires HMRC Government Gateway credentials
             gateway_id = os.environ.get("HMRC_GATEWAY_ID")
             gateway_password = os.environ.get("HMRC_GATEWAY_PASSWORD")
+            hmrc_sender_id = os.environ.get("HMRC_SENDER_ID", gateway_id)
             
             if not gateway_id or not gateway_password:
                 return {
@@ -948,16 +957,67 @@ class RTISyncEngine:
                     "message": "HMRC Gateway credentials not configured. Set HMRC_GATEWAY_ID and HMRC_GATEWAY_PASSWORD environment variables."
                 }
             
-            # In production, implement actual HMRC API call here
-            # Using httpx or aiohttp to POST to HMRC_URLS["live"]
-            # with proper authentication headers
-            
-            return {
-                "success": False,
-                "correlation_id": correlation_id,
-                "response_code": "501",
-                "message": "Live HMRC submission not yet implemented. This is a stub."
-            }
+            try:
+                # Build HMRC SOAP envelope with GovTalk wrapper
+                soap_envelope = self._build_hmrc_soap_envelope(
+                    xml_content=xml_content,
+                    submission_type=submission_type,
+                    gateway_id=gateway_id,
+                    gateway_password=gateway_password,
+                    sender_id=hmrc_sender_id,
+                    correlation_id=correlation_id
+                )
+                
+                # Submit to HMRC Transaction Engine
+                hmrc_url = HMRC_URLS["live"]
+                
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        hmrc_url,
+                        content=soap_envelope,
+                        headers={
+                            "Content-Type": "application/xml; charset=utf-8",
+                            "SOAPAction": "Submit"
+                        }
+                    )
+                
+                # Parse HMRC response
+                if response.status_code == 200:
+                    response_xml = response.text
+                    hmrc_result = self._parse_hmrc_response(response_xml)
+                    
+                    return {
+                        "success": hmrc_result.get("success", False),
+                        "correlation_id": hmrc_result.get("correlation_id", correlation_id),
+                        "poll_url": hmrc_result.get("poll_url"),
+                        "response_code": str(response.status_code),
+                        "message": hmrc_result.get("message", "Submission processed by HMRC"),
+                        "hmrc_qualifier": hmrc_result.get("qualifier"),
+                        "mode": "live"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "correlation_id": correlation_id,
+                        "response_code": str(response.status_code),
+                        "message": f"HMRC Gateway returned HTTP {response.status_code}: {response.text[:500]}"
+                    }
+                    
+            except httpx.TimeoutException:
+                return {
+                    "success": False,
+                    "correlation_id": correlation_id,
+                    "response_code": "408",
+                    "message": "HMRC Gateway request timed out. Please retry later."
+                }
+            except Exception as e:
+                logger.error(f"HMRC submission error: {e}")
+                return {
+                    "success": False,
+                    "correlation_id": correlation_id,
+                    "response_code": "500",
+                    "message": f"HMRC submission failed: {str(e)}"
+                }
         
         return {
             "success": False,
@@ -965,6 +1025,286 @@ class RTISyncEngine:
             "response_code": "503",
             "message": "RTI Sync Engine is paused"
         }
+    
+    def _build_hmrc_soap_envelope(
+        self,
+        xml_content: str,
+        submission_type: str,
+        gateway_id: str,
+        gateway_password: str,
+        sender_id: str,
+        correlation_id: str
+    ) -> str:
+        """
+        Build HMRC GovTalk SOAP envelope for RTI submission.
+        
+        HMRC uses a specific GovTalk envelope format for submissions.
+        """
+        now = datetime.now(timezone.utc)
+        
+        # GovTalk envelope wrapping the RTI payload
+        govtalk_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+    <EnvelopeVersion>2.0</EnvelopeVersion>
+    <Header>
+        <MessageDetails>
+            <Class>HMRC-PAYE-RTI-{submission_type}</Class>
+            <Qualifier>request</Qualifier>
+            <Function>submit</Function>
+            <CorrelationID>{correlation_id}</CorrelationID>
+            <Transformation>XML</Transformation>
+        </MessageDetails>
+        <SenderDetails>
+            <IDAuthentication>
+                <SenderID>{sender_id}</SenderID>
+                <Authentication>
+                    <Method>clear</Method>
+                    <Role>principal</Role>
+                    <Value>{gateway_password}</Value>
+                </Authentication>
+            </IDAuthentication>
+            <X509Certificate/>
+        </SenderDetails>
+    </Header>
+    <GovTalkDetails>
+        <Keys/>
+        <TargetDetails>
+            <Organisation>HMRC</Organisation>
+        </TargetDetails>
+        <GatewayTimestamp>{now.isoformat()}</GatewayTimestamp>
+    </GovTalkDetails>
+    <Body>
+        {xml_content}
+    </Body>
+</GovTalkMessage>"""
+        
+        return govtalk_envelope
+    
+    def _parse_hmrc_response(self, response_xml: str) -> dict:
+        """
+        Parse HMRC GovTalk response XML.
+        
+        HMRC responses include:
+        - Qualifier: acknowledgement, response, poll, error
+        - CorrelationID: for tracking
+        - Errors: if any validation/submission errors
+        """
+        from xml.etree import ElementTree as ET
+        
+        result = {
+            "success": False,
+            "correlation_id": None,
+            "poll_url": None,
+            "message": "",
+            "qualifier": None,
+            "errors": []
+        }
+        
+        try:
+            # Parse the response XML
+            root = ET.fromstring(response_xml)
+            
+            # Define namespaces
+            ns = {
+                "gt": "http://www.govtalk.gov.uk/CM/envelope",
+                "err": "http://www.govtalk.gov.uk/CM/errorresponse"
+            }
+            
+            # Extract qualifier (acknowledgement, response, error, poll)
+            qualifier_elem = root.find(".//gt:Qualifier", ns)
+            if qualifier_elem is not None:
+                result["qualifier"] = qualifier_elem.text
+            
+            # Extract correlation ID
+            corr_elem = root.find(".//gt:CorrelationID", ns)
+            if corr_elem is not None:
+                result["correlation_id"] = corr_elem.text
+            
+            # Check for errors
+            errors = root.findall(".//err:Error", ns)
+            if errors:
+                error_messages = []
+                for err in errors:
+                    err_num = err.find("err:Number", ns)
+                    err_text = err.find("err:Text", ns)
+                    error_messages.append({
+                        "number": err_num.text if err_num is not None else "unknown",
+                        "text": err_text.text if err_text is not None else "Unknown error"
+                    })
+                result["errors"] = error_messages
+                result["message"] = "; ".join([e["text"] for e in error_messages])
+                result["success"] = False
+            else:
+                # Check for acknowledgement
+                if result["qualifier"] == "acknowledgement":
+                    result["success"] = True
+                    result["message"] = "Submission acknowledged by HMRC"
+                    
+                    # Look for poll interval/URL
+                    poll_elem = root.find(".//gt:ResponseEndPoint", ns)
+                    if poll_elem is not None:
+                        result["poll_url"] = poll_elem.text
+                    
+                elif result["qualifier"] == "response":
+                    result["success"] = True
+                    result["message"] = "Submission accepted by HMRC"
+                    
+                elif result["qualifier"] == "error":
+                    result["success"] = False
+                    result["message"] = "HMRC returned an error"
+                else:
+                    result["message"] = f"HMRC response received (qualifier: {result['qualifier']})"
+                    result["success"] = result["qualifier"] not in ["error", "poll_error"]
+                    
+        except ET.ParseError as e:
+            result["message"] = f"Failed to parse HMRC response: {str(e)}"
+        except Exception as e:
+            result["message"] = f"Error processing HMRC response: {str(e)}"
+        
+        return result
+    
+    async def poll_hmrc_status(self, submission_id: str) -> dict:
+        """
+        Poll HMRC for submission status.
+        
+        HMRC uses asynchronous processing - after initial acknowledgement,
+        we need to poll for the final response.
+        """
+        import httpx
+        
+        submission = await db.rti_submissions.find_one(
+            {"submission_id": submission_id},
+            {"_id": 0}
+        )
+        
+        if not submission:
+            raise ValueError(f"Submission {submission_id} not found")
+        
+        poll_url = submission.get("hmrc_poll_url")
+        correlation_id = submission.get("hmrc_correlation_id")
+        
+        if not poll_url and not correlation_id:
+            return {
+                "status": "no_poll_url",
+                "message": "No poll URL available for this submission"
+            }
+        
+        if self.mode == RTISyncMode.SANDBOX:
+            # Mock polling response for sandbox
+            return {
+                "status": "accepted",
+                "correlation_id": correlation_id,
+                "message": "Sandbox submission accepted",
+                "mode": "sandbox"
+            }
+        
+        if self.mode != RTISyncMode.LIVE:
+            return {
+                "status": "paused",
+                "message": "RTI Sync Engine is paused"
+            }
+        
+        gateway_id = os.environ.get("HMRC_GATEWAY_ID")
+        gateway_password = os.environ.get("HMRC_GATEWAY_PASSWORD")
+        
+        if not gateway_id or not gateway_password:
+            return {
+                "status": "error",
+                "message": "HMRC credentials not configured"
+            }
+        
+        try:
+            # Build poll request
+            poll_envelope = self._build_hmrc_poll_envelope(
+                correlation_id=correlation_id,
+                gateway_id=gateway_id,
+                gateway_password=gateway_password
+            )
+            
+            poll_endpoint = poll_url or HMRC_URLS["live"]
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    poll_endpoint,
+                    content=poll_envelope,
+                    headers={
+                        "Content-Type": "application/xml; charset=utf-8",
+                        "SOAPAction": "Poll"
+                    }
+                )
+            
+            if response.status_code == 200:
+                result = self._parse_hmrc_response(response.text)
+                
+                # Update submission status
+                now = datetime.now(timezone.utc)
+                new_state = RTISubmissionState.ACCEPTED.value if result.get("success") else RTISubmissionState.REJECTED.value
+                
+                if result.get("qualifier") == "acknowledgement":
+                    # Still processing, keep polling
+                    new_state = RTISubmissionState.POLLING.value
+                
+                await db.rti_submissions.update_one(
+                    {"submission_id": submission_id},
+                    {"$set": {
+                        "state": new_state,
+                        "hmrc_poll_result": result,
+                        "updated_at": now.isoformat()
+                    }}
+                )
+                
+                return {
+                    "status": new_state,
+                    "correlation_id": correlation_id,
+                    "message": result.get("message"),
+                    "hmrc_response": result
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"HMRC poll returned HTTP {response.status_code}"
+                }
+                
+        except Exception as e:
+            logger.error(f"HMRC poll error: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+    
+    def _build_hmrc_poll_envelope(
+        self,
+        correlation_id: str,
+        gateway_id: str,
+        gateway_password: str
+    ) -> str:
+        """Build HMRC poll request envelope"""
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
+    <EnvelopeVersion>2.0</EnvelopeVersion>
+    <Header>
+        <MessageDetails>
+            <Class>HMRC-PAYE-RTI-FPS</Class>
+            <Qualifier>poll</Qualifier>
+            <Function>submit</Function>
+            <CorrelationID>{correlation_id}</CorrelationID>
+        </MessageDetails>
+        <SenderDetails>
+            <IDAuthentication>
+                <SenderID>{gateway_id}</SenderID>
+                <Authentication>
+                    <Method>clear</Method>
+                    <Role>principal</Role>
+                    <Value>{gateway_password}</Value>
+                </Authentication>
+            </IDAuthentication>
+        </SenderDetails>
+    </Header>
+    <GovTalkDetails>
+        <Keys/>
+    </GovTalkDetails>
+    <Body/>
+</GovTalkMessage>"""
     
     # ==================== HELPERS ====================
     

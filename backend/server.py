@@ -2832,9 +2832,13 @@ try:
     from routes.hmrc import router as hmrc_router
     from routes.self_service import router as self_service_router
     from routes.rti_sync import router as rti_sync_router
+    from routes.ukvi import router as ukvi_router
+    from routes.enterprise import router as enterprise_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
+    api_router.include_router(ukvi_router)
+    api_router.include_router(enterprise_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

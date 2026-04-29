@@ -1,0 +1,116 @@
+{
+  "summary": "Completed comprehensive testing of new UKVI Compliance Layer, Enterprise Features, and RTI Sync Poll APIs. All backend APIs (16/16) and frontend tests (13/13) passed successfully.",
+  "mode": "generate",
+  "baseline_commit": "6806ad1046216c3dfda13592bc16308f6ce79701",
+  "head_commit": "1fc09fc86046767cf4e617fed91cc0f7e9965037",
+  "specs_created": [
+    "/app/tests/e2e/ukvi-enterprise.spec.ts",
+    "/app/backend/tests/test_ukvi_enterprise_apis.py",
+    "/app/backend/tests/conftest.py"
+  ],
+  "specs_updated": [],
+  "quarantined_tests": [],
+  "test_report_links": [
+    "/app/backend/tests/test_ukvi_enterprise_apis.py",
+    "/app/test_reports/pytest/pytest_results_iter6.xml",
+    "/app/tests/e2e/ukvi-enterprise.spec.ts"
+  ],
+  "regression_results": {
+    "total_specs": 29,
+    "passed": 29,
+    "failed": 0,
+    "skipped": 0
+  },
+  "issues": [
+    {
+      "id": "IMP-001",
+      "issue_type": "improvement",
+      "severity": "LOW",
+      "description": "Dashboard compliance score shows '100%' correctly now (was '00%' in previous iterations)",
+      "endpoint_or_component": "Dashboard.jsx"
+    },
+    {
+      "id": "IMP-002",
+      "issue_type": "improvement",
+      "severity": "LOW",
+      "description": "UKVI Compliance page tabs could benefit from data-testid attributes for more robust testing",
+      "endpoint_or_component": "UKVICompliancePage.jsx"
+    },
+    {
+      "id": "IMP-003",
+      "issue_type": "improvement",
+      "severity": "LOW",
+      "description": "Enterprise page tabs could benefit from data-testid attributes for more robust testing",
+      "endpoint_or_component": "EnterprisePage.jsx"
+    }
+  ],
+  "action_items": [],
+  "updated_files": [
+    "/app/tests/e2e/ukvi-enterprise.spec.ts",
+    "/app/backend/tests/test_ukvi_enterprise_apis.py",
+    "/app/backend/tests/conftest.py",
+    "/app/tests/playwright.config.ts",
+    "/app/tests/fixtures/helpers.ts"
+  ],
+  "test_results": {
+    "backend": "100% (16/16 passed)",
+    "frontend": "100% (13/13 passed)"
+  },
+  "seed_data_creation": "No new seed data created. Used existing test user (test@example.com) and company data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All new UKVI and Enterprise features tested and working. Backend APIs: UKVI dashboard, visa-types, alerts, reporting checklist; Enterprise roles, permissions, SSO config; RTI Sync poll. Frontend pages: UKVI Compliance with tab navigation (Overview, Reporting, Alerts), Enterprise Settings with tab navigation (Roles & Permissions, Multi-Entity, SSO Configuration), Dashboard compliance score card. Test credentials: test@example.com / Test123!",
+  "mocked_apis": {
+    "HMRC Gateway (sandbox mode)": "Returns mock success response with correlation_id and poll_url",
+    "Email notifications (Resend)": "Uses mock implementation until RESEND_API_KEY is set",
+    "SCIM IdP webhook endpoint": "Endpoint available but not connected to real IdP",
+    "SAML SSO callback": "Endpoint available but SSO not configured"
+  },
+  "backend_tests_summary": {
+    "TestUKVIComplianceAPIs": {
+      "test_ukvi_dashboard_returns_compliance_data": "PASSED",
+      "test_ukvi_visa_types_returns_list": "PASSED",
+      "test_ukvi_alerts_returns_list": "PASSED",
+      "test_ukvi_alerts_filter_by_resolved": "PASSED",
+      "test_ukvi_reporting_checklist_returns_data": "PASSED",
+      "test_ukvi_dashboard_requires_auth": "PASSED"
+    },
+    "TestEnterpriseAPIs": {
+      "test_enterprise_roles_returns_list": "PASSED",
+      "test_enterprise_permissions_returns_categorized_list": "PASSED",
+      "test_enterprise_sso_config_returns_status": "PASSED",
+      "test_enterprise_roles_requires_auth": "PASSED",
+      "test_enterprise_permissions_requires_auth": "PASSED"
+    },
+    "TestRTISyncPollAPI": {
+      "test_rti_poll_with_submitted_submission": "PASSED",
+      "test_rti_poll_invalid_submission_returns_404": "PASSED",
+      "test_rti_poll_non_submitted_returns_400": "PASSED",
+      "test_rti_poll_requires_auth": "PASSED"
+    },
+    "TestDashboardAPI": {
+      "test_dashboard_stats_returns_compliance_score": "PASSED"
+    }
+  },
+  "frontend_tests_summary": {
+    "UKVI Compliance Page": {
+      "navigates to UKVI Compliance page from sidebar": "PASSED",
+      "displays UKVI compliance dashboard with key metrics": "PASSED",
+      "displays UKVI compliance disclaimer": "PASSED",
+      "has working tab navigation (overview, reporting, alerts)": "PASSED",
+      "displays Check Alerts and Refresh buttons": "PASSED"
+    },
+    "Enterprise Settings Page": {
+      "navigates to Enterprise page from sidebar": "PASSED",
+      "displays Enterprise badge and description": "PASSED",
+      "has working tab navigation (Roles, Multi-Entity, SSO)": "PASSED",
+      "displays Create Custom Role button": "PASSED",
+      "displays SCIM provisioning section in SSO tab": "PASSED"
+    },
+    "Dashboard Compliance Score": {
+      "displays compliance score card on dashboard": "PASSED",
+      "displays stat cards on dashboard": "PASSED",
+      "displays quick action cards on dashboard": "PASSED"
+    }
+  }
+}

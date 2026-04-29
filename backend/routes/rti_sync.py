@@ -536,6 +536,46 @@ async def list_receipts(
 
 # ==================== HEALTH CHECK ROUTE ====================
 
+@router.post("/submissions/{submission_id}/poll")
+async def poll_hmrc_submission(
+    submission_id: str,
+    user: User = Depends(require_payroll_admin)
+):
+    """
+    Poll HMRC for submission status.
+    
+    HMRC uses asynchronous processing. After initial acknowledgement,
+    poll for the final response (accepted/rejected).
+    
+    Returns current HMRC response status.
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    
+    submission = await db.rti_submissions.find_one(
+        {"submission_id": submission_id, "company_id": user.company_id},
+        {"_id": 0}
+    )
+    
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    if submission.get("state") not in ["submitted", "polling"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Submission must be in 'submitted' or 'polling' state to poll. Current: {submission.get('state')}"
+        )
+    
+    from services.rti_sync_service import rti_sync_engine
+    
+    try:
+        result = await rti_sync_engine.poll_hmrc_status(submission_id)
+        return result
+    except Exception as e:
+        logger.error(f"HMRC poll failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/health-check/{payrun_id}")
 async def rti_health_check(
     payrun_id: str,
