@@ -43,6 +43,7 @@ const navigation = [
     { name: 'Employees', href: '/employees', icon: Users },
     { name: 'Leave', href: '/leave', icon: Calendar },
     { name: 'Documents', href: '/documents', icon: FileText },
+    { name: 'Time Tracking', href: '/time-tracking', icon: Clock },
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
     { name: 'HMRC RTI', href: '/hmrc', icon: Send },

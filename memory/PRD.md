@@ -1,218 +1,199 @@
 # RealtouchHR - Product Requirements Document
 
 ## Overview
-RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform designed for the UK market with global extensibility. The platform provides comprehensive tools for employee management, payroll processing, compliance monitoring, and regulatory submissions.
-
-## Core Differentiation
-- **Compliance Autopilot**: Real-time risk scoring and automated compliance monitoring
-- **One Guided Payroll Flow**: Intuitive payroll processing with RTI integration
-- **AI Copilots**: Intelligent assistance for various HR tasks
-- **UK-First Design**: HMRC RTI, UKVI compliance, UK tax calculations
-
-## Target Market
-- UK businesses of all sizes
-- Companies with sponsored workers (UKVI compliance)
-- Multi-entity organizations requiring consolidated reporting
+RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform designed for the UK market with global extensibility.
 
 ---
 
-## Implemented Features
+## Implemented Features (April 29, 2026)
 
-### Authentication & User Management
-- [x] JWT-based authentication (email/password)
-- [x] Emergent-managed Google Social Login
-- [x] Role-based access control (Owner, Admin, HR Manager, Payroll Admin, Manager, Employee)
-- [x] User registration and onboarding wizard
-
-### Core HR Module
+### Core HR Module ✅
 - [x] Employee records management (CRUD)
 - [x] Employee detail views with compliance scoring
 - [x] Bulk employee import (CSV)
 - [x] Leave management and approval workflows
 - [x] Document management and storage
 
-### Payroll Module
+### Authentication ✅
+- [x] JWT-based authentication (email/password)
+- [x] Emergent-managed Google Social Login
+- [x] Role-based access control
+
+### Time & Scheduling Module ✅ (NEW)
+- [x] Clock in/out functionality with location tracking
+- [x] Break start/end tracking
+- [x] Shift scheduling
+- [x] Rota management (create, publish, copy)
+- [x] Timesheet generation from clock events
+- [x] Timesheet approval workflow
+- [x] Attendance reporting
+
+### Payroll Module ✅
 - [x] Pay run creation and management
 - [x] UK tax calculations (PAYE, NI, Student Loan)
 - [x] PDF payslip generation
-- [x] Multi-currency support (16+ currencies)
 - [x] Guided payroll flow wizard
 
-### HMRC RTI Sync Engine (P0 - COMPLETED)
+### HMRC RTI Sync Engine ✅
 - [x] Event-driven architecture for RTI submissions
-- [x] Sandbox/Live/Paused modes
+- [x] Sandbox/Live modes with SOAP/XML GovTalk envelope
 - [x] FPS (Full Payment Submission) generation
 - [x] Human-in-the-loop approval workflow
-- [x] Immutable audit trails
-- [x] SOAP/XML GovTalk envelope for live HMRC submissions
-- [x] Poll endpoint for submission status tracking
-- [x] Correlation ID tracking
+- [x] Poll endpoint for submission status
 
-### UKVI Compliance Layer (P2 - COMPLETED)
+### UKVI Compliance Layer ✅
 - [x] UKVI Compliance Dashboard
-- [x] Employee visa/immigration tracking
-- [x] Visa expiry alerts and notifications
-- [x] Right-to-work monitoring
-- [x] Appendix D record completeness tracking
-- [x] Reportable events detection (10-day reporting)
-- [x] Reporting checklist with deadlines
+- [x] Visa expiry tracking and alerts
 - [x] Compliance scoring per employee
 
-### Enterprise Features (P2 - COMPLETED)
+### Right to Work (RTW) Module ✅ (NEW)
+- [x] RTW check recording (manual, IDVT, Home Office, share code)
+- [x] Document type validation
+- [x] RTW status tracking (valid, expiring_soon, expired, not_checked)
+- [x] Follow-up date calculation (28 days before expiry)
+- [x] RTW summary dashboard
+- [x] Bulk status update
+
+### Certificate of Sponsorship (CoS) Register ✅ (NEW)
+- [x] CoS record management
+- [x] SOC code lookup with going rates
+- [x] Salary threshold checks
+- [x] CoS assignment to employees
+- [x] Expiry tracking
+
+### Pension Auto-Enrolment Module ✅ (NEW)
+- [x] Pension scheme management
+- [x] Worker category assessment (eligible, non-eligible, entitled)
+- [x] Auto-enrolment logic
+- [x] Opt-out recording
+- [x] Contribution calculations
+- [x] Contribution reports per pay run
+
+### Enterprise Features ✅
 - [x] Advanced RBAC with 45 granular permissions
-- [x] 7 pre-defined role templates
-- [x] Custom role creation
+- [x] 7 pre-defined role templates + custom roles
 - [x] Multi-entity organization management
-- [x] Consolidated payroll reporting
 - [x] SCIM 2.0 provisioning endpoints
 - [x] SAML SSO configuration
 
-### AI Copilot
+### AI Copilot ✅
 - [x] AI-powered assistant using GPT-4o
 - [x] Integration with emergentintegrations library
-- [x] Contextual HR queries and assistance
 
-### Self-Service Portal
-- [x] Employee profile view
-- [x] Payslip access
-- [x] Leave request submission
-- [x] Personal document access
+---
+
+## API Endpoints
+
+### Time & Scheduling
+- `POST /api/time/clock-in` - Clock in
+- `POST /api/time/clock-out` - Clock out
+- `POST /api/time/break/start` - Start break
+- `POST /api/time/break/end` - End break
+- `GET /api/time/status` - Get clock status
+- `GET /api/time/shifts` - List shifts
+- `POST /api/time/shifts` - Create shift
+- `GET /api/time/rotas` - List rotas
+- `POST /api/time/rotas` - Create rota
+- `GET /api/time/timesheets` - List timesheets
+- `POST /api/time/timesheets/{id}/approve` - Approve timesheet
+
+### Right to Work
+- `POST /api/rtw/check` - Record RTW check
+- `GET /api/rtw/employees/{id}` - Get employee RTW checks
+- `GET /api/rtw/summary` - RTW status summary
+- `GET /api/rtw/expiring` - Expiring RTW
+
+### Certificate of Sponsorship
+- `GET /api/cos` - List CoS records
+- `POST /api/cos` - Create CoS
+- `GET /api/cos/{id}` - Get CoS details
+- `POST /api/cos/{id}/assign` - Assign CoS to employee
+- `GET /api/cos/salary-checks` - Check salary thresholds
+- `GET /api/cos/soc-codes/search` - Search SOC codes
+
+### Pensions
+- `GET /api/pensions/schemes` - List pension schemes
+- `POST /api/pensions/schemes` - Create scheme
+- `POST /api/pensions/assess` - Run bulk assessment
+- `POST /api/pensions/enrolment` - Enrol employee
+- `GET /api/pensions/contribution-report/{payRunId}` - Get contributions
+
+---
+
+## Placeholder Credentials (Replace with your own)
+
+### In `/app/backend/.env`:
+```
+RESEND_API_KEY=           # Your Resend API key for email notifications
+HMRC_GATEWAY_ID=          # Your HMRC Government Gateway User ID
+HMRC_GATEWAY_PASSWORD=    # Your HMRC Government Gateway Password
+HMRC_SENDER_ID=           # Your HMRC Sender ID (optional, defaults to Gateway ID)
+```
+
+---
+
+## Remaining Tasks (Backlog)
+
+### P1 - High Priority
+- [ ] Statutory Payments (SSP, SMP, SPP, ShPP, SAP)
+- [ ] Student Loan Deductions enhancement
+- [ ] P60, P45, P11D Generation
+- [ ] Benefits in Kind Module
+- [ ] Employee Termination/Offboarding Workflow
+
+### P2 - Medium Priority
+- [ ] Enhanced UKVI Reporting Workflow (automated triggers)
+- [ ] HMRC Settings Enhancement (PAYE ref validation in onboarding)
+- [ ] Record Retention Enforcement
+- [ ] Company Settings - Sponsor Licence fields
+
+### P3 - Future
+- [ ] Mobile app
+- [ ] Webhook integrations
+- [ ] API rate limiting
+- [ ] Two-factor authentication
 
 ---
 
 ## Technical Architecture
 
 ### Backend
-- **Framework**: FastAPI (Python)
-- **Database**: MongoDB (Motor async driver)
-- **Authentication**: JWT tokens
-- **PDF Generation**: ReportLab
-- **Email Service**: Resend (stubbed)
-- **HMRC Integration**: SOAP/XML via httpx
+- FastAPI (Python)
+- MongoDB (Motor async driver)
+- JWT Authentication
+- ReportLab (PDFs)
+- httpx (HMRC submissions)
 
 ### Frontend
-- **Framework**: React 18
-- **UI Library**: Shadcn UI + Tailwind CSS
-- **State Management**: Context API
-- **Routing**: React Router v6
+- React 18
+- Shadcn UI + Tailwind CSS
+- React Router v6
 
 ### Directory Structure
 ```
-/app/
-├── backend/
-│   ├── models/
-│   ├── routes/
-│   │   ├── auth.py
-│   │   ├── hmrc.py
-│   │   ├── rti_sync.py
-│   │   ├── ukvi.py
-│   │   ├── enterprise.py
-│   │   └── self_service.py
-│   ├── services/
-│   │   ├── email_service.py
-│   │   ├── hmrc_service.py
-│   │   ├── pdf_service.py
-│   │   ├── rti_sync_service.py
-│   │   ├── ukvi_service.py
-│   │   └── enterprise_service.py
-│   └── server.py
-├── frontend/
-│   └── src/
-│       ├── components/
-│       │   ├── pages/
-│       │   └── shared/
-│       └── App.js
-└── memory/
-    └── PRD.md
+/app/backend/
+├── routes/
+│   ├── auth.py
+│   ├── hmrc.py
+│   ├── rti_sync.py
+│   ├── ukvi.py
+│   ├── enterprise.py
+│   ├── time.py
+│   ├── rtw.py
+│   ├── cos.py
+│   ├── pensions.py
+│   └── self_service.py
+├── services/
+│   ├── rti_sync_service.py
+│   ├── ukvi_service.py
+│   ├── enterprise_service.py
+│   ├── time_service.py
+│   ├── rtw_service.py
+│   ├── cos_service.py
+│   ├── pension_service.py
+│   └── email_service.py
+└── server.py
 ```
-
----
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/token` - Token refresh
-
-### Employees
-- `GET /api/employees` - List employees
-- `POST /api/employees` - Create employee
-- `GET /api/employees/{id}` - Get employee details
-- `PUT /api/employees/{id}` - Update employee
-
-### Payroll
-- `GET /api/pay-runs` - List pay runs
-- `POST /api/pay-runs` - Create pay run
-- `GET /api/pay-runs/{id}` - Get pay run details
-
-### RTI Sync
-- `GET /api/rti-sync/status` - Engine status
-- `GET /api/rti-sync/submissions` - List submissions
-- `POST /api/rti-sync/prepare` - Prepare FPS
-- `POST /api/rti-sync/submissions/{id}/approve` - Approve submission
-- `POST /api/rti-sync/submissions/{id}/submit` - Submit to HMRC
-- `POST /api/rti-sync/submissions/{id}/poll` - Poll HMRC status
-
-### UKVI Compliance
-- `GET /api/ukvi/dashboard` - Company UKVI dashboard
-- `GET /api/ukvi/visa-types` - Visa type reference
-- `GET /api/ukvi/alerts` - Active alerts
-- `GET /api/ukvi/reporting/checklist` - Pending reports
-
-### Enterprise
-- `GET /api/enterprise/roles` - Company roles
-- `POST /api/enterprise/roles` - Create custom role
-- `GET /api/enterprise/permissions` - All permissions
-- `GET /api/enterprise/sso/config` - SSO configuration
-
----
-
-## Database Collections
-- `users` - User accounts
-- `companies` - Company records
-- `employees` - Employee records
-- `pay_runs` - Payroll runs
-- `payslips` - Individual payslips
-- `leave_requests` - Leave applications
-- `audit_log` - System audit trail
-- `rti_submissions` - RTI submission records
-- `rti_audit_ledger` - RTI audit entries
-- `rti_receipts` - HMRC receipts
-- `ukvi_alerts` - UKVI compliance alerts
-- `ukvi_reporting_events` - Reportable events
-- `roles` - Custom role definitions
-- `organizations` - Multi-entity orgs
-- `entities` - Legal entities
-- `sso_configs` - SSO settings
-
----
-
-## Mocked/Stubbed Services
-1. **HMRC Live Submission**: Credentials required (HMRC_GATEWAY_ID, HMRC_GATEWAY_PASSWORD)
-2. **Email Notifications**: API key required (RESEND_API_KEY)
-3. **SCIM IdP Integration**: Endpoint available, requires IdP setup
-4. **SAML SSO**: Endpoint available, requires IdP metadata
-
----
-
-## Test Coverage
-- Backend: 100% API tests passing
-- Frontend: 100% E2E tests passing
-- Test files: `/app/backend/tests/`, `/app/tests/e2e/`
-
----
-
-## Future Roadmap
-
-### Backlog
-- [ ] Time & Scheduling module (rotas, clock-ins)
-- [ ] E-signature integration
-- [ ] Advanced analytics dashboard
-- [ ] Mobile app
-- [ ] Webhook integrations
-- [ ] API rate limiting
-- [ ] Two-factor authentication
 
 ---
 

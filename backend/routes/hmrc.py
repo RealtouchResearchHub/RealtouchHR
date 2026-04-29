@@ -540,7 +540,7 @@ async def payroll_health_check(
             score -= 10
         
         # Invalid NI format
-        elif not RTIValidator.validate_ni_number(emp.get("ni_number")) is None:
+        elif RTIValidator.validate_ni_number(emp.get("ni_number")) is not None:
             issues.append(HealthCheckIssue(
                 severity="critical",
                 category="compliance",

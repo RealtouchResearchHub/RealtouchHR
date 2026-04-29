@@ -2834,11 +2834,19 @@ try:
     from routes.rti_sync import router as rti_sync_router
     from routes.ukvi import router as ukvi_router
     from routes.enterprise import router as enterprise_router
+    from routes.time import router as time_router
+    from routes.rtw import router as rtw_router
+    from routes.cos import router as cos_router
+    from routes.pensions import router as pensions_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
     api_router.include_router(ukvi_router)
     api_router.include_router(enterprise_router)
+    api_router.include_router(time_router)
+    api_router.include_router(rtw_router)
+    api_router.include_router(cos_router)
+    api_router.include_router(pensions_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")
