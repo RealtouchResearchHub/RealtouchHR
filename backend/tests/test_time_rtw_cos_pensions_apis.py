@@ -6,7 +6,7 @@ import requests
 import os
 from datetime import date, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://rtisync-staging.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://ukvi-staging.preview.emergentagent.com')
 
 
 class TestTimeSchedulingAPIs:
