@@ -220,11 +220,14 @@ export default function TimeSchedulingPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen" data-testid="time-page-loading">
         <RefreshCw className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  // Check if user has no employee record
+  const noEmployeeRecord = clockStatus?.status === 'not_clocked_in' && !clockStatus?.last_event;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
