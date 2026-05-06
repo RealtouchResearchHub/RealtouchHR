@@ -114,7 +114,7 @@ class CompanyCreate(BaseModel):
     payroll_frequency: str = "monthly"
 
 class Company(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
     company_id: str
     name: str
     industry: Optional[str] = None
@@ -124,6 +124,19 @@ class Company(BaseModel):
     owner_id: str
     setup_completed: bool = False
     created_at: datetime
+    # HMRC references
+    paye_reference: Optional[str] = None
+    accounts_office_reference: Optional[str] = None
+    corporation_tax_reference: Optional[str] = None
+    hmrc_sender_id: Optional[str] = None
+    small_employer_relief: bool = False
+    # UKVI Sponsor Licence
+    sponsor_licence_number: Optional[str] = None
+    sponsor_licence_expiry: Optional[str] = None
+    sponsor_licence_rating: Optional[str] = None
+    # Demo
+    demo_mode: bool = False
+    demo_seeded_at: Optional[str] = None
 
 # Employee Models
 class EmployeeCreate(BaseModel):
@@ -138,9 +151,14 @@ class EmployeeCreate(BaseModel):
     tax_code: Optional[str] = None
     bank_account: Optional[str] = None
     bank_sort_code: Optional[str] = None
+    ni_letter: Optional[str] = None
+    immigration_status: Optional[dict] = None
+    student_loan_plan: Optional[str] = None
+    has_postgrad_loan: bool = False
+    pension_enrolled: bool = False
 
 class Employee(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
     employee_id: str
     company_id: str
     first_name: str
@@ -152,11 +170,16 @@ class Employee(BaseModel):
     salary: Optional[float] = None
     ni_number: Optional[str] = None
     tax_code: Optional[str] = None
+    ni_letter: Optional[str] = None
     bank_account: Optional[str] = None
     bank_sort_code: Optional[str] = None
     status: str = "active"
     compliance_score: int = 0
     compliance_issues: List[str] = []
+    immigration_status: Optional[dict] = None
+    student_loan_plan: Optional[str] = None
+    has_postgrad_loan: bool = False
+    pension_enrolled: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -806,6 +829,11 @@ async def create_employee(data: EmployeeCreate, user: User = Depends(get_current
         "tax_code": data.tax_code,
         "bank_account": data.bank_account,
         "bank_sort_code": data.bank_sort_code,
+        "ni_letter": data.ni_letter,
+        "immigration_status": data.immigration_status,
+        "student_loan_plan": data.student_loan_plan,
+        "has_postgrad_loan": data.has_postgrad_loan,
+        "pension_enrolled": data.pension_enrolled,
         "status": "active",
         "compliance_score": compliance_score,
         "compliance_issues": compliance_issues,
@@ -833,6 +861,7 @@ async def create_employee(data: EmployeeCreate, user: User = Depends(get_current
     
     employee_doc["created_at"] = now
     employee_doc["updated_at"] = now
+    employee_doc.pop("_id", None)
     return Employee(**employee_doc)
 
 @api_router.get("/employees", response_model=List[Employee])
@@ -871,7 +900,7 @@ async def update_employee(employee_id: str, data: dict, user: User = Depends(get
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
-    allowed_fields = ["first_name", "last_name", "email", "job_title", "department", "start_date", "salary", "ni_number", "tax_code", "bank_account", "bank_sort_code", "status"]
+    allowed_fields = ["first_name", "last_name", "email", "job_title", "department", "start_date", "salary", "ni_number", "tax_code", "bank_account", "bank_sort_code", "status", "ni_letter", "immigration_status", "student_loan_plan", "has_postgrad_loan", "pension_enrolled", "leaving_date", "termination_reason"]
     update_fields = {k: v for k, v in data.items() if k in allowed_fields}
     update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     

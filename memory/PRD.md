@@ -46,6 +46,60 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 6, 2026 — Iteration 9)
+
+### Demo Tour Walkthrough ✅
+- One-click "Start Demo Tour" on Dashboard seeds 6 demo employees (incl. 1 sponsored worker), a draft pay run with 6 payslips, and a leave request
+- Floating tour overlay walks user through 6 steps: Dashboard → Employees → Payroll → Statutory → UKVI → Billing
+- Idempotent seed (re-running keeps employee count at 6); one-click "Clear Demo Data" reset
+- Tour state persisted in localStorage so it survives navigation; auto-mounted in MainLayout
+
+### Student Loan Plans (P1) ✅
+- 2025-26 thresholds for Plans 1/2/4/5 + Postgraduate Loan
+- `services/student_loan_service.py` calculates per-period deductions
+- API: `GET /api/admin/student-loans/plans`
+- Employee model now accepts `student_loan_plan` and `has_postgrad_loan`
+
+### Statutory ShPP & SAP (P1) ✅
+- Shared Parental Pay (up to 37 weeks) at £184.03 / 90% AWE
+- Adoption Pay (39 weeks total: 6 weeks at 90% AWE + 33 weeks at £184.03)
+- Recovery rates (92% standard / 103% small employer)
+- API: `POST /api/statutory/shpp/calculate`, `POST /api/statutory/sap/calculate`
+- Frontend: 5-tab calculator (SSP/SMP/SPP/ShPP/SAP) at `/statutory`
+
+### Year-End Close (P1) ✅
+- Preview totals, EPS recovery, last-pay-date check
+- One-click close: queues P60s for all active employees, marks final FPS, creates EPS submission record
+- Auditable via `audit_log` collection
+- Frontend: dedicated `/year-end` page
+
+### Benefits in Kind / P11D UI (P1) ✅
+- Inline benefits editor on Employee Detail → Actions → Benefits / P11D
+- Categories: company car, fuel, medical, loan, accommodation, vouchers, expenses, other
+- Auto-calculates total cash equivalent + Class 1A NIC (13.8%)
+- Save record + download PDF in one dialog
+
+### Sponsor Licence + PAYE Validation (P2) ✅
+- Settings → Company tab now has dedicated HMRC References section (PAYE ref + AOR + small employer toggle)
+- UKVI Sponsor Licence section (number, expiry, A/B/suspended rating)
+- Server-side regex validation for PAYE format `NNN/AANNNNNNN` and AOR format `NNNPAANNNNNNNN`
+- 400 error with helpful message on invalid format
+
+### UKVI Salary Threshold Monitoring (P2) ✅
+- `POST /api/ukvi/alerts/generate` now also creates `salary_threshold_breach` alerts when sponsored worker salary < CoS going-rate (or default £38,700)
+- Triggers for visa types: skilled_worker, tier2, gbm, scale_up, intra_company
+
+### Record Retention Enforcement (P2) ✅
+- API: `GET /api/admin/retention/policy`, `POST /api/admin/retention/run?dry_run=true|false`
+- HMRC-compliant 6-7 year retention windows for audit_log, payslips, RTI submissions, tax docs, P11D records, leave, UKVI alerts, notifications
+- Owner-only access; archives to `{collection}_archive` before deletion
+
+### API Surface Improvements ✅
+- `Company` Pydantic model now exposes paye_reference, accounts_office_reference, sponsor_licence_*, small_employer_relief, demo_mode (was previously stripped)
+- `EmployeeCreate` + PUT `/api/employees/{id}` allowed_fields now accept `immigration_status`, `ni_letter`, `student_loan_plan`, `has_postgrad_loan`, `pension_enrolled`, `leaving_date`, `termination_reason`
+
+---
+
 ## NEW (May 6, 2026 — Iteration 8)
 
 ### Stripe Subscription Billing ✅
