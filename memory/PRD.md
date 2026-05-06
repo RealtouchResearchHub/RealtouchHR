@@ -1,200 +1,180 @@
 # RealtouchHR - Product Requirements Document
 
 ## Overview
-RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform designed for the UK market with global extensibility.
+RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform designed for the UK market with global extensibility. The user plans to deploy on Namecheap (frontend + backend).
 
 ---
 
-## Implemented Features (April 29, 2026)
+## Implemented Features
 
 ### Core HR Module ✅
-- [x] Employee records management (CRUD)
-- [x] Employee detail views with compliance scoring
-- [x] Bulk employee import (CSV)
-- [x] Leave management and approval workflows
-- [x] Document management and storage
+- Employee CRUD, detail views with compliance scoring, bulk CSV import
+- Leave management and approval workflows
+- Document management
 
 ### Authentication ✅
-- [x] JWT-based authentication (email/password)
-- [x] Emergent-managed Google Social Login
-- [x] Role-based access control
+- JWT-based (email/password) + Emergent-managed Google Social Login
+- Role-based access control
 
-### Time & Scheduling Module ✅ (NEW)
-- [x] Clock in/out functionality with location tracking
-- [x] Break start/end tracking
-- [x] Shift scheduling
-- [x] Rota management (create, publish, copy)
-- [x] Timesheet generation from clock events
-- [x] Timesheet approval workflow
-- [x] Attendance reporting
+### Time & Scheduling ✅
+- Clock in/out with location, breaks, shifts, rotas, timesheet generation/approval, attendance reporting
 
-### Payroll Module ✅
-- [x] Pay run creation and management
-- [x] UK tax calculations (PAYE, NI, Student Loan)
-- [x] PDF payslip generation
-- [x] Guided payroll flow wizard
+### Payroll ✅
+- Pay run creation, UK PAYE/NI/Student Loan calculations
+- PDF payslip generation, guided payroll flow
 
-### HMRC RTI Sync Engine ✅
-- [x] Event-driven architecture for RTI submissions
-- [x] Sandbox/Live modes with SOAP/XML GovTalk envelope
-- [x] FPS (Full Payment Submission) generation
-- [x] Human-in-the-loop approval workflow
-- [x] Poll endpoint for submission status
+### HMRC RTI Sync ✅
+- Live SOAP submission via `zeep` (sandbox/live modes), FPS generation, human-in-the-loop approval
 
-### UKVI Compliance Layer ✅
-- [x] UKVI Compliance Dashboard
-- [x] Visa expiry tracking and alerts
-- [x] Compliance scoring per employee
+### UKVI Compliance ✅
+- Visa expiry tracking, compliance scoring, alerts dashboard
 
-### Right to Work (RTW) Module ✅ (NEW)
-- [x] RTW check recording (manual, IDVT, Home Office, share code)
-- [x] Document type validation
-- [x] RTW status tracking (valid, expiring_soon, expired, not_checked)
-- [x] Follow-up date calculation (28 days before expiry)
-- [x] RTW summary dashboard
-- [x] Bulk status update
+### Right to Work (RTW) ✅
+- Manual / IDVT / Home Office / share code checks, expiry tracking, follow-up dates
 
-### Certificate of Sponsorship (CoS) Register ✅ (NEW)
-- [x] CoS record management
-- [x] SOC code lookup with going rates
-- [x] Salary threshold checks
-- [x] CoS assignment to employees
-- [x] Expiry tracking
+### Certificate of Sponsorship (CoS) ✅
+- CoS register, SOC code lookup, salary threshold checks, employee assignment
 
-### Pension Auto-Enrolment Module ✅ (NEW)
-- [x] Pension scheme management
-- [x] Worker category assessment (eligible, non-eligible, entitled)
-- [x] Auto-enrolment logic
-- [x] Opt-out recording
-- [x] Contribution calculations
-- [x] Contribution reports per pay run
+### Pension Auto-Enrolment ✅
+- Scheme management, worker category assessment, opt-out, contribution reports
 
-### Enterprise Features ✅
-- [x] Advanced RBAC with 45 granular permissions
-- [x] 7 pre-defined role templates + custom roles
-- [x] Multi-entity organization management
-- [x] SCIM 2.0 provisioning endpoints
-- [x] SAML SSO configuration
+### Enterprise ✅
+- 45 RBAC permissions, 7 role templates, multi-entity, SCIM 2.0, SAML SSO
 
 ### AI Copilot ✅
-- [x] AI-powered assistant using GPT-4o
-- [x] Integration with emergentintegrations library
+- GPT-4o powered assistant via emergentintegrations Universal Key
 
 ---
 
-## API Endpoints
+## NEW (May 6, 2026 — Iteration 8)
 
-### Time & Scheduling
-- `POST /api/time/clock-in` - Clock in
-- `POST /api/time/clock-out` - Clock out
-- `POST /api/time/break/start` - Start break
-- `POST /api/time/break/end` - End break
-- `GET /api/time/status` - Get clock status
-- `GET /api/time/shifts` - List shifts
-- `POST /api/time/shifts` - Create shift
-- `GET /api/time/rotas` - List rotas
-- `POST /api/time/rotas` - Create rota
-- `GET /api/time/timesheets` - List timesheets
-- `POST /api/time/timesheets/{id}/approve` - Approve timesheet
+### Stripe Subscription Billing ✅
+- Plans: Starter (£49/mo, 10 employees), Professional (£149/mo, 50), Enterprise (£399/mo, unlimited)
+- One-time add-ons: Extra users (+10), Priority support, Data migration
+- Server-side fixed pricing (no frontend amount manipulation)
+- `payment_transactions` collection — pending → paid lifecycle
+- Polling on return from Stripe, owner-only billing access
+- Top-level webhook at `/api/webhook/stripe`
+- Dedicated `/billing` page with plan cards + add-ons + transaction history
 
-### Right to Work
-- `POST /api/rtw/check` - Record RTW check
-- `GET /api/rtw/employees/{id}` - Get employee RTW checks
-- `GET /api/rtw/summary` - RTW status summary
-- `GET /api/rtw/expiring` - Expiring RTW
+### Statutory Payments (SSP/SMP/SPP) ✅
+- 2025-26 rates: SSP £116.75/wk, SMP/SPP £184.03/wk, LEL £123/wk
+- Calculator UI for SSP, SMP, SPP per employee
+- Recovery rate calculation (92% standard / 103% small employer)
+- Records persisted in `statutory_payments` collection
+- `/api/statutory/eps-summary` for EPS submission
 
-### Certificate of Sponsorship
-- `GET /api/cos` - List CoS records
-- `POST /api/cos` - Create CoS
-- `GET /api/cos/{id}` - Get CoS details
-- `POST /api/cos/{id}/assign` - Assign CoS to employee
-- `GET /api/cos/salary-checks` - Check salary thresholds
-- `GET /api/cos/soc-codes/search` - Search SOC codes
+### P45 / P60 / P11D PDF Generation ✅
+- Auto-generated P45 on employee offboarding
+- On-demand P60 download for any tax year
+- P11D benefits-in-kind records + downloadable PDF
+- Endpoints: `/api/tax-docs/p45/{id}`, `/p60/{id}?tax_year=YYYY-YY`, `/p11d/{id}/{tax_year}`
 
-### Pensions
-- `GET /api/pensions/schemes` - List pension schemes
-- `POST /api/pensions/schemes` - Create scheme
-- `POST /api/pensions/assess` - Run bulk assessment
-- `POST /api/pensions/enrolment` - Enrol employee
-- `GET /api/pensions/contribution-report/{payRunId}` - Get contributions
+### Employee Offboarding/Termination Workflow ✅
+- Wizard dialog accessible via Actions dropdown on Employee Detail
+- Atomic pipeline: mark leaver → generate P45 → queue RTI leaver → trigger UKVI report (if sponsored) → cease pension → email confirmation
+- 8 termination reasons (resignation, dismissal, redundancy, retirement, end-of-contract, TUPE, death, visa refusal)
+
+### Email Notifications ✅
+- Visa expiry alerts (UKVI alert generation)
+- Timesheet approval/rejection (with reason)
+- Pension auto-enrolment confirmation (with opt-out window)
+- Subscription confirmation
+- Leave approval/rejection (existing)
+- Currently in MOCK mode — set `RESEND_API_KEY` in `/app/backend/.env` to enable
 
 ---
 
-## Placeholder Credentials (Replace with your own)
+## API Endpoints (New in Iter 8)
 
-### In `/app/backend/.env`:
+### Billing/Stripe
+- `GET /api/payments/plans`, `GET /api/payments/billing`, `GET /api/payments/transactions`
+- `POST /api/payments/checkout/subscription`, `POST /api/payments/checkout/addon`, `POST /api/payments/checkout/status`
+- `POST /api/webhook/stripe` (top-level for Stripe webhooks)
+
+### Statutory
+- `GET /api/statutory/rates`
+- `POST /api/statutory/{ssp|smp|spp}/calculate`
+- `POST /api/statutory/record`
+- `GET /api/statutory/{employee/{id}|active|eps-summary}`
+
+### Offboarding
+- `GET /api/offboarding/reasons`, `GET /api/offboarding/list`
+- `POST /api/offboarding/terminate`, `POST /api/offboarding/reinstate/{id}`
+
+### Tax Documents
+- `GET /api/tax-docs/p45/{employee_id}`
+- `GET /api/tax-docs/p60/{employee_id}?tax_year=YYYY-YY`
+- `POST /api/tax-docs/p11d`, `GET /api/tax-docs/p11d/{employee_id}/{tax_year}`
+- `GET /api/tax-docs/employee/{employee_id}/documents`
+
+---
+
+## Placeholder Credentials
+
+`/app/backend/.env`:
 ```
-RESEND_API_KEY=           # Your Resend API key for email notifications
-HMRC_GATEWAY_ID=          # Your HMRC Government Gateway User ID
-HMRC_GATEWAY_PASSWORD=    # Your HMRC Government Gateway Password
-HMRC_SENDER_ID=           # Your HMRC Sender ID (optional, defaults to Gateway ID)
+RESEND_API_KEY=           # Empty → mock email mode (intentional)
+HMRC_GATEWAY_ID=          # Placeholder for sandbox SOAP
+HMRC_GATEWAY_PASSWORD=
+HMRC_SENDER_ID=
+STRIPE_API_KEY=sk_test_emergent  # Pod test key — already configured
+EMERGENT_LLM_KEY=sk-emergent-...   # Universal Key for GPT-4o copilot
 ```
 
 ---
 
-## Remaining Tasks (Backlog)
+## Backlog
 
-### P1 - High Priority
-- [ ] Statutory Payments (SSP, SMP, SPP, ShPP, SAP)
-- [ ] Student Loan Deductions enhancement
-- [ ] P60, P45, P11D Generation
-- [ ] Benefits in Kind Module
-- [ ] Employee Termination/Offboarding Workflow
+### P1 — High Priority
+- Student Loan deductions enhancement (Plans 1/2/4/5 + Postgrad)
+- Benefits in Kind ingestion form (UI for adding P11D items)
+- Year-end FPS finalization + EPS auto-generation (annual close)
+- ShPP / SAP calculators (currently SSP/SMP/SPP only — service code already supports them)
 
-### P2 - Medium Priority
-- [ ] Enhanced UKVI Reporting Workflow (automated triggers)
-- [ ] HMRC Settings Enhancement (PAYE ref validation in onboarding)
-- [ ] Record Retention Enforcement
-- [ ] Company Settings - Sponsor Licence fields
+### P2 — Medium Priority
+- Company Settings — Sponsor Licence fields, PAYE-ref validation in onboarding
+- Record Retention enforcement (auto-archive after retention window)
+- UKVI salary threshold monitoring (alert on going-rate drift)
+- Real-time multi-entity payroll consolidation
 
-### P3 - Future
-- [ ] Mobile app
-- [ ] Webhook integrations
-- [ ] API rate limiting
-- [ ] Two-factor authentication
+### P3 — Future
+- Mobile app, webhook integrations, API rate limiting, 2FA
+- Refactor `server.py` (~2.9K lines) into smaller modules under `routes/`
 
 ---
 
 ## Technical Architecture
 
-### Backend
-- FastAPI (Python)
-- MongoDB (Motor async driver)
-- JWT Authentication
-- ReportLab (PDFs)
-- httpx (HMRC submissions)
-
-### Frontend
-- React 18
-- Shadcn UI + Tailwind CSS
-- React Router v6
-
-### Directory Structure
+### Backend (FastAPI / MongoDB)
 ```
 /app/backend/
 ├── routes/
-│   ├── auth.py
-│   ├── hmrc.py
-│   ├── rti_sync.py
-│   ├── ukvi.py
-│   ├── enterprise.py
-│   ├── time.py
-│   ├── rtw.py
-│   ├── cos.py
-│   ├── pensions.py
-│   └── self_service.py
+│   ├── auth.py, hmrc.py, rti_sync.py, ukvi.py, enterprise.py
+│   ├── time.py, rtw.py, cos.py, pensions.py, self_service.py
+│   ├── payments.py, statutory.py, offboarding.py, tax_documents.py   ← NEW
 ├── services/
-│   ├── rti_sync_service.py
-│   ├── ukvi_service.py
-│   ├── enterprise_service.py
-│   ├── time_service.py
-│   ├── rtw_service.py
-│   ├── cos_service.py
-│   ├── pension_service.py
-│   └── email_service.py
-└── server.py
+│   ├── email_service.py (with visa/timesheet/pension/subscription helpers)
+│   ├── hmrc_service.py, rti_sync_service.py, ukvi_service.py
+│   ├── enterprise_service.py, time_service.py, rtw_service.py
+│   ├── cos_service.py, pension_service.py
+│   ├── payment_service.py, statutory_service.py, offboarding_service.py   ← NEW
+│   └── pdf_service.py (now generates P45/P60/P11D in addition to payslips)
+└── server.py (top-level router + /api/webhook/stripe)
+```
+
+### Frontend (React + Shadcn + Tailwind)
+```
+/app/frontend/src/components/
+├── pages/
+│   ├── BillingPage.jsx          ← NEW: /billing
+│   ├── StatutoryPaymentsPage.jsx ← NEW: /statutory
+│   ├── (existing 18 pages…)
+└── shared/
+    ├── OffboardingDialog.jsx    ← NEW
+    └── (existing shared widgets)
 ```
 
 ---
 
-*Last Updated: April 29, 2026*
+*Last Updated: May 6, 2026 — Iteration 8 (Stripe + Statutory + Offboarding + Tax Docs + Email Notifications)*
