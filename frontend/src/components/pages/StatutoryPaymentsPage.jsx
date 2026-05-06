@@ -44,6 +44,20 @@ export default function StatutoryPaymentsPage() {
         birth_date: '',
         paternity_weeks: 2,
     });
+    // ShPP form
+    const [shppForm, setShppForm] = useState({
+        employee_id: '',
+        share_start_date: '',
+        weeks: 20,
+        is_small_employer: false,
+    });
+    // SAP form
+    const [sapForm, setSapForm] = useState({
+        employee_id: '',
+        adoption_placement_date: '',
+        adoption_start_date: '',
+        is_small_employer: false,
+    });
 
     const [calcResult, setCalcResult] = useState(null);
     const [calcLoading, setCalcLoading] = useState(false);
@@ -94,6 +108,22 @@ export default function StatutoryPaymentsPage() {
                 }
                 url = `${API_URL}/api/statutory/smp/calculate`;
                 body = smpForm;
+            } else if (calcType === 'shpp') {
+                if (!shppForm.employee_id || !shppForm.share_start_date) {
+                    toast.error('Fill all fields');
+                    setCalcLoading(false);
+                    return;
+                }
+                url = `${API_URL}/api/statutory/shpp/calculate`;
+                body = shppForm;
+            } else if (calcType === 'sap') {
+                if (!sapForm.employee_id || !sapForm.adoption_placement_date || !sapForm.adoption_start_date) {
+                    toast.error('Fill all fields');
+                    setCalcLoading(false);
+                    return;
+                }
+                url = `${API_URL}/api/statutory/sap/calculate`;
+                body = sapForm;
             } else {
                 if (!sppForm.employee_id || !sppForm.birth_date) {
                     toast.error('Fill all fields');
@@ -130,6 +160,14 @@ export default function StatutoryPaymentsPage() {
             } else if (calcType === 'smp') {
                 employeeId = smpForm.employee_id;
                 startDate = smpForm.maternity_start_date;
+                endDate = null;
+            } else if (calcType === 'shpp') {
+                employeeId = shppForm.employee_id;
+                startDate = shppForm.share_start_date;
+                endDate = null;
+            } else if (calcType === 'sap') {
+                employeeId = sapForm.employee_id;
+                startDate = sapForm.adoption_start_date;
                 endDate = null;
             } else {
                 employeeId = sppForm.employee_id;
@@ -211,10 +249,12 @@ export default function StatutoryPaymentsPage() {
                     </CardHeader>
                     <CardContent>
                         <Tabs value={calcType} onValueChange={(v) => { setCalcType(v); setCalcResult(null); }}>
-                            <TabsList className="grid grid-cols-3 w-full mb-4">
+                            <TabsList className="grid grid-cols-5 w-full mb-4">
                                 <TabsTrigger value="ssp" data-testid="tab-ssp">SSP</TabsTrigger>
                                 <TabsTrigger value="smp" data-testid="tab-smp">SMP</TabsTrigger>
                                 <TabsTrigger value="spp" data-testid="tab-spp">SPP</TabsTrigger>
+                                <TabsTrigger value="shpp" data-testid="tab-shpp">ShPP</TabsTrigger>
+                                <TabsTrigger value="sap" data-testid="tab-sap">SAP</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="ssp" className="space-y-4">
@@ -329,6 +369,76 @@ export default function StatutoryPaymentsPage() {
                                     </div>
                                 </div>
                             </TabsContent>
+
+                            <TabsContent value="shpp" className="space-y-4">
+                                <EmployeeSelect
+                                    value={shppForm.employee_id}
+                                    onChange={(v) => setShppForm({ ...shppForm, employee_id: v })}
+                                    employees={employees}
+                                    testId="shpp-employee"
+                                />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <Label>Share-leave start date</Label>
+                                        <Input
+                                            type="date"
+                                            value={shppForm.share_start_date}
+                                            onChange={(e) => setShppForm({ ...shppForm, share_start_date: e.target.value })}
+                                            data-testid="shpp-start"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Weeks (max 37)</Label>
+                                        <Input
+                                            type="number" min="1" max="37"
+                                            value={shppForm.weeks}
+                                            onChange={(e) => setShppForm({ ...shppForm, weeks: parseInt(e.target.value) || 1 })}
+                                            data-testid="shpp-weeks"
+                                        />
+                                    </div>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" checked={shppForm.is_small_employer}
+                                        onChange={(e) => setShppForm({ ...shppForm, is_small_employer: e.target.checked })}
+                                        data-testid="shpp-small-employer" />
+                                    Small employer (claim 103% recovery)
+                                </label>
+                            </TabsContent>
+
+                            <TabsContent value="sap" className="space-y-4">
+                                <EmployeeSelect
+                                    value={sapForm.employee_id}
+                                    onChange={(v) => setSapForm({ ...sapForm, employee_id: v })}
+                                    employees={employees}
+                                    testId="sap-employee"
+                                />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <Label>Adoption start</Label>
+                                        <Input
+                                            type="date"
+                                            value={sapForm.adoption_start_date}
+                                            onChange={(e) => setSapForm({ ...sapForm, adoption_start_date: e.target.value })}
+                                            data-testid="sap-start"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Placement date</Label>
+                                        <Input
+                                            type="date"
+                                            value={sapForm.adoption_placement_date}
+                                            onChange={(e) => setSapForm({ ...sapForm, adoption_placement_date: e.target.value })}
+                                            data-testid="sap-placement"
+                                        />
+                                    </div>
+                                </div>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" checked={sapForm.is_small_employer}
+                                        onChange={(e) => setSapForm({ ...sapForm, is_small_employer: e.target.checked })}
+                                        data-testid="sap-small-employer" />
+                                    Small employer (claim 103% recovery)
+                                </label>
+                            </TabsContent>
                         </Tabs>
 
                         <Button
@@ -375,7 +485,9 @@ export default function StatutoryPaymentsPage() {
                                         £{Number(
                                             calcResult.total_ssp_amount ??
                                             calcResult.total_smp ??
-                                            calcResult.total_spp ?? 0
+                                            calcResult.total_spp ??
+                                            calcResult.total_shpp ??
+                                            calcResult.total_sap ?? 0
                                         ).toFixed(2)}
                                     </p>
                                 </div>

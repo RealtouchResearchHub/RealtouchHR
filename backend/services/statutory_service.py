@@ -316,6 +316,87 @@ class StatutoryPaymentsService:
             "weeks": paternity_weeks,
             "total_spp": round(total_spp, 2)
         }
+
+    # ==================== ShPP CALCULATIONS ====================
+
+    async def calculate_shpp(
+        self,
+        employee_id: str,
+        company_id: str,
+        share_start_date: date,
+        weeks: int = 37,
+        is_small_employer: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Statutory Shared Parental Pay — up to 37 weeks (derived from SMP entitlement).
+        Paid at lower of £184.03 or 90% of AWE.
+        """
+        if weeks < 1 or weeks > SHPP_MAX_WEEKS:
+            weeks = min(max(1, weeks), SHPP_MAX_WEEKS)
+
+        awe = await self._calculate_average_weekly_earnings(employee_id, company_id)
+        if awe < LOWER_EARNINGS_LIMIT:
+            return {
+                "eligible": False,
+                "reason": f"Average weekly earnings (£{awe:.2f}) below lower earnings limit (£{LOWER_EARNINGS_LIMIT})",
+            }
+
+        weekly_rate = min(SHPP_WEEKLY_RATE, awe * 0.90)
+        total = round(weekly_rate * weeks, 2)
+        recovery_rate = SMALL_EMPLOYER_RECOVERY_RATE if is_small_employer else STANDARD_RECOVERY_RATE
+        return {
+            "eligible": True,
+            "payment_type": "shpp",
+            "share_start_date": share_start_date.isoformat(),
+            "average_weekly_earnings": round(awe, 2),
+            "weekly_rate": round(weekly_rate, 2),
+            "weeks": weeks,
+            "total_shpp": total,
+            "recovery_rate": recovery_rate,
+            "recoverable_amount": round(total * recovery_rate, 2),
+            "is_small_employer": is_small_employer,
+        }
+
+    # ==================== SAP CALCULATIONS ====================
+
+    async def calculate_sap(
+        self,
+        employee_id: str,
+        company_id: str,
+        adoption_placement_date: date,
+        adoption_start_date: date,
+        is_small_employer: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Statutory Adoption Pay — 39 weeks total, 90% AWE for first 6 weeks then £184.03 or 90% AWE.
+        """
+        awe = await self._calculate_average_weekly_earnings(employee_id, company_id)
+        if awe < LOWER_EARNINGS_LIMIT:
+            return {
+                "eligible": False,
+                "reason": f"Average weekly earnings (£{awe:.2f}) below lower earnings limit (£{LOWER_EARNINGS_LIMIT})",
+            }
+
+        first_6_rate = round(awe * SAP_FIRST_6_WEEKS_RATE, 2)
+        first_6_total = round(first_6_rate * 6, 2)
+        remaining_rate = round(min(SAP_STANDARD_WEEKLY_RATE, awe * 0.90), 2)
+        remaining_total = round(remaining_rate * 33, 2)
+        total = round(first_6_total + remaining_total, 2)
+        recovery_rate = SMALL_EMPLOYER_RECOVERY_RATE if is_small_employer else STANDARD_RECOVERY_RATE
+        return {
+            "eligible": True,
+            "payment_type": "sap",
+            "adoption_placement_date": adoption_placement_date.isoformat(),
+            "adoption_start_date": adoption_start_date.isoformat(),
+            "average_weekly_earnings": round(awe, 2),
+            "first_6_weeks": {"rate": first_6_rate, "weeks": 6, "total": first_6_total},
+            "remaining_33_weeks": {"rate": remaining_rate, "weeks": 33, "total": remaining_total},
+            "total_sap": total,
+            "total_weeks": SAP_TOTAL_WEEKS,
+            "recovery_rate": recovery_rate,
+            "recoverable_amount": round(total * recovery_rate, 2),
+            "is_small_employer": is_small_employer,
+        }
     
     # ==================== RECORD MANAGEMENT ====================
     
@@ -340,7 +421,14 @@ class StatutoryPaymentsService:
         recovery_rate = SMALL_EMPLOYER_RECOVERY_RATE if is_small_employer else STANDARD_RECOVERY_RATE
         
         # Calculate recoverable amount
-        total_amount = calculation.get("total_ssp_amount") or calculation.get("total_smp") or calculation.get("total_spp") or 0
+        total_amount = (
+            calculation.get("total_ssp_amount")
+            or calculation.get("total_smp")
+            or calculation.get("total_spp")
+            or calculation.get("total_shpp")
+            or calculation.get("total_sap")
+            or 0
+        )
         recoverable = total_amount * recovery_rate
         
         payment = StatutoryPayment(

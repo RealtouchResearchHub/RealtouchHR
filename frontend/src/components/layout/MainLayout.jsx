@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -34,11 +34,13 @@ import {
     Globe,
     Briefcase,
     Receipt,
-    HeartPulse
+    HeartPulse,
+    CalendarCheck
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
 import NotificationsPopover from '../shared/NotificationsPopover';
+import DemoTour from '../shared/DemoTour';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -49,6 +51,7 @@ const navigation = [
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
     { name: 'Statutory Pay', href: '/statutory', icon: HeartPulse },
+    { name: 'Year-End', href: '/year-end', icon: CalendarCheck },
     { name: 'HMRC RTI', href: '/hmrc', icon: Send },
     { name: 'RTI Sync', href: '/rti-sync', icon: Shield },
     { name: 'UKVI Compliance', href: '/ukvi', icon: Globe },
@@ -67,6 +70,33 @@ export default function MainLayout({ children }) {
     const navigate = useNavigate();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [copilotOpen, setCopilotOpen] = useState(false);
+    const [tourOpen, setTourOpen] = useState(false);
+    const [tourSteps, setTourSteps] = useState([]);
+
+    useEffect(() => {
+        const loadTour = () => {
+            const active = localStorage.getItem('demo_tour_active') === 'true';
+            const stepsRaw = localStorage.getItem('demo_tour_steps');
+            if (active && stepsRaw) {
+                try {
+                    const steps = JSON.parse(stepsRaw);
+                    if (steps?.length) {
+                        setTourSteps(steps);
+                        setTourOpen(true);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        };
+        loadTour();
+        window.addEventListener('demo-tour-start', loadTour);
+        return () => window.removeEventListener('demo-tour-start', loadTour);
+    }, []);
+
+    const closeTour = () => {
+        setTourOpen(false);
+        localStorage.removeItem('demo_tour_active');
+        localStorage.removeItem('demo_tour_steps');
+    };
 
     const handleLogout = async () => {
         await logout();
@@ -233,6 +263,14 @@ export default function MainLayout({ children }) {
 
             {/* AI Copilot Sidebar */}
             <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
+
+            {/* Demo Tour overlay */}
+            <DemoTour
+                open={tourOpen}
+                steps={tourSteps}
+                onClose={closeTour}
+                onComplete={closeTour}
+            />
         </div>
     );
 }

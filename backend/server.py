@@ -738,13 +738,34 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
     if not user.company_id:
         raise HTTPException(status_code=404, detail="No company found")
     
-    # Allow updating HMRC-related fields for RTI submissions
+    # Allow updating HMRC + sponsor licence fields
     allowed_fields = [
         "name", "industry", "size", "address", "payroll_frequency", "setup_completed",
         "paye_reference", "accounts_office_reference", "corporation_tax_reference",
-        "hmrc_sender_id", "hmrc_password"
+        "hmrc_sender_id", "hmrc_password",
+        "sponsor_licence_number", "sponsor_licence_expiry", "sponsor_licence_rating",
+        "small_employer_relief"
     ]
     update_fields = {k: v for k, v in data.items() if k in allowed_fields}
+
+    # Validate PAYE reference format: NNN/AANNNNNNN (e.g. 123/AB456)
+    if "paye_reference" in update_fields and update_fields["paye_reference"]:
+        import re
+        pattern = r'^\d{3}/[A-Za-z0-9]{1,10}$'
+        if not re.match(pattern, update_fields["paye_reference"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid PAYE reference format. Expected: NNN/AANNNNNNN (e.g. 123/AB456)"
+            )
+
+    # Validate Accounts Office reference: NNNPNNNNNNNNN (13 chars, e.g. 123PA00012345)
+    if "accounts_office_reference" in update_fields and update_fields["accounts_office_reference"]:
+        import re
+        if not re.match(r'^\d{3}P[A-Z0-9]{8,10}$', update_fields["accounts_office_reference"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Accounts Office reference. Expected format: NNNPAANNNNNNNN"
+            )
     
     if update_fields:
         await db.companies.update_one({"company_id": user.company_id}, {"$set": update_fields})
@@ -2842,6 +2863,9 @@ try:
     from routes.statutory import router as statutory_router
     from routes.offboarding import router as offboarding_router
     from routes.tax_documents import router as tax_docs_router
+    from routes.year_end import router as year_end_router
+    from routes.admin import router as admin_router
+    from routes.demo import router as demo_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2855,6 +2879,9 @@ try:
     api_router.include_router(statutory_router)
     api_router.include_router(offboarding_router)
     api_router.include_router(tax_docs_router)
+    api_router.include_router(year_end_router)
+    api_router.include_router(admin_router)
+    api_router.include_router(demo_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

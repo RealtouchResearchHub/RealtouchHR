@@ -28,6 +28,7 @@ import EnterprisePage from './components/pages/EnterprisePage';
 import TimeSchedulingPage from './components/pages/TimeSchedulingPage';
 import BillingPage from './components/pages/BillingPage';
 import StatutoryPaymentsPage from './components/pages/StatutoryPaymentsPage';
+import YearEndPage from './components/pages/YearEndPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -116,6 +117,7 @@ function AppRouter() {
             <Route path="/enterprise" element={<ProtectedRoute><EnterprisePage /></ProtectedRoute>} />
             <Route path="/time-tracking" element={<ProtectedRoute><TimeSchedulingPage /></ProtectedRoute>} />
             <Route path="/statutory" element={<ProtectedRoute><StatutoryPaymentsPage /></ProtectedRoute>} />
+            <Route path="/year-end" element={<ProtectedRoute><YearEndPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             

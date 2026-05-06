@@ -41,7 +41,13 @@ export default function SettingsPage() {
         industry: '',
         size: '',
         address: '',
-        payroll_frequency: 'monthly'
+        payroll_frequency: 'monthly',
+        paye_reference: '',
+        accounts_office_reference: '',
+        sponsor_licence_number: '',
+        sponsor_licence_expiry: '',
+        sponsor_licence_rating: '',
+        small_employer_relief: false,
     });
     const [complianceScore, setComplianceScore] = useState(null);
     const [complianceTasks, setComplianceTasks] = useState([]);
@@ -54,7 +60,13 @@ export default function SettingsPage() {
                 industry: company.industry || '',
                 size: company.size || '',
                 address: company.address || '',
-                payroll_frequency: company.payroll_frequency || 'monthly'
+                payroll_frequency: company.payroll_frequency || 'monthly',
+                paye_reference: company.paye_reference || '',
+                accounts_office_reference: company.accounts_office_reference || '',
+                sponsor_licence_number: company.sponsor_licence_number || '',
+                sponsor_licence_expiry: company.sponsor_licence_expiry || '',
+                sponsor_licence_rating: company.sponsor_licence_rating || '',
+                small_employer_relief: company.small_employer_relief || false,
             });
         }
         fetchCompliance();
@@ -205,6 +217,82 @@ export default function SettingsPage() {
                                     data-testid="input-address"
                                 />
                             </div>
+
+                            {/* HMRC References */}
+                            <div className="pt-4 border-t">
+                                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">HMRC references</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label>PAYE reference</Label>
+                                        <Input
+                                            placeholder="e.g. 120/AB1234"
+                                            value={companyData.paye_reference}
+                                            onChange={(e) => setCompanyData({ ...companyData, paye_reference: e.target.value })}
+                                            data-testid="input-paye-ref"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Format: NNN/AANNNNNNN</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Accounts Office reference</Label>
+                                        <Input
+                                            placeholder="e.g. 120PA00012345"
+                                            value={companyData.accounts_office_reference}
+                                            onChange={(e) => setCompanyData({ ...companyData, accounts_office_reference: e.target.value })}
+                                            data-testid="input-aor"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Format: NNNPAANNNNNNNN</p>
+                                    </div>
+                                </div>
+                                <div className="mt-4 flex items-center gap-2">
+                                    <Switch
+                                        checked={!!companyData.small_employer_relief}
+                                        onCheckedChange={(v) => setCompanyData({ ...companyData, small_employer_relief: v })}
+                                        data-testid="small-employer-toggle"
+                                    />
+                                    <Label className="cursor-pointer">Small employer relief (claim 103% recovery on statutory pay)</Label>
+                                </div>
+                            </div>
+
+                            {/* Sponsor Licence */}
+                            <div className="pt-4 border-t">
+                                <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">UKVI Sponsor Licence</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="space-y-2">
+                                        <Label>Licence number</Label>
+                                        <Input
+                                            placeholder="e.g. 1234567890"
+                                            value={companyData.sponsor_licence_number}
+                                            onChange={(e) => setCompanyData({ ...companyData, sponsor_licence_number: e.target.value })}
+                                            data-testid="input-sponsor-licence"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Expiry date</Label>
+                                        <Input
+                                            type="date"
+                                            value={companyData.sponsor_licence_expiry?.split('T')[0] || ''}
+                                            onChange={(e) => setCompanyData({ ...companyData, sponsor_licence_expiry: e.target.value })}
+                                            data-testid="input-sponsor-expiry"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Rating</Label>
+                                        <Select
+                                            value={companyData.sponsor_licence_rating || ''}
+                                            onValueChange={(v) => setCompanyData({ ...companyData, sponsor_licence_rating: v })}
+                                        >
+                                            <SelectTrigger data-testid="select-sponsor-rating"><SelectValue placeholder="Select rating" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="A">A-rated (full)</SelectItem>
+                                                <SelectItem value="B">B-rated (action plan)</SelectItem>
+                                                <SelectItem value="suspended">Suspended</SelectItem>
+                                                <SelectItem value="none">None</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="flex gap-3">
                                 <Button onClick={handleSaveCompany} disabled={saving} data-testid="save-company-btn">
                                     {saving ? 'Saving...' : 'Save Changes'}

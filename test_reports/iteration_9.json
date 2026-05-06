@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 9 testing complete. Backend: 20/20 NEW pytest cases PASS (Demo Tour, Statutory ShPP/SAP, Year-End preview/close, Admin retention+student-loan, PAYE format validation, UKVI salary threshold breach, regression smoke). Iteration 8 regression: 30/30 PASS — total 50/50 backend. Frontend: Demo Tour overlay walks 6 steps end-to-end (dashboard→employees→payroll→statutory→ukvi→billing) with start-demo-btn / demo-tour-overlay / tour-next-btn / tour-prev-btn data-testids all firing. Statutory page renders 5 tabs (SSP/SMP/SPP/ShPP/SAP). Year-End page renders stats + EPS recovery preview cards + close button. Settings → Company tab renders HMRC References (PAYE + AOR + small employer toggle) and UKVI Sponsor Licence sections. One real backend bug found: GET /api/company response model strips paye_reference/sponsor_licence_*/small_employer_relief — fields persist in DB (PUT works) but are not returned in JSON, so frontend Settings page cannot show saved values back to user.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/company", "issue": "Company response model (server.py:116) uses extra='ignore' and does NOT declare paye_reference, accounts_office_reference, sponsor_licence_number, sponsor_licence_expiry, sponsor_licence_rating, small_employer_relief, hmrc_sender_id, hmrc_password, demo_mode. PUT /api/company correctly persists these fields, but GET strips them. Frontend Settings page will appear blank after save+reload."},
+      {"endpoint": "POST /api/employees", "issue": "Endpoint silently drops `immigration_status`, `ni_letter`, `pension_*` and other UKVI/sponsorship fields — they are not in the EmployeeCreate Pydantic model nor in the PUT allowed_fields list (server.py:874). Side effect: salary_threshold_breach alert can only fire for employees seeded via /api/demo/seed (which inserts directly via Mongo) or through CoS upload — never through standard CRUD."},
+      {"endpoint": "PUT /api/employees/{id}", "issue": "allowed_fields list does not include immigration_status — cannot update visa info via standard API."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Settings save+reload of HMRC/sponsor fields", "issue": "After saving PAYE / AOR / sponsor licence values, GET /api/company returns null for those keys, so the form will reset to placeholders on page reload. Root cause is the backend Company response model — see backend issue.", "affected_selectors": ["input[placeholder*='120/AB1234']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_demo_yearend_admin_apis.py",
+    "/app/backend/tests/test_billing_statutory_offboarding_apis.py",
+    "/app/test_reports/pytest/iter9_results.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) Extend the Company Pydantic model in server.py:116 to declare paye_reference, accounts_office_reference, sponsor_licence_number, sponsor_licence_expiry, sponsor_licence_rating, small_employer_relief, demo_mode (all Optional). Without this, the Settings page cannot display saved HMRC/sponsor licence values and Demo Mode banner can't read demo_mode from /api/company.",
+    "(MEDIUM) Add immigration_status (and ideally ni_letter) to EmployeeCreate model and PUT /api/employees allowed_fields — otherwise UKVI salary_threshold_breach + visa_expiry alerts only fire for demo-seeded or CoS-imported employees, not for standard CRUD-created sponsored workers.",
+    "(LOW) Consider returning Company doc via dict instead of Pydantic model so all stored fields surface — or switch model_config to extra='allow' and declare the new fields properly typed."
+  ],
+  "critical_code_review_comments": [
+    "Demo seed is correctly idempotent: re-running POST /api/demo/seed keeps employee_count at exactly 6, no duplicate pay_run/leave_request/payslips inserted. Verified.",
+    "POST /api/demo/seed also writes paye_reference='120/AB1234', accounts_office_reference='120PA00012345', small_employer_relief=true onto the company doc — bypassing the PAYE format validator. Acceptable since values are HMRC-compliant.",
+    "ShPP route validates weeks via Pydantic Field(ge=1, le=37) — 422 on weeks=50 (test verified).",
+    "SAP route requires adoption_placement_date AND adoption_start_date (not matching_date / placement_date as the original spec wording suggested) — task description was slightly off; routes/statutory.py:69 SAPCalcRequest is the source of truth.",
+    "Year-End /preview correctly defends against malformed pay_date with try/except ValueError,TypeError around date.fromisoformat — good resilience for legacy data.",
+    "Year-End /close marks final_fps=True on most-recent payrun, queues N P60 records, creates EPS submission record, and writes audit_log entry — verified end-to-end.",
+    "/api/admin/retention/run auth: 401 when no token, 403 when role!='owner'. Test passes (only owner-registered user can call). Minor: dependency uses model role default 'owner' if missing — a stricter check would assert role explicitly belongs to the active company.",
+    "5 route files (demo, year_end, admin, statutory shpp/sap, ukvi threshold logic) all duplicate the same get_current_user JWT/cookie code. Recommend extracting to a shared dependency module — currently ~50 lines x 5 = code smell, refactor risk acceptable but should be cleaned up.",
+    "UKVI salary_threshold_breach alert is INSERTED into db.ukvi_alerts but is NOT returned in the function's `alerts` response list — the calling endpoint relies on a subsequent GET /api/ukvi/alerts. This is fine but means POST /api/ukvi/alerts/generate response payload omits the new alert type — make sure frontend toast/refresh logic re-fetches alerts after generate."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_demo_yearend_admin_apis.py"
+  ],
+  "success_rate": {"backend": "100% (20/20 new + 30/30 regression = 50/50)", "frontend": "100% on tested surfaces (Demo Tour, Statutory tabs, Year-End, Settings HMRC/Sponsor sections)"},
+  "test_credentials": "test@example.com / Test123! (existing). Module-scoped fresh owner registered per pytest run for isolation.",
+  "seed_data_creation": "Per iter9 backend test run: 1 owner user + 1 company + 6 demo employees (Aarav, Olivia, James, Sofia [skilled_worker], Noah, Maya) + 1 draft pay run + 6 payslips + 1 leave request + EPS submission record + P60 queue entries + 1 retention audit_log row. _cleanup_demo fixture calls /api/demo/reset on teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 50 backend tests in /app/backend/tests/ pass cleanly. Two real backend bugs documented (Company response model + Employee immigration_status field gap) — neither blocks demo flow because demo seed bypasses the API model layer. Frontend Demo Tour walkthrough verified end-to-end with all data-testids responding. Employee Detail BiK dialog (/employees/{id}) was NOT directly clicked through the UI in this iteration because test@example.com's primary company has zero employees in the employee list view (route differs from demo seed company) — the BiK + P11D backend pipeline is verified end-to-end via iter8 tests (test_p11d_create_and_get + test_employee_documents_listing). Demo Tour seed correctly inserts payslips WITHOUT a company_id field (joined via payrun_id) — confirmed and intentional.",
+  "mocked_apis": {
+    "Resend Email Service": "MOCK mode (RESEND_API_KEY empty) — emails logged to backend stderr",
+    "HMRC Gateway": "Sandbox/test mode (placeholder credentials)"
+  }
+}

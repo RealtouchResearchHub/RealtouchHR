@@ -24,6 +24,7 @@ import {
 } from '../ui/dropdown-menu';
 import ComplianceScore from '../shared/ComplianceScore';
 import OffboardingDialog from '../shared/OffboardingDialog';
+import BenefitsInKindDialog from '../shared/BenefitsInKindDialog';
 import { 
     ArrowLeft,
     Save,
@@ -55,6 +56,7 @@ export default function EmployeeDetail() {
     const [leaves, setLeaves] = useState([]);
     const [shifts, setShifts] = useState([]);
     const [showOffboard, setShowOffboard] = useState(false);
+    const [showBiK, setShowBiK] = useState(false);
 
     useEffect(() => {
         fetchEmployee();
@@ -170,6 +172,13 @@ export default function EmployeeDetail() {
                             <FileDown className="w-4 h-4 mr-2" />
                             Download P45 {employee.status !== 'terminated' && '(after leave)'}
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => setShowBiK(true)}
+                            data-testid="bik-menu-item"
+                        >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Benefits / P11D
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel>Workflow</DropdownMenuLabel>
                         <DropdownMenuItem
@@ -190,6 +199,12 @@ export default function EmployeeDetail() {
                 onOpenChange={setShowOffboard}
                 employee={employee}
                 onComplete={() => fetchEmployee()}
+            />
+
+            <BenefitsInKindDialog
+                open={showBiK}
+                onOpenChange={setShowBiK}
+                employee={employee}
             />
 
             {/* Overview Cards */}

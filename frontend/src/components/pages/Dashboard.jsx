@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import ComplianceScore from '../shared/ComplianceScore';
 import NextActionBanner from '../shared/NextActionBanner';
+import { DemoLauncherCard } from '../shared/DemoTour';
 import { 
     Users, 
     Calendar, 
@@ -28,27 +29,41 @@ export default function Dashboard() {
     const [employees, setEmployees] = useState([]);
     const [recentLeaves, setRecentLeaves] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [demoStatus, setDemoStatus] = useState({ demo_mode: false });
+
+    const fetchData = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
+            const [statsRes, empRes, leaveRes, demoRes] = await Promise.all([
+                axios.get(`${API_URL}/api/dashboard/stats`, { headers, withCredentials: true }),
+                axios.get(`${API_URL}/api/employees`, { headers, withCredentials: true }),
+                axios.get(`${API_URL}/api/leave`, { headers, withCredentials: true }),
+                axios.get(`${API_URL}/api/demo/status`, { headers, withCredentials: true }).catch(() => ({ data: { demo_mode: false } })),
+            ]);
+            setStats(statsRes.data);
+            setEmployees(empRes.data.slice(0, 5));
+            setRecentLeaves(leaveRes.data.slice(0, 5));
+            setDemoStatus(demoRes.data || { demo_mode: false });
+        } catch (error) {
+            console.error('Error fetching dashboard data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [statsRes, empRes, leaveRes] = await Promise.all([
-                    axios.get(`${API_URL}/api/dashboard/stats`, { withCredentials: true }),
-                    axios.get(`${API_URL}/api/employees`, { withCredentials: true }),
-                    axios.get(`${API_URL}/api/leave`, { withCredentials: true })
-                ]);
-                setStats(statsRes.data);
-                setEmployees(empRes.data.slice(0, 5));
-                setRecentLeaves(leaveRes.data.slice(0, 5));
-            } catch (error) {
-                console.error('Error fetching dashboard data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchData();
     }, []);
+
+    const handleStartTour = (steps) => {
+        // Persist steps in localStorage so MainLayout DemoTour can pick them up
+        localStorage.setItem('demo_tour_steps', JSON.stringify(steps));
+        localStorage.setItem('demo_tour_active', 'true');
+        // Force MainLayout to re-render via storage event (synthetic)
+        window.dispatchEvent(new Event('demo-tour-start'));
+        fetchData();
+    };
 
     if (loading) {
         return (
@@ -96,6 +111,13 @@ export default function Dashboard() {
 
             {/* Next Best Action - Hero */}
             <NextActionBanner action={stats?.next_action} />
+
+            {/* Demo launcher - prominent if no demo seeded yet */}
+            <DemoLauncherCard
+                isSeeded={demoStatus.demo_mode}
+                onStart={handleStartTour}
+                onReset={fetchData}
+            />
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

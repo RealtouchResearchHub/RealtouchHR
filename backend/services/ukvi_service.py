@@ -698,6 +698,48 @@ class UKVIComplianceService:
                     import logging as _logging
                     _logging.getLogger(__name__).warning(f"Visa expiry email failed: {exc}")
 
+        # Salary threshold monitoring for sponsored workers (UKVI requirement)
+        # Sponsored workers must be paid at or above the SOC code going-rate / £38,700
+        SPONSORED_VISA_TYPES = {"skilled_worker", "tier2", "gbm", "scale_up", "intra_company"}
+        DEFAULT_SKILLED_WORKER_THRESHOLD = 38700  # 2024/25 base threshold
+        for emp in employees:
+            immigration = emp.get("immigration_status", {}) or {}
+            if immigration.get("visa_type") not in SPONSORED_VISA_TYPES:
+                continue
+            salary = float(emp.get("salary", 0) or 0)
+            if salary <= 0:
+                continue
+            cos = await db.cos_register.find_one(
+                {"employee_id": emp["employee_id"], "company_id": company_id},
+                {"_id": 0, "going_rate_annual": 1, "salary": 1}
+            ) or {}
+            going_rate = cos.get("going_rate_annual") or DEFAULT_SKILLED_WORKER_THRESHOLD
+            if salary < going_rate:
+                deficit = going_rate - salary
+                alert_id = f"alert_{uuid.uuid4().hex[:12]}"
+                existing = await db.ukvi_alerts.find_one({
+                    "employee_id": emp["employee_id"],
+                    "alert_type": "salary_threshold_breach",
+                    "resolved": False,
+                })
+                if not existing:
+                    await db.ukvi_alerts.insert_one({
+                        "alert_id": alert_id,
+                        "employee_id": emp["employee_id"],
+                        "company_id": company_id,
+                        "alert_type": "salary_threshold_breach",
+                        "severity": "high",
+                        "title": f"Salary below sponsor threshold: {emp.get('first_name', '')} {emp.get('last_name', '')}",
+                        "description": (
+                            f"Annual salary £{salary:,.0f} is below the going-rate / threshold £{going_rate:,.0f} "
+                            f"(deficit £{deficit:,.0f}). Risk to sponsor licence."
+                        ),
+                        "action_required": "Review CoS, increase salary, or reassess sponsorship",
+                        "deadline": None,
+                        "resolved": False,
+                        "created_at": now.isoformat(),
+                    })
+
         return alerts
     
     async def resolve_alert(

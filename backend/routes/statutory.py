@@ -59,6 +59,20 @@ class SPPCalcRequest(BaseModel):
     paternity_weeks: int = Field(2, ge=1, le=2)
 
 
+class ShPPCalcRequest(BaseModel):
+    employee_id: str
+    share_start_date: str
+    weeks: int = Field(37, ge=1, le=37)
+    is_small_employer: bool = False
+
+
+class SAPCalcRequest(BaseModel):
+    employee_id: str
+    adoption_placement_date: str
+    adoption_start_date: str
+    is_small_employer: bool = False
+
+
 class RecordRequest(BaseModel):
     employee_id: str
     payment_type: str  # ssp, smp, spp, shpp, sap
@@ -145,6 +159,40 @@ async def calc_spp(req: SPPCalcRequest, user: CurrentUser = Depends(get_current_
             paternity_weeks=req.paternity_weeks
         )
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/shpp/calculate")
+async def calc_shpp(req: ShPPCalcRequest, user: CurrentUser = Depends(get_current_user)):
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    from services.statutory_service import statutory_service
+    try:
+        return await statutory_service.calculate_shpp(
+            employee_id=req.employee_id,
+            company_id=user.company_id,
+            share_start_date=date.fromisoformat(req.share_start_date),
+            weeks=req.weeks,
+            is_small_employer=req.is_small_employer,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/sap/calculate")
+async def calc_sap(req: SAPCalcRequest, user: CurrentUser = Depends(get_current_user)):
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    from services.statutory_service import statutory_service
+    try:
+        return await statutory_service.calculate_sap(
+            employee_id=req.employee_id,
+            company_id=user.company_id,
+            adoption_placement_date=date.fromisoformat(req.adoption_placement_date),
+            adoption_start_date=date.fromisoformat(req.adoption_start_date),
+            is_small_employer=req.is_small_employer,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
