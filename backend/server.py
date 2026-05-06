@@ -2838,6 +2838,10 @@ try:
     from routes.rtw import router as rtw_router
     from routes.cos import router as cos_router
     from routes.pensions import router as pensions_router
+    from routes.payments import router as payments_router
+    from routes.statutory import router as statutory_router
+    from routes.offboarding import router as offboarding_router
+    from routes.tax_documents import router as tax_docs_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2847,9 +2851,34 @@ try:
     api_router.include_router(rtw_router)
     api_router.include_router(cos_router)
     api_router.include_router(pensions_router)
+    api_router.include_router(payments_router)
+    api_router.include_router(statutory_router)
+    api_router.include_router(offboarding_router)
+    api_router.include_router(tax_docs_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")
+
+
+# ==================== TOP-LEVEL STRIPE WEBHOOK ====================
+# Per integration playbook: POST /api/webhook/stripe
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook_endpoint(request: Request):
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature", "")
+    origin_url = str(request.base_url).rstrip("/")
+    try:
+        from services.payment_service import payment_service
+        result = await payment_service.handle_webhook(
+            request_body=body,
+            signature=signature,
+            origin_url=origin_url
+        )
+        return result
+    except Exception as exc:
+        logger.error(f"Stripe webhook error: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
 
 # Include the router
 app.include_router(api_router)

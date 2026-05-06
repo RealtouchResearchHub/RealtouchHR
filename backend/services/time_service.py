@@ -712,7 +712,26 @@ class TimeSchedulingService:
         
         if result.modified_count == 0:
             raise ValueError(f"Timesheet {timesheet_id} not found or not in submitted state")
-        
+
+        # Fire-and-forget email notification
+        try:
+            ts = await db.timesheets.find_one({"timesheet_id": timesheet_id}, {"_id": 0})
+            if ts:
+                emp = await db.employees.find_one({"employee_id": ts.get("employee_id")}, {"_id": 0}) or {}
+                approver = await db.users.find_one({"user_id": approved_by}, {"_id": 0}) or {}
+                if emp.get("email"):
+                    from services.email_service import email_service
+                    await email_service.send_timesheet_approval(
+                        to=emp["email"],
+                        employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                        week_start=ts.get("week_start", ""),
+                        hours_worked=ts.get("total_hours", ts.get("hours_worked", 0)) or 0,
+                        status="approved",
+                        approver_name=approver.get("name")
+                    )
+        except Exception as exc:
+            logger.warning(f"Timesheet approval email failed: {exc}")
+
         return {"status": "approved", "timesheet_id": timesheet_id}
     
     async def reject_timesheet(
@@ -739,7 +758,27 @@ class TimeSchedulingService:
         
         if result.modified_count == 0:
             raise ValueError(f"Timesheet {timesheet_id} not found or not in submitted state")
-        
+
+        # Email notification
+        try:
+            ts = await db.timesheets.find_one({"timesheet_id": timesheet_id}, {"_id": 0})
+            if ts:
+                emp = await db.employees.find_one({"employee_id": ts.get("employee_id")}, {"_id": 0}) or {}
+                approver = await db.users.find_one({"user_id": rejected_by}, {"_id": 0}) or {}
+                if emp.get("email"):
+                    from services.email_service import email_service
+                    await email_service.send_timesheet_approval(
+                        to=emp["email"],
+                        employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                        week_start=ts.get("week_start", ""),
+                        hours_worked=ts.get("total_hours", ts.get("hours_worked", 0)) or 0,
+                        status="rejected",
+                        approver_name=approver.get("name"),
+                        rejection_reason=reason
+                    )
+        except Exception as exc:
+            logger.warning(f"Timesheet rejection email failed: {exc}")
+
         return {"status": "rejected", "timesheet_id": timesheet_id}
     
     async def get_timesheets(

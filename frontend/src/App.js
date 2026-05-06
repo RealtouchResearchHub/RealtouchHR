@@ -26,6 +26,8 @@ import HMRCSubmissionPage from './components/pages/HMRCSubmissionPage';
 import UKVICompliancePage from './components/pages/UKVICompliancePage';
 import EnterprisePage from './components/pages/EnterprisePage';
 import TimeSchedulingPage from './components/pages/TimeSchedulingPage';
+import BillingPage from './components/pages/BillingPage';
+import StatutoryPaymentsPage from './components/pages/StatutoryPaymentsPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -113,6 +115,9 @@ function AppRouter() {
             <Route path="/ukvi" element={<ProtectedRoute><UKVICompliancePage /></ProtectedRoute>} />
             <Route path="/enterprise" element={<ProtectedRoute><EnterprisePage /></ProtectedRoute>} />
             <Route path="/time-tracking" element={<ProtectedRoute><TimeSchedulingPage /></ProtectedRoute>} />
+            <Route path="/statutory" element={<ProtectedRoute><StatutoryPaymentsPage /></ProtectedRoute>} />
+            <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
+            <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />

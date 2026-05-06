@@ -94,6 +94,41 @@ class EmailService:
         
         return results
 
+    # ==================== Convenience helpers ====================
+
+    async def send_visa_expiry_alert(self, to: str, employee_name: str, visa_type: str,
+                                     expiry_date: str, days_until: int,
+                                     manager_name: Optional[str] = None) -> dict:
+        subject = f"Visa expiring in {days_until} days - {employee_name}"
+        html = visa_expiry_alert_email(employee_name, visa_type, expiry_date, days_until, manager_name)
+        return await self.send_email(to, subject, html)
+
+    async def send_timesheet_approval(self, to: str, employee_name: str, week_start: str,
+                                      hours_worked: float, status: str,
+                                      approver_name: Optional[str] = None,
+                                      rejection_reason: Optional[str] = None) -> dict:
+        subject = f"Timesheet {status} - Week of {week_start}"
+        html = timesheet_approval_email(employee_name, week_start, hours_worked, status,
+                                        approver_name, rejection_reason)
+        return await self.send_email(to, subject, html)
+
+    async def send_pension_enrolment(self, to: str, employee_name: str, scheme_name: str,
+                                     enrolment_date: str, employee_contribution_pct: float,
+                                     employer_contribution_pct: float,
+                                     opt_out_window_end: str) -> dict:
+        subject = "Workplace Pension - Auto-Enrolment Confirmation"
+        html = pension_enrolment_email(employee_name, scheme_name, enrolment_date,
+                                       employee_contribution_pct, employer_contribution_pct,
+                                       opt_out_window_end)
+        return await self.send_email(to, subject, html)
+
+    async def send_subscription_confirmation(self, to_email: str, plan_name: str,
+                                             amount: float, currency: str = "gbp",
+                                             user_name: str = "there") -> dict:
+        subject = f"Subscription Confirmed - {plan_name}"
+        html = subscription_confirmation_email(user_name, plan_name, amount, currency)
+        return await self.send_email(to_email, subject, html)
+
 
 # ==================== EMAIL TEMPLATES ====================
 
@@ -350,6 +385,164 @@ def welcome_email(user_name: str, company_name: str) -> str:
         <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0;">
             Need help? Our AI Copilot is available 24/7 to guide you through any process.
         </p>
+    """
+    return get_base_template(content)
+
+
+def visa_expiry_alert_email(
+    employee_name: str,
+    visa_type: str,
+    expiry_date: str,
+    days_until: int,
+    manager_name: Optional[str] = None
+) -> str:
+    """Visa expiry alert email for UKVI-sponsored employees or HR managers"""
+    urgency_color = "#ef4444" if days_until <= 7 else "#f59e0b" if days_until <= 30 else "#3b82f6"
+    urgency_label = "URGENT" if days_until <= 7 else "ACTION REQUIRED" if days_until <= 30 else "REMINDER"
+    content = f"""
+        <div style="display: inline-block; padding: 4px 12px; background-color: {urgency_color}; color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 16px;">
+            {urgency_label}
+        </div>
+        <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">
+            Visa Expiry Approaching
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi {manager_name or 'HR Team'},
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            <strong>{employee_name}'s</strong> <strong>{visa_type}</strong> visa is due to expire in
+            <strong style="color: {urgency_color};">{days_until} days</strong> (on {expiry_date}).
+        </p>
+        <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 6px; margin: 0 0 24px 0;">
+            <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.5;">
+                <strong>Home Office reporting obligations:</strong> Sponsored workers must be reported
+                if their employment ends. Ensure extension is in progress or plan next steps.
+            </p>
+        </div>
+        <div style="text-align: center; margin: 0 0 24px 0;">
+            <a href="{APP_URL}/ukvi" style="display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Open UKVI Compliance
+            </a>
+        </div>
+    """
+    return get_base_template(content)
+
+
+def timesheet_approval_email(
+    employee_name: str,
+    week_start: str,
+    hours_worked: float,
+    status: str,
+    approver_name: Optional[str] = None,
+    rejection_reason: Optional[str] = None
+) -> str:
+    """Timesheet approved/rejected notification"""
+    is_approved = status.lower() == "approved"
+    status_color = "#10b981" if is_approved else "#ef4444"
+    content = f"""
+        <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">
+            Timesheet {status.title()}
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi {employee_name},
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+            Your timesheet for the week starting <strong>{week_start}</strong> has been
+            <span style="color: {status_color}; font-weight: 700;">{status.lower()}</span>{f' by {approver_name}' if approver_name else ''}.
+        </p>
+        <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin: 0 0 24px 0;">
+            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">Hours worked</p>
+            <p style="margin: 0; color: #111827; font-size: 28px; font-weight: 700;">{hours_worked:.2f} hrs</p>
+        </div>
+        {f'''<div style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 16px; border-radius: 6px; margin: 0 0 24px 0;">
+            <p style="color: #991b1b; font-size: 14px; margin: 0 0 4px 0; font-weight: 700;">Reason for rejection</p>
+            <p style="color: #991b1b; font-size: 14px; margin: 0; line-height: 1.5;">{rejection_reason}</p>
+        </div>''' if rejection_reason else ''}
+        <div style="text-align: center;">
+            <a href="{APP_URL}/time-tracking" style="display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                View Timesheet
+            </a>
+        </div>
+    """
+    return get_base_template(content)
+
+
+def pension_enrolment_email(
+    employee_name: str,
+    scheme_name: str,
+    enrolment_date: str,
+    employee_contribution_pct: float,
+    employer_contribution_pct: float,
+    opt_out_window_end: str
+) -> str:
+    """Statutory pension auto-enrolment confirmation email"""
+    content = f"""
+        <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">
+            You've Been Auto-Enrolled in a Workplace Pension
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi {employee_name},
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+            Under the Pensions Act 2008, your employer is required to automatically enrol eligible
+            workers into a workplace pension. We're pleased to confirm your enrolment.
+        </p>
+        <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin: 0 0 24px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Scheme:</td>
+                    <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">{scheme_name}</td></tr>
+                <tr><td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">Enrolment Date:</td>
+                    <td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">{enrolment_date}</td></tr>
+                <tr><td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">Your contribution:</td>
+                    <td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">{employee_contribution_pct}% of qualifying earnings</td></tr>
+                <tr><td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">Employer contribution:</td>
+                    <td style="padding: 8px 0; border-top: 1px solid #e5e7eb; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">{employer_contribution_pct}%</td></tr>
+            </table>
+        </div>
+        <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 6px; margin: 0 0 24px 0;">
+            <p style="color: #92400e; font-size: 14px; margin: 0 0 4px 0; font-weight: 700;">Opt-out window</p>
+            <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.5;">
+                You have 1 month to opt out with a full refund (until <strong>{opt_out_window_end}</strong>).
+                After this, contributions can still be stopped but won't be refunded.
+            </p>
+        </div>
+        <div style="text-align: center;">
+            <a href="{APP_URL}/self-service" style="display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Manage Pension
+            </a>
+        </div>
+    """
+    return get_base_template(content)
+
+
+def subscription_confirmation_email(
+    user_name: str,
+    plan_name: str,
+    amount: float,
+    currency: str = "gbp"
+) -> str:
+    """Subscription payment confirmation"""
+    currency_symbol = "£" if currency.lower() == "gbp" else "$" if currency.lower() == "usd" else currency.upper() + " "
+    content = f"""
+        <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">
+            Subscription Confirmed
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi {user_name},
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+            Your <strong>{plan_name}</strong> plan is now active. Thank you for choosing RealtouchHR.
+        </p>
+        <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); border-radius: 8px; padding: 24px; margin: 0 0 24px 0; text-align: center;">
+            <p style="color: #e0e7ff; font-size: 14px; margin: 0 0 8px 0;">Amount charged</p>
+            <p style="color: #ffffff; font-size: 36px; font-weight: 700; margin: 0;">{currency_symbol}{amount:,.2f}</p>
+            <p style="color: #c7d2fe; font-size: 14px; margin: 8px 0 0 0;">{plan_name}</p>
+        </div>
+        <div style="text-align: center;">
+            <a href="{APP_URL}/billing" style="display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                View Billing
+            </a>
+        </div>
     """
     return get_base_template(content)
 

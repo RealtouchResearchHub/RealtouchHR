@@ -14,7 +14,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '../ui/select';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    DropdownMenuLabel,
+} from '../ui/dropdown-menu';
 import ComplianceScore from '../shared/ComplianceScore';
+import OffboardingDialog from '../shared/OffboardingDialog';
 import { 
     ArrowLeft,
     Save,
@@ -26,7 +35,10 @@ import {
     AlertTriangle,
     CheckCircle2,
     FileText,
-    Clock
+    Clock,
+    MoreVertical,
+    UserMinus,
+    FileDown
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate, getStatusColor, getComplianceColor } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -42,6 +54,7 @@ export default function EmployeeDetail() {
     const [formData, setFormData] = useState({});
     const [leaves, setLeaves] = useState([]);
     const [shifts, setShifts] = useState([]);
+    const [showOffboard, setShowOffboard] = useState(false);
 
     useEffect(() => {
         fetchEmployee();
@@ -58,6 +71,29 @@ export default function EmployeeDetail() {
             navigate('/employees');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const downloadTaxDoc = async (docType, extraPath = '') => {
+        try {
+            const token = localStorage.getItem('token');
+            const url = `${API_URL}/api/tax-docs/${docType}/${id}${extraPath}`;
+            const res = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true,
+                responseType: 'blob',
+            });
+            const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `${docType.toUpperCase()}_${employee.first_name}_${employee.last_name}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            toast.success(`${docType.toUpperCase()} downloaded`);
+        } catch (err) {
+            toast.error(err.response?.data?.detail || `Failed to download ${docType.toUpperCase()}`);
         }
     };
 
@@ -111,7 +147,50 @@ export default function EmployeeDetail() {
                     <p className="text-muted-foreground">{employee.job_title || 'No job title'}</p>
                 </div>
                 <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" data-testid="employee-actions-btn">
+                            <MoreVertical className="w-4 h-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel>Tax Documents</DropdownMenuLabel>
+                        <DropdownMenuItem
+                            onClick={() => downloadTaxDoc('p60', '?tax_year=2024-25')}
+                            data-testid="download-p60-item"
+                        >
+                            <FileDown className="w-4 h-4 mr-2" />
+                            Download P60 (2024-25)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => downloadTaxDoc('p45')}
+                            disabled={employee.status !== 'terminated'}
+                            data-testid="download-p45-item"
+                        >
+                            <FileDown className="w-4 h-4 mr-2" />
+                            Download P45 {employee.status !== 'terminated' && '(after leave)'}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Workflow</DropdownMenuLabel>
+                        <DropdownMenuItem
+                            onClick={() => setShowOffboard(true)}
+                            disabled={employee.status === 'terminated'}
+                            className="text-rose-600 focus:text-rose-700"
+                            data-testid="offboard-menu-item"
+                        >
+                            <UserMinus className="w-4 h-4 mr-2" />
+                            Offboard Employee
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
+
+            <OffboardingDialog
+                open={showOffboard}
+                onOpenChange={setShowOffboard}
+                employee={employee}
+                onComplete={() => fetchEmployee()}
+            />
 
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

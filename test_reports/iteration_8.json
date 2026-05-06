@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 8: Comprehensive testing of new Stripe Billing, Statutory Payments (SSP/SMP/SPP), Offboarding workflow, Tax Documents (P45/P60/P11D), and email notification wiring. Backend: 30/30 pytest cases PASS (100%). Frontend smoke: Billing + Statutory pages render correctly with all expected data; Employee Detail Actions dropdown indirectly verified through backend pipeline (terminate → P45 download). Stripe checkout sessions returning real cs_test_* IDs proves live API call. Mock email mode confirmed in backend logs (intentional).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/cos/list", "issue": "Returns 404 instead of empty list when company has no certificates of sponsorship — should return 200 with empty array for consistency with other listing endpoints (e.g. /api/employees)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_billing_statutory_offboarding_apis.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [
+    "(LOW) Make /api/cos/list return 200 + empty array when no certificates exist, instead of 404. Same pattern likely applies to other listing endpoints — review for consistency.",
+    "(INFO) Email service correctly running in MOCK mode — RESEND_API_KEY intentionally empty per user requirements. Mock emails are logged to backend stderr (verified)."
+  ],
+  "critical_code_review_comments": [
+    "Stripe checkout endpoints correctly enforce server-side pricing — frontend cannot override amount (verified by reading /app/backend/services/payment_service.py SUBSCRIPTION_PLANS).",
+    "Stripe checkout creates a payment_transactions record before returning checkout_url (verified — /api/payments/transactions returns 1 record after checkout call).",
+    "Owner-role enforcement on billing endpoints works correctly (require_owner dependency).",
+    "Top-level /api/webhook/stripe is registered and reachable (returns 4xx on bad signature, NOT 404). There's also a redundant /api/payments/webhook/stripe in payments.py — minor cleanup opportunity but not a bug.",
+    "Offboarding pipeline is comprehensive: marks employee terminated, generates P45 PDF, queues RTI leaver entry, closes pension, and triggers MOCK email — verified end-to-end.",
+    "Tax document PDFs (P45, P60, P11D) all return valid %PDF magic bytes with Content-Type: application/pdf.",
+    "P45 endpoint correctly returns 400 when employee not terminated — proper error handling.",
+    "Statutory rates correctly returned: SSP £116.75, SMP £184.03, SPP £184.03, LEL £123 (2025-26 tax year).",
+    "Auth fixture cookie-leak risk in tests: /api/auth/register sets session_token cookie that persists in shared requests.Session — addressed by using fresh session for unauthenticated test."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_billing_statutory_offboarding_apis.py"
+  ],
+  "success_rate": {"backend": "100% (30/30)", "frontend": "100% on tested surfaces (Billing + Statutory pages)"},
+  "test_credentials": "test@example.com / Test123! (existing). Iter8 also auto-registers a fresh owner per pytest module run for company-scoped tests.",
+  "seed_data_creation": "Per test run: 1 owner user + 1 company + 2 employees (one terminated then reinstated, one always-active). Stripe test sessions remain in test mode and incur no cost.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 30 backend tests in /app/backend/tests/test_billing_statutory_offboarding_apis.py pass. The test file uses module-scoped fixture that registers a fresh owner+company per run, so it is hermetic and reusable. Frontend Billing (/billing) and Statutory (/statutory) pages tested via Playwright and render correctly. EmployeeDetail Actions dropdown was NOT directly clicked in the UI because test@example.com's company has zero employees — but the full offboarding + P45 backend pipeline that the dropdown invokes is verified end-to-end. Stripe checkout returns real cs_test_* session IDs proving live API integration. RESEND email service running in MOCK mode is intentional (per /app/memory/test_credentials.md) — backend logs confirm [MOCK EMAIL] entries on offboarding events.",
+  "mocked_apis": {
+    "Resend Email Service": "MOCK mode (RESEND_API_KEY empty) — emails logged to backend stderr",
+    "HMRC Gateway": "Sandbox/test mode (placeholder credentials)"
+  }
+}

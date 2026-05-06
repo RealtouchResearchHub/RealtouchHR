@@ -32,7 +32,9 @@ import {
     UserCircle,
     Send,
     Globe,
-    Briefcase
+    Briefcase,
+    Receipt,
+    HeartPulse
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -46,6 +48,7 @@ const navigation = [
     { name: 'Time Tracking', href: '/time-tracking', icon: Clock },
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
     { name: 'Payroll', href: '/payroll', icon: CreditCard },
+    { name: 'Statutory Pay', href: '/statutory', icon: HeartPulse },
     { name: 'HMRC RTI', href: '/hmrc', icon: Send },
     { name: 'RTI Sync', href: '/rti-sync', icon: Shield },
     { name: 'UKVI Compliance', href: '/ukvi', icon: Globe },
@@ -53,6 +56,7 @@ const navigation = [
     { name: 'Audit Log', href: '/audit', icon: Building2 },
     { name: 'Self-Service', href: '/self-service', icon: UserCircle },
     { name: 'Enterprise', href: '/enterprise', icon: Briefcase },
+    { name: 'Billing', href: '/billing', icon: Receipt },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

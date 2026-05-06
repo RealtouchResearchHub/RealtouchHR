@@ -487,7 +487,28 @@ class PensionService:
                 "pension_enrolment_date": today.isoformat()
             }}
         )
-        
+
+        # Send enrolment confirmation email (best-effort)
+        try:
+            emp = await db.employees.find_one({"employee_id": employee_id}, {"_id": 0}) or {}
+            if emp.get("email"):
+                from services.email_service import email_service
+                opt_out_end = (today + timedelta(days=30)).isoformat()
+                await email_service.send_pension_enrolment(
+                    to=emp["email"],
+                    employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                    scheme_name=scheme.get("name", scheme.get("scheme_name", "Workplace Pension")),
+                    enrolment_date=today.isoformat(),
+                    employee_contribution_pct=(employee_contribution_override
+                                               or scheme.get("employee_contribution_pct", 5.0)),
+                    employer_contribution_pct=(employer_contribution_override
+                                               or scheme.get("employer_contribution_pct", 3.0)),
+                    opt_out_window_end=opt_out_end,
+                )
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(f"Pension enrolment email failed: {exc}")
+
         return enrolment
     
     async def record_opt_out(

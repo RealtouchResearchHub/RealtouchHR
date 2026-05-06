@@ -666,7 +666,38 @@ class UKVIComplianceService:
             
             if not existing:
                 await db.ukvi_alerts.insert_one(alert.to_dict())
-        
+
+                # Send email notification to company owner / HR team (best-effort)
+                try:
+                    emp = await db.employees.find_one(
+                        {"employee_id": alert.employee_id}, {"_id": 0}
+                    ) or {}
+                    company = await db.companies.find_one(
+                        {"company_id": company_id}, {"_id": 0}
+                    ) or {}
+                    owner_user = None
+                    if company.get("owner_id"):
+                        owner_user = await db.users.find_one(
+                            {"user_id": company["owner_id"]}, {"_id": 0}
+                        )
+
+                    recipient_email = (owner_user or {}).get("email") or emp.get("email")
+                    if recipient_email and alert.alert_type == "visa_expiry":
+                        from services.email_service import email_service
+                        deadline_iso = alert.deadline.isoformat() if alert.deadline else ""
+                        days_left = (alert.deadline - now).days if alert.deadline else 0
+                        await email_service.send_visa_expiry_alert(
+                            to=recipient_email,
+                            employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                            visa_type=(emp.get('immigration_status') or {}).get('visa_type', 'Unknown'),
+                            expiry_date=deadline_iso[:10],
+                            days_until=max(0, days_left),
+                            manager_name=(owner_user or {}).get("name")
+                        )
+                except Exception as exc:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(f"Visa expiry email failed: {exc}")
+
         return alerts
     
     async def resolve_alert(
