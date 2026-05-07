@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { Toaster } from './components/ui/sonner';
+
+// Global axios interceptor — attach Bearer token from localStorage on every request
+axios.interceptors.request.use((config) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (token && !config.headers?.Authorization) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
 
 // Pages
 import LoginPage from './components/pages/LoginPage';
@@ -29,6 +40,7 @@ import TimeSchedulingPage from './components/pages/TimeSchedulingPage';
 import BillingPage from './components/pages/BillingPage';
 import StatutoryPaymentsPage from './components/pages/StatutoryPaymentsPage';
 import YearEndPage from './components/pages/YearEndPage';
+import LandingPage from './components/pages/LandingPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -122,7 +134,7 @@ function AppRouter() {
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             
             {/* Default redirect */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
     );

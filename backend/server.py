@@ -285,12 +285,15 @@ class PayRun(BaseModel):
     updated_at: datetime
 
 class PayslipPreview(BaseModel):
+    model_config = ConfigDict(extra="allow")
     employee_id: str
     employee_name: str
     gross_pay: float
     tax_deduction: float
     ni_deduction: float
     pension_deduction: float
+    student_loan_deduction: float = 0
+    student_loan_plan: Optional[str] = None
     other_deductions: float
     net_pay: float
     overtime_pay: float = 0
@@ -1208,7 +1211,17 @@ async def create_pay_run(data: PayRunCreate, user: User = Depends(get_current_us
         tax = monthly_gross * 0.20 if monthly_gross > 1048 else 0  # Basic rate after personal allowance
         ni = monthly_gross * 0.12 if monthly_gross > 797 else 0  # NI threshold
         pension = monthly_gross * 0.05  # Auto-enrollment minimum
-        net = monthly_gross - tax - ni - pension
+
+        # Student loan deduction (Plans 1/2/4/5 + Postgrad)
+        from services.student_loan_service import calculate_loan_deduction
+        loan_calc = calculate_loan_deduction(
+            annual_earnings=salary,
+            plan=emp.get("student_loan_plan") or "none",
+            pay_frequency="monthly",
+            has_postgrad=emp.get("has_postgrad_loan", False),
+        )
+        student_loan = loan_calc["total_deduction"]
+        net = monthly_gross - tax - ni - pension - student_loan
         
         total_gross += monthly_gross
         total_tax += tax
@@ -1226,6 +1239,8 @@ async def create_pay_run(data: PayRunCreate, user: User = Depends(get_current_us
             "tax_deduction": round(tax, 2),
             "ni_deduction": round(ni, 2),
             "pension_deduction": round(pension, 2),
+            "student_loan_deduction": round(student_loan, 2),
+            "student_loan_plan": emp.get("student_loan_plan") or "none",
             "other_deductions": 0,
             "net_pay": round(net, 2),
             "overtime_pay": 0
@@ -2948,6 +2963,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_scheduler():
+    try:
+        from services.scheduler_service import start_scheduler
+        start_scheduler()
+    except Exception as exc:
+        logging.warning(f"Scheduler start failed: {exc}")
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    try:
+        from services.scheduler_service import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
     client.close()

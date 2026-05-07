@@ -413,7 +413,7 @@ class UKVIComplianceService:
         compliance_scores = []
         
         for emp in employees:
-            immigration = emp.get("immigration_status", {})
+            immigration = emp.get("immigration_status") or {}
             visa_type = immigration.get("visa_type", "")
             
             # Skip British citizens
@@ -597,7 +597,7 @@ class UKVIComplianceService:
         ).to_list(1000)
         
         for emp in employees:
-            immigration = emp.get("immigration_status", {})
+            immigration = emp.get("immigration_status") or {}
             visa_type = immigration.get("visa_type", "")
             
             # Skip British citizens

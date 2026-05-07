@@ -195,6 +195,140 @@ async def seed_demo(user: CurrentUser = Depends(get_current_user)):
     }
 
 
+@router.post("/sandbox")
+async def create_sandbox_account():
+    """Public, no-auth sandbox account creator: instantly returns a token that
+    is bound to a fresh demo company, seeded with sample data. Used for the
+    public landing page 'Try Demo' CTA — accounts auto-expire after 24h."""
+    import secrets
+    now = datetime.now(timezone.utc)
+    suffix = secrets.token_hex(4)
+    email = f"sandbox.{suffix}@realtouchhr-demo.uk"
+    user_id = f"user_sandbox_{uuid.uuid4().hex[:12]}"
+    company_id = f"company_sandbox_{uuid.uuid4().hex[:12]}"
+
+    # Create company
+    await db.companies.insert_one({
+        "company_id": company_id,
+        "name": "RealtouchHR Demo Co.",
+        "industry": "Technology",
+        "size": "10-50",
+        "address": "1 Demo Street, London EC1A 1BB",
+        "payroll_frequency": "monthly",
+        "owner_id": user_id,
+        "setup_completed": True,
+        "demo_mode": True,
+        "demo_seeded_at": now.isoformat(),
+        "is_sandbox": True,
+        "sandbox_expires_at": (now + timedelta(hours=24)).isoformat(),
+        "created_at": now,
+        "paye_reference": "120/AB1234",
+        "accounts_office_reference": "120PA00012345",
+        "small_employer_relief": True,
+    })
+
+    # Create user (no password)
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": email,
+        "name": "Sandbox Visitor",
+        "role": "owner",
+        "company_id": company_id,
+        "is_sandbox": True,
+        "sandbox_expires_at": (now + timedelta(hours=24)).isoformat(),
+        "auth_method": "sandbox",
+        "created_at": now.isoformat(),
+        "preferences": {"theme_preference": "system"},
+    })
+
+    # Issue a JWT (24-hour life)
+    token = jwt.encode(
+        {"user_id": user_id, "email": email, "exp": now + timedelta(hours=24)},
+        JWT_SECRET, algorithm="HS256"
+    )
+
+    # Persist a session so cookie auth also works
+    await db.user_sessions.insert_one({
+        "session_token": token,
+        "user_id": user_id,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(hours=24)).isoformat(),
+    })
+
+    # Synthetic CurrentUser to seed demo data
+    fake_user = CurrentUser(user_id=user_id, email=email, name="Sandbox Visitor", role="owner", company_id=company_id)
+    try:
+        await seed_demo(user=fake_user)
+    except HTTPException:
+        # seed_demo raises HTTPException only if no company_id, but we have one
+        raise
+
+    return {
+        "token": token,
+        "user": {
+            "user_id": user_id,
+            "email": email,
+            "name": "Sandbox Visitor",
+            "role": "owner",
+            "company_id": company_id,
+            "auth_method": "sandbox",
+        },
+        "company_id": company_id,
+        "expires_in_hours": 24,
+        "tour_steps": [
+            {"id": "dashboard", "title": "Compliance Dashboard", "route": "/dashboard", "description": "Your real-time compliance score and critical actions."},
+            {"id": "employees", "title": "Employees", "route": "/employees", "description": "Six demo employees including a sponsored worker."},
+            {"id": "payroll", "title": "Payroll Preview", "route": "/payroll", "description": "A draft pay run is ready to review."},
+            {"id": "statutory", "title": "Statutory Pay", "route": "/statutory", "description": "Calculate SSP/SMP/SPP/ShPP/SAP for any employee."},
+            {"id": "ukvi", "title": "UKVI Compliance", "route": "/ukvi", "description": "Visa expiry alerts and salary threshold monitoring."},
+            {"id": "billing", "title": "Stripe Billing", "route": "/billing", "description": "Try a Stripe test checkout — card 4242 4242 4242 4242."},
+        ]
+    }
+
+
+@router.post("/sandbox/cleanup")
+async def cleanup_expired_sandboxes():
+    """Delete sandbox companies + users + their data older than 24h. Idempotent."""
+    now = datetime.now(timezone.utc)
+    cutoff = now.isoformat()
+    expired_companies = await db.companies.find(
+        {"is_sandbox": True, "sandbox_expires_at": {"$lt": cutoff}},
+        {"_id": 0, "company_id": 1, "owner_id": 1}
+    ).to_list(1000)
+    deleted = {"companies": 0, "employees": 0, "pay_runs": 0, "payslips": 0, "users": 0, "leave_requests": 0, "user_sessions": 0}
+    for c in expired_companies:
+        cid = c["company_id"]
+        for col, key in [
+            ("employees", "company_id"),
+            ("pay_runs", "company_id"),
+            ("leave_requests", "company_id"),
+            ("ukvi_alerts", "company_id"),
+            ("compliance_tasks", "company_id"),
+            ("audit_log", "company_id"),
+            ("ukvi_reports", "company_id"),
+            ("payslips", None),  # via payrun join
+        ]:
+            if col == "payslips":
+                payruns = await db.pay_runs.find({"company_id": cid}, {"_id": 0, "payrun_id": 1}).to_list(1000)
+                ids = [p["payrun_id"] for p in payruns]
+                if ids:
+                    res = await db.payslips.delete_many({"payrun_id": {"$in": ids}})
+                    deleted["payslips"] += res.deleted_count
+            else:
+                res = await db[col].delete_many({key: cid})
+                if col in deleted:
+                    deleted[col] += res.deleted_count
+        # Delete owner user + sessions
+        if c.get("owner_id"):
+            res = await db.users.delete_many({"user_id": c["owner_id"]})
+            deleted["users"] += res.deleted_count
+            res = await db.user_sessions.delete_many({"user_id": c["owner_id"]})
+            deleted["user_sessions"] += res.deleted_count
+    res = await db.companies.delete_many({"is_sandbox": True, "sandbox_expires_at": {"$lt": cutoff}})
+    deleted["companies"] = res.deleted_count
+    return {"cleaned_up": len(expired_companies), "deleted": deleted}
+
+
 @router.post("/reset")
 async def reset_demo(user: CurrentUser = Depends(get_current_user)):
     """Remove all demo-seeded data for this company"""

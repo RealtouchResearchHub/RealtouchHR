@@ -1,0 +1,48 @@
+{
+  "summary": "Iter10 testing complete. Backend: 12/12 NEW iter10 tests PASS (sandbox /api/demo/sandbox no-auth, sandbox token works as Bearer, seeded company has demo_mode+6 employees, /sandbox/cleanup idempotent, employee CRUD persists immigration_status+ni_letter+student_loan_plan+has_postgrad_loan, UKVI salary_threshold_breach now fires via standard CRUD, Company response model returns paye_reference/sponsor_licence_*/small_employer_relief/demo_mode, payroll engine wires student_loan into payslips with correct £252.79 for £45k plan_2+postgrad and £0 for non-loan employees). Total regression: 98/98 PASS across all iterations. Frontend: GET / serves LandingPage (no redirect), all 4 required testids present (landing-page, landing-hero-title, try-demo-btn, landing-signup-link, cta-try-demo-btn), Try Demo CTA → POST /api/demo/sandbox → localStorage.token stored → /dashboard navigation succeeds → DemoTour overlay visible (Step 1/6 Compliance Dashboard) → 6 employees seeded → sandbox user 'Welcome back, Sandbox' renders. Axios interceptor verified end-to-end (sandbox token successfully authenticated /api/auth/me + /api/company + /api/employees in one shot). Backend startup logs confirm '[scheduler] Started — 3 jobs registered' (ukvi_alerts_daily, sandbox_cleanup_hourly, retention_audit_weekly).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me", "issue": "Does not surface auth_method/is_sandbox flags from the user document — frontend cannot distinguish a sandbox session from a regular session via /me alone (must read /api/company demo_mode). Low priority; could be added to the response without breaking changes."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_sandbox_studentloan.py",
+    "/app/test_reports/pytest/iter10_results.xml",
+    "/app/test_reports/pytest/iter10_full_regression.xml"
+  ],
+  "action_items": [
+    "(LOW) Optionally surface auth_method/is_sandbox/sandbox_expires_at in GET /api/auth/me so the frontend Demo Mode banner can read 'sandbox expires in Xh' without a second /api/company round-trip.",
+    "(INFO) Server.py partial refactor was deferred per agent-to-agent context — /leave and /documents routes still in server.py. Not flagged as a bug per task instructions.",
+    "(INFO) No functional bugs remaining in iter10 scope. Main agent can ship."
+  ],
+  "critical_code_review_comments": [
+    "Found and FIXED a real iter10 regression in services/ukvi_service.py:600 (and duplicate site) — `emp.get('immigration_status', {})` returned None when the field was explicitly stored as null (which iter10's POST /api/employees now does for employees without visa info). Subsequent .get() crashed with NoneType. Fixed to `emp.get('immigration_status') or {}`. This unblocked test_visa_alerts_endpoint_reachable in test_billing_statutory_offboarding_apis.py which was failing 500.",
+    "POST /api/demo/sandbox correctly bypasses get_current_user, generates a fresh user/company pair flagged is_sandbox=true with sandbox_expires_at=now+24h, issues a 24h JWT (HS256), persists a parallel db.user_sessions row so cookie auth would also work, and reuses seed_demo() to populate 6 employees + draft pay run + leave request + HMRC refs. Idempotent /sandbox/cleanup deletes companies/employees/pay_runs/leave_requests/ukvi_alerts/compliance_tasks/audit_log/ukvi_reports/payslips for expired sandboxes — verified via two consecutive calls returning 200.",
+    "APScheduler started cleanly with exactly 3 jobs in backend.err.log (ukvi_alerts_daily 02:00 cron, sandbox_cleanup_hourly 1h interval, retention_audit_weekly Sun 03:00 cron). Scheduler also gracefully stops on uvicorn reload — '[scheduler] Stopped' log confirms.",
+    "student_loan_service.calculate_loan_deduction() correctly handles plan_2+postgrad: £45k → £132.79 plan_2 + £120.00 postgrad = £252.79/m total. Employees with plan='none' get exactly £0. Wired into create_pay_run via `from services.student_loan_service import calculate_loan_deduction` import inside the loop (line 1216) — minor: import is repeated per employee, prefer module-level import for perf.",
+    "Axios interceptor (App.js:9-16) attaches Bearer from localStorage on every request and only when no Authorization header is already set — clean, no leakage. Verified by sandbox token successfully driving /api/auth/me, /api/company, /api/employees, /api/payroll/runs without manual headers from LandingPage.startSandboxDemo().",
+    "Company Pydantic model (server.py:115-139) now declares paye_reference, accounts_office_reference, hmrc_sender_id, small_employer_relief, sponsor_licence_*, demo_mode, demo_seeded_at — fixes iter9 regression. Employee Pydantic model uses extra='allow' + declares immigration_status/ni_letter/student_loan_plan/has_postgrad_loan/pension_enrolled — fixes iter9 regression.",
+    "EmployeeCreate now includes immigration_status/ni_letter/student_loan_plan/has_postgrad_loan + PUT allowed_fields list (line 906) covers them too — sponsored employees can finally be created via standard API rather than only via /demo/seed or /cos imports. UKVI salary_threshold_breach alert verified to fire end-to-end via CRUD."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_sandbox_studentloan.py",
+    "/app/backend/services/ukvi_service.py"
+  ],
+  "success_rate": {"backend": "100% (12/12 new iter10 + 86/86 prior regression = 98/98)", "frontend": "100% on tested surfaces (landing page render, Try Demo CTA → sandbox provisioning → dashboard with DemoTour overlay)"},
+  "test_credentials": "Public sandbox: NO auth required for POST /api/demo/sandbox. Existing user test@example.com / Test123! still works. Each iter10 test run creates a fresh module-scoped owner via /api/auth/register with random suffix.",
+  "seed_data_creation": "Per iter10 sandbox test run: 1 sandbox user/company pair (auto-cleaned via /sandbox/cleanup) + seeded with 6 demo employees + draft pay run + leave request + HMRC refs (PAYE 120/AB1234, AOR 120PA00012345, small_employer_relief=true). Per fresh_owner fixture: 1 owner + 1 company + 2 employees (1 sponsored £30k skilled_worker, 1 high-salary £45k plan_2+postgrad).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter10 backend & frontend fully verified. Sandbox demo flow is the primary new feature — tested both backend contract (12 tests) and end-to-end UI flow (LandingPage → /api/demo/sandbox → localStorage token → axios interceptor → /dashboard with DemoTour overlay). All 98 backend tests across iterations 8/9/10 pass clean. One real regression found and fixed in ukvi_service.py (NoneType crash on employees without immigration_status). Server.py refactor deferred per task instructions — do NOT flag /leave or /documents being in server.py as a bug. Only minor remaining nit: /api/auth/me does not return auth_method/is_sandbox.",
+  "rca of the issue": "ukvi_service.generate_expiry_alerts crashed 500 'NoneType has no attribute get' when iter10's improved EmployeeCreate model started persisting immigration_status as null (instead of dropping the field as iter9 did). Reproduction: register user, create employee without immigration_status, POST /api/ukvi/alerts/generate → 500. Mitigation applied: changed `emp.get('immigration_status', {})` → `emp.get('immigration_status') or {}` (replace_all=True for both sites in ukvi_service.py). Verified test_visa_alerts_endpoint_reachable now passes.",
+  "mocked_apis": {
+    "Resend Email Service": "MOCK mode (RESEND_API_KEY empty) — emails logged",
+    "HMRC Gateway": "Sandbox/test mode (placeholder credentials)"
+  }
+}

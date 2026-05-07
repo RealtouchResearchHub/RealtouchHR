@@ -120,6 +120,7 @@ export function AuthProvider({ children }) {
         logout,
         updatePreferences,
         refreshCompany,
+        refresh: fetchUser,
         isAuthenticated: !!user,
         token
     };
