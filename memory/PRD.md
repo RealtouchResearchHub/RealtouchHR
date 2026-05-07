@@ -46,6 +46,47 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 7, 2026 — Iteration 11)
+
+### Stripe Customer Portal ✅
+- `POST /api/payments/portal` (owner only) creates a Stripe Billing Portal session using the stripe SDK directly
+- Captures `stripe_customer_id` from successful checkout sessions and mirrors it to `companies.stripe_customer_id` for fast future lookups; falls back to resolving via the most recent paid transaction if missing
+- "Manage subscription & payment methods" button on BillingPage (only shown when subscription_active=true)
+- Lets customers self-serve: update card, switch plan, cancel subscription, download invoices
+
+### Team Management (Invite + Roles) ✅
+- `POST /api/users/invite` — owner/admin can invite by email+role (7-day token expiry, sent via Resend mock email)
+- `GET /api/users/invite/{token}` (public, no auth) — preview invite details before accepting
+- `POST /api/users/invite/accept` (public) — new user sets password, gets JWT back, can sign in
+- `GET /api/users` — list company users; `PUT /api/users/{id}/role` (owner only); `DELETE /api/users/{id}` (owner only)
+- `GET /api/users/invites` / `DELETE /api/users/invites/{id}` — manage pending invites
+- Safety: self-demote blocked, self-remove blocked, owner-to-owner removal blocked, invite duplicates blocked
+
+### Admin Portal Page (/admin) ✅
+- Role-gated: only owner + admin can access; lower roles see "Access restricted" card
+- 4 tabs: **Team** (user list with inline role dropdown + remove), **Invites** (pending list with revoke), **Audit Log** (last 50 events), **Danger Zone** (run retention + clear demo)
+- "Invite user" button opens dialog with name/email/role form (6 roles: admin, hr_manager, payroll_admin, manager, employee, viewer)
+- Copies invite link to clipboard on successful send
+
+### Invite Accept Page (/invite/:token) ✅
+- Public, no-auth page accessed via email link
+- Shows company + inviter + assigned role; accept with password
+- On success: stores JWT in localStorage, redirects to /dashboard
+
+### Enhanced Onboarding Wizard ✅
+- Complete step now shows an 8-module "What's next" grid linking to HMRC, UKVI, Statutory, Time Tracking, Year-End, Admin, Billing, Settings
+- Each module card is clickable → instant deep link
+
+### Sidebar Role Filtering ✅
+- Admin link shown only to owner/admin roles
+- Billing link shown only to owner role
+- Employee/HR/Payroll roles see only the relevant modules
+
+### Pre-Existing Bug Fixed (found by testing agent) ✅
+- `POST /api/auth/register` returned 500 due to ObjectId leaking into Pydantic User model (after `User` was updated to `extra="allow"` in iter10). Fixed by popping `_id` alongside `password_hash`.
+
+---
+
 ## NEW (May 7, 2026 — Iteration 10)
 
 ### Public Landing Page + No-Signup Sandbox Demo ✅
