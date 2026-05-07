@@ -91,7 +91,7 @@ class UserLogin(BaseModel):
     password: str
 
 class User(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
     user_id: str
     email: str
     name: str
@@ -99,6 +99,9 @@ class User(BaseModel):
     role: str = "owner"
     company_id: Optional[str] = None
     theme_preference: str = "light"
+    auth_method: Optional[str] = None
+    is_sandbox: bool = False
+    sandbox_expires_at: Optional[str] = None
     created_at: datetime
 
 class TokenResponse(BaseModel):

@@ -46,6 +46,40 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 7, 2026 — Iteration 10)
+
+### Public Landing Page + No-Signup Sandbox Demo ✅
+- New marketing landing at `/` — replaces previous `/` → `/login` redirect
+- Hero + Features + Pricing + Compliance sections with gradient dark theme
+- **"Try Demo" CTA** → one-click `/api/demo/sandbox` (zero auth) → instant tenant with 6 seeded employees, draft pay run, UKVI alerts, HMRC refs, pre-filled PAYE
+- Sandbox JWT lasts 24 hours, user flagged `is_sandbox=true` and `auth_method='sandbox'`
+- Sandbox banner in MainLayout ("You're in a sandbox demo. Data wiped after 24h — create a real account to keep it")
+- Auto-cleanup via APScheduler (hourly)
+
+### Wire Student Loan into Payroll Engine ✅
+- `create_pay_run` now imports `student_loan_service.calculate_loan_deduction` and persists `student_loan_deduction` + `student_loan_plan` on each payslip
+- Verified: £45k salary on Plan 2 + Postgrad → £252.79/month deducted; non-loan employees → £0
+
+### APScheduler — Auto-cron Jobs ✅
+- `services/scheduler_service.py` starts on FastAPI startup
+- Jobs: `ukvi_alerts_daily` (02:00 cron — generates visa + salary threshold alerts for all companies), `sandbox_cleanup_hourly` (purges expired demo tenants), `retention_audit_weekly` (Sun 03:00)
+- APScheduler 3.11.2 added to requirements.txt
+- Graceful shutdown on uvicorn reload
+
+### Axios Global Auth Interceptor ✅
+- Attaches `Authorization: Bearer <token>` from localStorage on every request
+- Enables sandbox token flow without per-call manual headers
+- Backend continues to accept both cookie session and Bearer auth
+
+### User Model — Expose Sandbox Flags ✅
+- `GET /api/auth/me` now returns `auth_method`, `is_sandbox`, `sandbox_expires_at`
+- Enables the "sandbox expiring in Xh" banner without a second round-trip
+
+### Regression Fix (found + fixed by testing agent) ✅
+- `ukvi_service.generate_expiry_alerts` crashed 500 when `immigration_status=None` (legitimately persisted by the new EmployeeCreate model) — fixed with `.get('immigration_status') or {}` safeguards
+
+---
+
 ## NEW (May 6, 2026 — Iteration 9)
 
 ### Demo Tour Walkthrough ✅

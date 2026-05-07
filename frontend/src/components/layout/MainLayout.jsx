@@ -35,7 +35,8 @@ import {
     Briefcase,
     Receipt,
     HeartPulse,
-    CalendarCheck
+    CalendarCheck,
+    Sparkles
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -254,6 +255,19 @@ export default function MainLayout({ children }) {
                         </div>
                     </div>
                 </header>
+
+                {/* Sandbox demo banner */}
+                {user?.is_sandbox && (
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 text-xs flex items-center justify-between" data-testid="sandbox-banner">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>
+                                You're in a <strong>sandbox demo</strong>. Data will be wiped after 24h — <Link to="/register" className="underline font-semibold">create a real account</Link> to keep it.
+                            </span>
+                        </div>
+                        <Link to="/billing" className="underline font-semibold hover:opacity-80">Upgrade →</Link>
+                    </div>
+                )}
 
                 {/* Page content */}
                 <main className="p-4 lg:p-8">
