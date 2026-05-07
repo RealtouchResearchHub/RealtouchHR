@@ -230,6 +230,67 @@ async def get_transactions(
     return {"transactions": transactions, "total": len(transactions)}
 
 
+@router.post("/portal")
+async def create_billing_portal(
+    data: dict,
+    user: User = Depends(require_owner),
+):
+    """
+    Create a Stripe Customer Portal session so the customer can self-serve
+    payment methods, cancel subscription, download invoices.
+    
+    Body: { "return_url": "https://app.example.com/billing" }
+    """
+    import stripe
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not stripe.api_key or stripe.api_key == "sk_test_emergent":
+        # sk_test_emergent is the pod test key — portal requires a real live/test key tied to the account
+        pass  # Proceed — Stripe test keys still create test portal sessions
+
+    return_url = data.get("return_url") or f"{os.environ.get('APP_URL', 'https://realtouchhr.com')}/billing"
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    # Find a completed transaction to get the Stripe customer id
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    stripe_customer_id = (company or {}).get("stripe_customer_id")
+
+    if not stripe_customer_id:
+        # Try to extract customer id from the most recent paid transaction
+        tx = await db.payment_transactions.find_one(
+            {"company_id": user.company_id, "payment_status": "paid"},
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+        if tx and tx.get("session_id"):
+            try:
+                session = stripe.checkout.Session.retrieve(tx["session_id"])
+                stripe_customer_id = session.get("customer")
+                if stripe_customer_id:
+                    await db.companies.update_one(
+                        {"company_id": user.company_id},
+                        {"$set": {"stripe_customer_id": stripe_customer_id}}
+                    )
+            except Exception as exc:
+                logger.error(f"Could not resolve Stripe customer: {exc}")
+
+    if not stripe_customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No Stripe customer found. Complete a subscription checkout first."
+        )
+
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=stripe_customer_id,
+            return_url=return_url,
+        )
+        return {"portal_url": portal_session.url, "customer_id": stripe_customer_id}
+    except Exception as exc:
+        logger.error(f"Stripe portal creation failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Portal session failed: {exc}")
+
+
 # ==================== WEBHOOK ROUTE ====================
 
 @router.post("/webhook/stripe")

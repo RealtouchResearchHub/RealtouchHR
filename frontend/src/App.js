@@ -41,6 +41,8 @@ import BillingPage from './components/pages/BillingPage';
 import StatutoryPaymentsPage from './components/pages/StatutoryPaymentsPage';
 import YearEndPage from './components/pages/YearEndPage';
 import LandingPage from './components/pages/LandingPage';
+import AdminPortalPage from './components/pages/AdminPortalPage';
+import InviteAcceptPage from './components/pages/InviteAcceptPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -130,6 +132,8 @@ function AppRouter() {
             <Route path="/time-tracking" element={<ProtectedRoute><TimeSchedulingPage /></ProtectedRoute>} />
             <Route path="/statutory" element={<ProtectedRoute><StatutoryPaymentsPage /></ProtectedRoute>} />
             <Route path="/year-end" element={<ProtectedRoute><YearEndPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPortalPage /></ProtectedRoute>} />
+            <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             

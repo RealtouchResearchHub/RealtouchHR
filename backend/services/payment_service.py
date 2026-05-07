@@ -313,15 +313,28 @@ class PaymentService:
         new_status = "completed" if status_response.payment_status == "paid" else status_response.status
         new_payment_status = status_response.payment_status
         
+        # Capture Stripe customer id for future billing-portal access
+        customer_id = getattr(status_response, "customer_id", None) or getattr(status_response, "customer", None)
+        update_fields = {
+            "status": new_status,
+            "payment_status": new_payment_status,
+            "amount_total": status_response.amount_total,
+            "updated_at": now.isoformat()
+        }
+        if customer_id:
+            update_fields["stripe_customer_id"] = customer_id
+        
         await db.payment_transactions.update_one(
             {"session_id": session_id},
-            {"$set": {
-                "status": new_status,
-                "payment_status": new_payment_status,
-                "amount_total": status_response.amount_total,
-                "updated_at": now.isoformat()
-            }}
+            {"$set": update_fields}
         )
+
+        # Mirror customer id to company for billing portal
+        if customer_id and transaction.get("company_id"):
+            await db.companies.update_one(
+                {"company_id": transaction["company_id"]},
+                {"$set": {"stripe_customer_id": customer_id}}
+            )
         
         # If payment successful, update company subscription
         if new_payment_status == "paid":

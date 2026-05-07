@@ -147,6 +147,28 @@ export default function BillingPage() {
         }
     };
 
+    const handleManageSubscription = async () => {
+        setCheckoutLoading('portal');
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(
+                `${API_URL}/api/payments/portal`,
+                { return_url: `${window.location.origin}/billing` },
+                { headers: { Authorization: `Bearer ${token}` }, withCredentials: true }
+            );
+            if (res.data?.portal_url) {
+                window.location.href = res.data.portal_url;
+            }
+        } catch (err) {
+            toast.error(
+                err.response?.data?.detail ||
+                'Customer portal unavailable — complete a subscription checkout first'
+            );
+        } finally {
+            setCheckoutLoading(null);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -209,6 +231,22 @@ export default function BillingPage() {
                             {billing?.subscription_active ? 'ACTIVE' : 'INACTIVE'}
                         </Badge>
                     </div>
+                    {billing?.subscription_active && (
+                        <div className="mt-4 pt-4 border-t flex justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={handleManageSubscription}
+                                disabled={checkoutLoading === 'portal'}
+                                data-testid="manage-subscription-btn"
+                            >
+                                {checkoutLoading === 'portal' ? (
+                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Opening…</>
+                                ) : (
+                                    <>Manage subscription &amp; payment methods <CreditCard className="w-4 h-4 ml-2" /></>
+                                )}
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

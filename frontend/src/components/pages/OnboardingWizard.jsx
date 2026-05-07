@@ -391,7 +391,7 @@ export default function OnboardingWizard() {
                                     <Rocket className="w-10 h-10 text-white" />
                                 </div>
                                 <CardTitle className="text-2xl font-['Plus_Jakarta_Sans']">You're all set!</CardTitle>
-                                <CardDescription>Your HR & payroll system is ready to use</CardDescription>
+                                <CardDescription>Your HR &amp; payroll system is ready to use</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-6">
@@ -411,6 +411,34 @@ export default function OnboardingWizard() {
                                         </li>
                                     </ul>
                                 </div>
+
+                                {/* Module tour — what's next */}
+                                <div>
+                                    <h3 className="font-semibold mb-3">Explore what's next:</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {[
+                                            { label: 'HMRC RTI submissions', desc: 'Submit FPS/EPS to HMRC', href: '/hmrc' },
+                                            { label: 'UKVI compliance', desc: 'Track visas + sponsor licence', href: '/ukvi' },
+                                            { label: 'Statutory Pay', desc: 'SSP/SMP/SPP/ShPP/SAP calculators', href: '/statutory' },
+                                            { label: 'Time & Scheduling', desc: 'Clock-ins, shifts, timesheets', href: '/time-tracking' },
+                                            { label: 'Year-End Close', desc: 'Generate P60s + EPS finalise', href: '/year-end' },
+                                            { label: 'Invite your team', desc: 'Assign roles: admin, HR, payroll', href: '/admin' },
+                                            { label: 'Billing', desc: 'Upgrade plan, manage payment methods', href: '/billing' },
+                                            { label: 'Settings — HMRC refs', desc: 'PAYE / AOR / sponsor licence', href: '/settings' },
+                                        ].map((m) => (
+                                            <button
+                                                key={m.href}
+                                                onClick={() => navigate(m.href)}
+                                                className="text-left p-3 border rounded-lg hover:border-indigo-400 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition"
+                                                data-testid={`wizard-module-${m.href.replace('/', '')}`}
+                                            >
+                                                <p className="text-sm font-medium">{m.label}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{m.desc}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 <Button 
                                     className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700" 
                                     onClick={handleFinish}

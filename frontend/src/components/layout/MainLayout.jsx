@@ -60,7 +60,8 @@ const navigation = [
     { name: 'Audit Log', href: '/audit', icon: Building2 },
     { name: 'Self-Service', href: '/self-service', icon: UserCircle },
     { name: 'Enterprise', href: '/enterprise', icon: Briefcase },
-    { name: 'Billing', href: '/billing', icon: Receipt },
+    { name: 'Admin', href: '/admin', icon: Shield, adminOnly: true },
+    { name: 'Billing', href: '/billing', icon: Receipt, ownerOnly: true },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -148,7 +149,13 @@ export default function MainLayout({ children }) {
 
                     {/* Navigation */}
                     <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-                        {navigation.map((item) => {
+                        {navigation
+                            .filter((item) => {
+                                if (item.ownerOnly && user?.role !== 'owner') return false;
+                                if (item.adminOnly && user?.role !== 'owner' && user?.role !== 'admin') return false;
+                                return true;
+                            })
+                            .map((item) => {
                             const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
                             return (
                                 <Link

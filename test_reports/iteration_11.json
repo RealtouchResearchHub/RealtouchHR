@@ -1,0 +1,46 @@
+{
+  "summary": "Iter11 testing complete. Backend: 12/12 new iter11 tests PASS (team management full lifecycle: invite create/duplicate-block/list/public-preview/accept-with-JWT/revoke + role hierarchy enforcement: owner-only role change and removal, admin+owner can invite, hr_manager gets 403; Stripe Customer Portal correctly returns 400 'No Stripe customer found' for fresh sandbox and 401 unauthenticated). Full regression: 110/110 PASS across iter8/9/10/11 after fixing a pre-existing register-500 regression (ObjectId bleed into TokenResponse). Frontend e2e: sandbox owner → /admin loads AdminPortalPage with all 4 tabs (Team/Invites/Audit/Danger) and invite-user-btn; invite dialog opens and submits; /invite/:token public page accessible without auth, accept form stores JWT and redirects to /dashboard; the newly-accepted hr_manager CANNOT access /admin (sees Access-restricted card) — role-based UI filtering works; /billing page loads and manage-subscription-btn is correctly HIDDEN when no active subscription; sidebar shows Admin+Billing for owner as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/register", "issue": "Pre-existing regression (not iter11-scope): MongoDB _id bled into User Pydantic model (extra='allow') causing PydanticSerializationError 500. Fixed by popping _id alongside password_hash. /api/auth/session (Google) also inserts but builds user_doc fresh so not affected."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_team_portal.py",
+    "/app/test_reports/pytest/iter11_results.xml",
+    "/app/test_reports/pytest/iter11_full_regression.xml"
+  ],
+  "action_items": [
+    "(INFO) Fixed /api/auth/register 500 (ObjectId serialization) in server.py. No further action required unless main agent prefers to also `user_doc.pop('_id', None)` defensively after any insert that may be re-used for response shaping elsewhere.",
+    "(INFO) Iter11 scope is fully verified — team management, invite/accept, role hierarchy, Stripe portal, admin portal page, invite accept page, billing portal button gating, and sidebar role filtering all pass."
+  ],
+  "critical_code_review_comments": [
+    "routes/team.py is cleanly scoped: VALID_ROLES whitelist enforced on both invite (rejects 'owner' and unknown) and role update; invite tokens are 32-byte urlsafe (secrets.token_urlsafe), 7-day expiry, single-use (accept flips status -> accepted so duplicate accepts 404). Password hashed with bcrypt.gensalt, JWT HS256 24h, parallel user_sessions row so cookie auth also works — consistent with server.py auth pattern. Good: self-demote blocked (400), self-removal blocked (400), owner-to-owner removal blocked (400), session cleanup on user removal.",
+    "routes/payments.py POST /portal: correctly requires owner, tries companies.stripe_customer_id first then falls back to resolving via most recent paid transaction's session (stripe.checkout.Session.retrieve), caches back to companies. Clean 400 when no customer exists. Note: the `if stripe.api_key == 'sk_test_emergent': pass` branch is a no-op — consider removing or converting to an explicit warning log; functionally fine with the pod test key.",
+    "PRE-EXISTING BUG FIXED: server.py /auth/register inserted user_doc via motor (which mutates the dict adding ObjectId _id), then returned User(**user_doc). User model has ConfigDict(extra='allow') → _id leaked into Pydantic → 500 on serialize. Added user_doc.pop('_id', None) before TokenResponse. /auth/login already re-fetched with projection so unaffected. Iter10 regression suite masked this because fresh_owner depends on /auth/register — all iter10 tests erroring at setup proved the regression was live.",
+    "Frontend AdminPortalPage.jsx has all data-testid hooks (admin-portal-page, tab-team|invites|audit|danger, invite-user-btn, invite-dialog, invite-name/email/role, send-invite-btn, role-select-*, remove-user-*, revoke-*). InviteAcceptPage.jsx exposes invite-accept-page, invite-password, invite-confirm-password, accept-invite-btn. BillingPage.jsx exposes manage-subscription-btn. Excellent testability coverage.",
+    "Role-based access control verified end-to-end: hr_manager created via accepted invite is correctly denied /admin UI (Access-restricted card renders). Sidebar Admin/Billing visibility is driven by role filter (MainLayout ownerOnly/adminOnly). Regression-safe."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_team_portal.py",
+    "/app/backend/server.py"
+  ],
+  "success_rate": {"backend": "100% (12/12 new + 98/98 prior regression = 110/110)", "frontend": "100% on tested surfaces (AdminPortalPage load + 4 tabs + invite dialog, InviteAcceptPage public flow, JWT storage + redirect, hr_manager access-denied on /admin, BillingPage manage-sub-btn gating, sidebar role filter)"},
+  "test_credentials": "Sandbox owner via POST /api/demo/sandbox (no auth, fresh every run, 24h JWT). Invitee created per-test with random email + password 'StrongPass123!'. Existing test@example.com / Test123! still available.",
+  "seed_data_creation": "Per iter11 test run: 1 sandbox owner + 6 demo employees (via /api/demo/sandbox seed), 3+ invites per run (duplicate-block + revoke + full-accept flows), 1 hr_manager user auto-promoted to admin then removed within test_full_invite_flow. Cleanup not strictly needed since sandbox is auto-expired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter11 backend + frontend fully verified. Key net-new endpoints (routes/team.py + POST /api/payments/portal) all behave per spec. Found and fixed ONE pre-existing regression in /auth/register (ObjectId leak into Pydantic). 110/110 backend tests clean. Frontend AdminPortalPage + InviteAcceptPage + BillingPage manage-sub-btn + role-filtered sidebar all working end-to-end. Stripe portal 400 'No Stripe customer found' is EXPECTED for fresh sandbox — not a bug.",
+  "rca of the issue": "POST /api/auth/register returned 500 because motor's insert_one mutates the user_doc dict to inject _id: ObjectId(...), and the endpoint then constructs TokenResponse(user=User(**user_doc)). Since User is defined with ConfigDict(extra='allow'), the _id leaked into the Pydantic model; during JSON serialization Pydantic raised 'Unable to serialize unknown type: <class bson.objectid.ObjectId>'. Reproduction: POST /api/auth/register with any new email. Mitigation: added `user_doc.pop('_id', None)` adjacent to the existing `user_doc.pop('password_hash', None)` line. Confirmed fix by re-running test_iter10_sandbox_studentloan.py (12/12 PASS) plus full regression (110/110 PASS).",
+  "mocked_apis": {
+    "Resend Email Service": "MOCK mode (invite emails logged to backend stdout)",
+    "HMRC Gateway": "Sandbox/test mode (placeholder credentials)",
+    "Stripe Customer Portal": "NOT MOCKED — real stripe SDK call; returns expected 400 for fresh sandbox without paid subscription"
+  }
+}

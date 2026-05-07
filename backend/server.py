@@ -577,6 +577,7 @@ async def register(data: UserCreate, response: Response):
     )
     
     user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
     user_doc["created_at"] = now
     return TokenResponse(token=token, user=User(**user_doc))
 
@@ -2913,6 +2914,7 @@ try:
     from routes.year_end import router as year_end_router
     from routes.admin import router as admin_router
     from routes.demo import router as demo_router
+    from routes.team import router as team_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2929,6 +2931,7 @@ try:
     api_router.include_router(year_end_router)
     api_router.include_router(admin_router)
     api_router.include_router(demo_router)
+    api_router.include_router(team_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")
