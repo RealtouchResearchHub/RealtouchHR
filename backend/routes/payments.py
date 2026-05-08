@@ -64,6 +64,11 @@ class CheckStatusRequest(BaseModel):
     origin_url: str
 
 
+class PayslipCheckoutRequest(BaseModel):
+    payslip_id: str
+    origin_url: str
+
+
 # ==================== AUTH HELPERS ====================
 
 async def get_current_user(request: Request) -> User:
@@ -228,6 +233,68 @@ async def get_transactions(
     ).sort("created_at", -1).limit(limit).to_list(limit)
     
     return {"transactions": transactions, "total": len(transactions)}
+
+
+@router.post("/checkout/payslip")
+async def create_payslip_checkout(
+    request_data: PayslipCheckoutRequest,
+    user: User = Depends(get_current_user)
+):
+    """
+    Create a Stripe checkout session for a single £5 payslip download.
+    
+    payslip_id format accepted:
+      - "{payrun_id}:{employee_id}"  (manager/admin downloading a specific employee)
+      - "{payrun_id}"                 (self-service: resolves employee from current user)
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    raw = request_data.payslip_id or ""
+    if ":" in raw:
+        payrun_id, employee_id = raw.split(":", 1)
+    else:
+        payrun_id = raw
+        # Self-service: resolve employee by user's email
+        emp = await db.employees.find_one({"email": user.email, "company_id": user.company_id}, {"_id": 0})
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee record not found")
+        employee_id = emp["employee_id"]
+
+    payslip = await db.payslips.find_one(
+        {"payrun_id": payrun_id, "employee_id": employee_id},
+        {"_id": 0}
+    )
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+
+    payrun = await db.pay_runs.find_one({"payrun_id": payrun_id}, {"_id": 0})
+    if not payrun or payrun.get("company_id") != user.company_id:
+        raise HTTPException(status_code=403, detail="Not your payslip")
+
+    canonical_id = f"{payrun_id}:{employee_id}"
+
+    # Block during trial — no downloads allowed
+    from services.trial_service import trial_service
+    status = await trial_service.get_trial_status(user.company_id)
+    if status.get("trial_active"):
+        raise HTTPException(
+            status_code=403,
+            detail="Downloads are disabled during the free trial. Upgrade your plan to enable payslip downloads."
+        )
+
+    from services.payment_service import payment_service
+    try:
+        return await payment_service.create_payslip_download_checkout(
+            payslip_id=canonical_id,
+            payrun_id=payrun_id,
+            company_id=user.company_id,
+            user_id=user.user_id,
+            user_email=user.email,
+            origin_url=request_data.origin_url
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/portal")

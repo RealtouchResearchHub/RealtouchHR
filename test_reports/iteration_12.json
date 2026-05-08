@@ -1,0 +1,46 @@
+{
+  "summary": "Iter12 (Trial + £5 Pay-per-Download) backend + frontend verified. Created /app/backend/tests/test_iter12_trial_paywall.py (11 tests). Iter12 results: 10 PASS + 1 XFAIL (sandbox bypass bug, see below). Full regression: 120 PASS + 1 XFAIL across all iter8–12 suites. Frontend: TrialBanner mounts on dashboard for fresh-registered owner with correct copy 'Free trial — 6 days remaining. Downloads are disabled during the trial. Upgrade to unlock.' — yellow background, dismiss button visible, 'Upgrade to unlock' links to /billing. /api/trial/status returns {trial_active:true, days_remaining:6, downloads_allowed:false} as expected. After expiring the trial via direct mongo update, GET /api/payroll/runs/{id}/payslips/{emp}/pdf returns HTTP 402 with '£5.00 per payslip download' message; POST /api/payments/checkout/payslip returns a real Stripe cs_test_... checkout_url with amount=5.0 currency=gbp. DownloadGateService.issue_pass + check_access + consume_pass cycle verified end-to-end (pass grants 200 PDF, second download is 402 again). Scheduler source confirms 4 jobs registered (ukvi/sandbox/retention/trial_reminder).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/payroll/runs/{id}/payslips/{emp}/pdf (sandbox flow)", "issue": "DownloadGateService.check_access does NOT bypass for is_sandbox=true / demo_mode=true companies. Per iter12 spec, sandbox companies should be exempt from the £5 paywall (intentional for sales tour) — but currently sandbox returns HTTP 402 because the gate only checks trial_active and subscription_active. Fix: in services/trial_service.py DownloadGateService.check_access, add a short-circuit: if company.is_sandbox or company.demo_mode → {allowed: True, reason: 'Sandbox demo'}."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_trial_paywall.py",
+    "/app/test_reports/pytest/iter12_results.xml",
+    "/app/test_reports/pytest/iter12_full_regression.xml"
+  ],
+  "action_items": [
+    "Fix sandbox bypass in services/trial_service.py DownloadGateService.check_access — sandbox/demo companies must NOT hit £5 paywall (currently they do). Add is_sandbox/demo_mode check at top of check_access, or set downloads_allowed=true for those companies.",
+    "(INFO) All other iter12 surfaces pass — trial auto-start, /api/trial/status, 403-during-trial on payslip pdf + checkout + self-service, 402-after-trial paywall, real Stripe checkout_url at £5/gbp, download pass single-use lifecycle, scheduler 4-jobs registration, frontend TrialBanner copy + upgrade link."
+  ],
+  "critical_code_review_comments": [
+    "trial_service.py: clean implementation — TRIAL_DURATION_DAYS=7 and PAYSLIP_DOWNLOAD_PRICE=5.00 are module-level constants (server-immutable, good). get_trial_status correctly nullifies trial_active when end<now (defensive against stale flag). issue_pass uses 30-min expiry + single-use (consume_pass uses {used:False} predicate so race-safe). Pass resource_id format is 'PAYRUN:EMPID' end-to-end consistent.",
+    "BUG: DownloadGateService.check_access has no sandbox/demo bypass. Sandbox tour will surface a £5 paywall on the very first payslip click — breaks the sales-demo intent stated in the iter12 spec.",
+    "routes/trial.py uses an inline get_current_user that re-implements auth (cookie + JWT fallback). Functional but duplicates server.py auth — consider centralizing to avoid drift.",
+    "server.py auth/register correctly auto-starts trial on company create (line 553-556). Idempotent because TrialService.start_trial guards on trial_started_at — good. server.py /demo/sandbox path doesn't set trial_active (correct per spec).",
+    "payments.py POST /checkout/payslip correctly blocks during trial (403). After trial, calls payment_service.create_payslip_download_checkout which returns Stripe cs_test_... — verified amount=5.0 gbp at the checkout_session.line_items level. _process_successful_payment.payslip_download branch issues a 30-min download pass keyed by company+user+resource_id — verified consumed on first download.",
+    "TrialBanner.jsx integration verified visually: yellow bg at >3 days, copy/CTA correct, dismiss + upgrade-link both present. days_remaining transitions to red at <=3 (not retested in this run but logic is in component)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_trial_paywall.py"
+  ],
+  "success_rate": {"backend": "100% on iter12 (10/10 PASS + 1 XFAIL documenting sandbox bypass bug); 120/120 PASS + 1 XFAIL on full regression", "frontend": "100% on tested surfaces (TrialBanner mount + copy + upgrade link, /api/trial/status integration on dashboard for fresh trial owner)"},
+  "test_credentials": "Fresh trial owner created per-run via /api/auth/register (TEST_iter12_*@example.com / Test123!). Sandbox owner via /api/demo/sandbox. Existing test@example.com / Test123! still available.",
+  "seed_data_creation": "Per run: 1 fresh trial owner + 1 employee + 1 payrun (from TestPayslipDownloadGate), 1 sandbox owner (auto-seeded 6 employees + payrun). Cleanup not strictly required since sandbox auto-expires and trial test data is prefixed TEST_.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter12 backend + frontend verified except for sandbox-bypass bug in DownloadGateService.check_access (returns 402 for sandbox/demo companies, should return 200/allowed). After fix, re-run TestSandboxDownloadsAllowed::test_sandbox_can_download_payslip — change xfail to plain assert 200. All 10 other iter12 tests + 110 prior regression tests are green. Stripe checkout returns cs_test_ URLs at £5 GBP. Download pass lifecycle (issue→consume) is single-use and 30-min expiry — verified.",
+  "rca of the issue": "Sandbox 402 bug RCA: services/trial_service.py DownloadGateService.check_access checks (1) trial_active → 403, then (2) existing pass → 200, then (3) falls through to needs_payment=true → 402. Sandbox companies are created with is_sandbox=true + demo_mode=true but trial_active is NOT set, so step 1 is skipped, no pass exists, and they fall to step 3 → 402. Reproduction: POST /api/demo/sandbox → take token → GET /api/payroll/runs/{id}/payslips/{emp}/pdf → 402. Fix: add `if company.get('is_sandbox') or company.get('demo_mode'): return {allowed:True, reason:'Sandbox demo bypass', needs_payment:False}` at the top of check_access (after fetching company doc — note the function currently doesn't fetch the company; it goes via TrialService.get_trial_status which only returns trial+subscription fields, not is_sandbox/demo_mode, so the fix needs an extra db.companies.find_one in check_access OR get_trial_status should include is_sandbox in its return).",
+  "mocked_apis": {
+    "Resend Email": "MOCK mode (trial reminders + invite emails logged to backend stdout)",
+    "HMRC Gateway": "Sandbox/test mode (placeholder credentials)",
+    "Stripe Checkout (payslip + subscription)": "REAL Stripe SDK — pod test key sk_test_emergent. Verified cs_test_... session URLs returned with amount=5.0 currency=gbp."
+  }
+}

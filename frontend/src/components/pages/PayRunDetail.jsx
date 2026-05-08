@@ -46,6 +46,21 @@ export default function PayRunDetail() {
         fetchData();
     }, [id]);
 
+    // Resume a pending payslip download after returning from Stripe
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get('session_id');
+        const status = params.get('status');
+        if (sessionId && status === 'success') {
+            (async () => {
+                const { resumePendingPayslipDownload } = await import('../../lib/payslipDownload');
+                await resumePendingPayslipDownload(sessionId);
+                // Clean up URL
+                window.history.replaceState({}, '', window.location.pathname);
+            })();
+        }
+    }, []);
+
     const fetchData = async () => {
         try {
             const [runRes, slipsRes] = await Promise.all([
@@ -82,23 +97,17 @@ export default function PayRunDetail() {
     };
 
     const handleDownloadPayslip = async (employeeId) => {
-        try {
-            const response = await axios.get(
-                `${API_URL}/api/payroll/runs/${id}/payslips/${employeeId}/pdf`,
-                { withCredentials: true, responseType: 'blob' }
-            );
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `payslip_${employeeId}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            toast.success('Payslip downloaded');
-        } catch (error) {
-            toast.error('Failed to download payslip');
-        }
+        const { downloadPayslipWithPaywall } = await import('../../lib/payslipDownload');
+        await downloadPayslipWithPaywall({
+            payrunId: id,
+            employeeId,
+            filename: `payslip_${employeeId}.pdf`,
+            onPaywall: async (message) => {
+                return window.confirm(
+                    `${message}\n\nProceed to Stripe to pay £5.00 for this payslip download?`
+                );
+            },
+        });
     };
 
     const handleExportFPS = async () => {

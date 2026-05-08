@@ -192,6 +192,77 @@ class PaymentService:
             "plan": plan
         }
     
+    async def create_payslip_download_checkout(
+        self,
+        payslip_id: str,
+        payrun_id: str,
+        company_id: str,
+        user_id: str,
+        user_email: str,
+        origin_url: str
+    ) -> Dict[str, Any]:
+        """
+        Create a Stripe checkout session for a single £5 payslip download.
+        Amount is server-enforced.
+        """
+        from services.trial_service import PAYSLIP_DOWNLOAD_PRICE, PAYSLIP_DOWNLOAD_CURRENCY
+        from emergentintegrations.payments.stripe.checkout import (
+            StripeCheckout,
+            CheckoutSessionRequest
+        )
+
+        success_url = f"{origin_url}/payroll?session_id={{CHECKOUT_SESSION_ID}}&status=success&payslip_id={payslip_id}"
+        cancel_url = f"{origin_url}/payroll?status=cancelled"
+        webhook_url = f"{origin_url}/api/webhook/stripe"
+
+        stripe_checkout = StripeCheckout(
+            api_key=self.stripe_api_key,
+            webhook_url=webhook_url
+        )
+
+        checkout_request = CheckoutSessionRequest(
+            amount=PAYSLIP_DOWNLOAD_PRICE,
+            currency=PAYSLIP_DOWNLOAD_CURRENCY,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                "company_id": company_id,
+                "user_id": user_id,
+                "user_email": user_email,
+                "payslip_id": payslip_id,
+                "payrun_id": payrun_id,
+                "type": "payslip_download"
+            }
+        )
+
+        session = await stripe_checkout.create_checkout_session(checkout_request)
+
+        now = datetime.now(timezone.utc)
+        transaction = {
+            "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
+            "session_id": session.session_id,
+            "company_id": company_id,
+            "user_id": user_id,
+            "user_email": user_email,
+            "type": "payslip_download",
+            "payslip_id": payslip_id,
+            "payrun_id": payrun_id,
+            "amount": PAYSLIP_DOWNLOAD_PRICE,
+            "currency": PAYSLIP_DOWNLOAD_CURRENCY,
+            "payment_status": "pending",
+            "status": "initiated",
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }
+        await db.payment_transactions.insert_one(transaction)
+
+        return {
+            "checkout_url": session.url,
+            "session_id": session.session_id,
+            "amount": PAYSLIP_DOWNLOAD_PRICE,
+            "currency": PAYSLIP_DOWNLOAD_CURRENCY
+        }
+
     async def create_addon_checkout(
         self,
         addon_id: str,
@@ -391,7 +462,29 @@ class PaymentService:
                 amount=transaction.get("amount"),
                 currency=transaction.get("currency")
             )
-        
+
+        elif payment_type == "payslip_download":
+            # Issue a one-use download pass valid for 30 min
+            from services.trial_service import download_gate
+            pass_data = await download_gate.issue_pass(
+                company_id=company_id,
+                user_id=transaction.get("user_id"),
+                resource_id=transaction.get("payslip_id"),
+                resource_type="payslip",
+                transaction_id=transaction.get("transaction_id"),
+            )
+            await db.audit_log.insert_one({
+                "action": "payslip_download_paid",
+                "entity_type": "payslip",
+                "entity_id": transaction.get("payslip_id"),
+                "details": {
+                    "amount": transaction.get("amount"),
+                    "user_id": transaction.get("user_id"),
+                    "pass_id": pass_data["pass_id"],
+                },
+                "timestamp": now.isoformat()
+            })
+
         elif payment_type == "addon":
             addon_id = transaction.get("addon_id")
             quantity = transaction.get("quantity", 1)

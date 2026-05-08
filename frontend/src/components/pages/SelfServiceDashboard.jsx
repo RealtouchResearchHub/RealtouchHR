@@ -98,7 +98,38 @@ export default function SelfServiceDashboard() {
             link.remove();
             toast.success('Payslip downloaded');
         } catch (error) {
-            toast.error('Failed to download payslip');
+            const status = error.response?.status;
+            let detail = '';
+            if (error.response?.data instanceof Blob) {
+                try { detail = JSON.parse(await error.response.data.text()).detail; }
+                catch { detail = 'Download failed'; }
+            } else {
+                detail = error.response?.data?.detail || 'Download failed';
+            }
+            if (status === 402) {
+                if (window.confirm(`${detail}\n\nProceed to Stripe to pay £5.00 for this payslip?`)) {
+                    try {
+                        const co = await axios.post(
+                            `${API_URL}/api/payments/checkout/payslip`,
+                            { payslip_id: payrunId, origin_url: window.location.origin },
+                            { withCredentials: true }
+                        );
+                        if (co.data?.checkout_url) {
+                            sessionStorage.setItem('pending_payslip_download', JSON.stringify({
+                                payrunId, employeeId: 'self', filename: `payslip_${payrunId}.pdf`,
+                                session_id: co.data.session_id, isSelfService: true,
+                            }));
+                            window.location.href = co.data.checkout_url;
+                        }
+                    } catch (e) {
+                        toast.error(e.response?.data?.detail || 'Could not start checkout');
+                    }
+                }
+            } else if (status === 403) {
+                toast.error(detail || 'Downloads disabled during trial');
+            } else {
+                toast.error(detail);
+            }
         }
     };
 

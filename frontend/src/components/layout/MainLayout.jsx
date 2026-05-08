@@ -42,6 +42,7 @@ import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
 import NotificationsPopover from '../shared/NotificationsPopover';
 import DemoTour from '../shared/DemoTour';
+import TrialBanner from '../shared/TrialBanner';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -275,6 +276,9 @@ export default function MainLayout({ children }) {
                         <Link to="/billing" className="underline font-semibold hover:opacity-80">Upgrade →</Link>
                     </div>
                 )}
+
+                {/* Trial banner for non-sandbox trial companies */}
+                {!user?.is_sandbox && <TrialBanner />}
 
                 {/* Page content */}
                 <main className="p-4 lg:p-8">

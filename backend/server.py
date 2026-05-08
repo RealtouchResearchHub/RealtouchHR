@@ -543,12 +543,16 @@ async def register(data: UserCreate, response: Response):
     # Create company if provided
     if data.company_name:
         company_id = f"company_{uuid.uuid4().hex[:12]}"
+        trial_ends = now + timedelta(days=7)
         company_doc = {
             "company_id": company_id,
             "name": data.company_name,
             "owner_id": user_id,
             "payroll_frequency": "monthly",
             "setup_completed": False,
+            "trial_active": True,
+            "trial_started_at": now.isoformat(),
+            "trial_ends_at": trial_ends.isoformat(),
             "created_at": now.isoformat()
         }
         await db.companies.insert_one(company_doc)
@@ -1907,7 +1911,7 @@ def generate_payslip_pdf(payslip: dict, company: dict, pay_period: dict) -> byte
 
 @api_router.get("/payroll/runs/{payrun_id}/payslips/{employee_id}/pdf")
 async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = Depends(get_current_user)):
-    """Download individual payslip as PDF"""
+    """Download individual payslip as PDF — requires valid download pass (£5 per download, blocked during trial)"""
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
@@ -1920,6 +1924,20 @@ async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = De
     payslip = await db.payslips.find_one({"payrun_id": payrun_id, "employee_id": employee_id}, {"_id": 0})
     if not payslip:
         raise HTTPException(status_code=404, detail="Payslip not found")
+
+    # Gate the download — trial blocks, paid must have a valid pass
+    from services.trial_service import download_gate
+    resource_id = f"{payrun_id}:{employee_id}"
+    access = await download_gate.check_access(user.company_id, user.user_id, resource_id)
+    if not access.get("allowed"):
+        raise HTTPException(
+            status_code=402 if access.get("needs_payment") else 403,
+            detail=access.get("reason", "Download not allowed"),
+            headers={"X-Payment-Required": "true"} if access.get("needs_payment") else {}
+        )
+    # Consume the pass (single-use)
+    if access.get("pass_id"):
+        await download_gate.consume_pass(access["pass_id"])
     
     # Get company
     company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
@@ -2739,7 +2757,7 @@ async def get_self_service_payslips(user: User = Depends(get_current_user)):
 
 @api_router.get("/self-service/payslips/{payrun_id}/pdf")
 async def download_self_service_payslip(payrun_id: str, user: User = Depends(get_current_user)):
-    """Download own payslip as PDF"""
+    """Download own payslip as PDF — blocked during trial, £5 per download when paid"""
     employee = await db.employees.find_one({"email": user.email}, {"_id": 0})
     
     if not employee:
@@ -2757,6 +2775,18 @@ async def download_self_service_payslip(payrun_id: str, user: User = Depends(get
     # Get pay run and company
     pay_run = await db.pay_runs.find_one({"payrun_id": payrun_id}, {"_id": 0})
     company = await db.companies.find_one({"company_id": pay_run.get("company_id")}, {"_id": 0})
+
+    # Gate the download
+    from services.trial_service import download_gate
+    resource_id = f"{payrun_id}:{employee['employee_id']}"
+    access = await download_gate.check_access(pay_run.get("company_id"), user.user_id, resource_id)
+    if not access.get("allowed"):
+        raise HTTPException(
+            status_code=402 if access.get("needs_payment") else 403,
+            detail=access.get("reason", "Download not allowed")
+        )
+    if access.get("pass_id"):
+        await download_gate.consume_pass(access["pass_id"])
     
     # Generate PDF
     pdf_bytes = generate_payslip_pdf(payslip, company or {}, pay_run)
@@ -2915,6 +2945,7 @@ try:
     from routes.admin import router as admin_router
     from routes.demo import router as demo_router
     from routes.team import router as team_router
+    from routes.trial import router as trial_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2932,6 +2963,7 @@ try:
     api_router.include_router(admin_router)
     api_router.include_router(demo_router)
     api_router.include_router(team_router)
+    api_router.include_router(trial_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

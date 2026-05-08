@@ -80,6 +80,50 @@ async def run_retention_audit():
     logger.info("[scheduler] Retention audit (dry run) — nothing deleted")
 
 
+async def run_trial_expiry_reminder():
+    """Daily: email owners whose trial ends in 3 days."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    target_min = (now + timedelta(days=3)).isoformat()
+    target_max = (now + timedelta(days=3, hours=23)).isoformat()
+    companies = await db.companies.find({
+        "trial_active": True,
+        "trial_ends_at": {"$gte": target_min, "$lte": target_max},
+    }, {"_id": 0}).to_list(1000)
+    sent = 0
+    for c in companies:
+        if c.get("trial_reminder_sent"):
+            continue
+        try:
+            owner = await db.users.find_one({"user_id": c.get("owner_id")}, {"_id": 0})
+            if owner and owner.get("email"):
+                from services.email_service import email_service, get_base_template
+                html = get_base_template(f"""
+                    <h2 style="color: #111827;">Your RealtouchHR trial ends in 3 days</h2>
+                    <p style="color: #374151;">Hi {owner.get('name', 'there')},</p>
+                    <p style="color: #374151; line-height: 1.6;">
+                        Your free trial for <strong>{c.get('name', 'your company')}</strong> ends on
+                        <strong>{c.get('trial_ends_at', '')[:10]}</strong>. Upgrade now to keep uninterrupted access
+                        and unlock payslip downloads.
+                    </p>
+                    <div style="margin: 24px 0;">
+                        <a href="{os.environ.get('APP_URL', 'https://realtouchhr.com')}/billing"
+                            style="display:inline-block; background:#4f46e5; color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600;">
+                            Upgrade now
+                        </a>
+                    </div>
+                """)
+                await email_service.send_email(owner["email"], "Trial ends in 3 days - RealtouchHR", html)
+                sent += 1
+                await db.companies.update_one(
+                    {"company_id": c["company_id"]},
+                    {"$set": {"trial_reminder_sent": True, "trial_reminder_sent_at": now.isoformat()}}
+                )
+        except Exception as exc:
+            logger.warning(f"Trial reminder failed for {c.get('company_id')}: {exc}")
+    logger.info(f"[scheduler] Trial expiry reminders sent: {sent}")
+
+
 def start_scheduler():
     if scheduler.running:
         return
@@ -101,8 +145,14 @@ def start_scheduler():
         trigger="cron", day_of_week="sun", hour=3, minute=0,
         id="retention_audit_weekly", replace_existing=True,
     )
+    # Daily trial expiry reminder at 09:00
+    scheduler.add_job(
+        run_trial_expiry_reminder,
+        trigger="cron", hour=9, minute=0,
+        id="trial_reminder_daily", replace_existing=True,
+    )
     scheduler.start()
-    logger.info("[scheduler] Started — 3 jobs registered")
+    logger.info("[scheduler] Started — 4 jobs registered")
 
 
 def stop_scheduler():
