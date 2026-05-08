@@ -105,6 +105,11 @@ class DownloadGateService:
         Check if user can download a resource right now.
         Returns {allowed: bool, reason: str, needs_payment: bool}
         """
+        # Sandbox / demo companies bypass the £5 paywall (intentional for sales tour)
+        company = await db.companies.find_one({"company_id": company_id}, {"_id": 0}) or {}
+        if company.get("is_sandbox") or company.get("demo_mode"):
+            return {"allowed": True, "reason": "Sandbox demo bypass", "needs_payment": False}
+
         status = await TrialService.get_trial_status(company_id)
 
         if status["trial_active"]:

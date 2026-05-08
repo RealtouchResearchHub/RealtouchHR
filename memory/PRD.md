@@ -46,6 +46,34 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 8, 2026 — Iteration 12)
+
+### 7-Day Free Trial ✅
+- Auto-starts on `POST /api/auth/register` when `company_name` is provided — sets `trial_active=true`, `trial_started_at`, `trial_ends_at` (+7 days)
+- `GET /api/trial/status` returns `{trial_active, days_remaining, trial_ends_at, subscription_active, downloads_allowed}`
+- All payslip/PDF downloads blocked during trial (HTTP 403 with upgrade message)
+- Stripe checkout for paid downloads also blocked during trial (so user doesn't pay £5 they can't redeem)
+- TrialBanner mounts in MainLayout — yellow until 3 days left, red ≤3 days, dismiss button + "Upgrade to unlock" link to /billing
+- Auto-cron daily at 09:00 UTC sends a "trial ends in 3 days" email reminder to company owners (idempotent via `trial_reminder_sent` flag)
+- Subscription activation clears the trial naturally (TrialService checks for paid subscription_transactions)
+
+### £5 Per-Payslip Download Paywall ✅
+- After trial ends (no subscription), every payslip PDF download requires a £5 Stripe payment
+- `POST /api/payments/checkout/payslip` body `{payslip_id: 'PAYRUN:EMPID' or just 'PAYRUN' for self-service, origin_url}` → returns Stripe `checkout_url` at £5 GBP
+- Server-side fixed pricing (`PAYSLIP_DOWNLOAD_PRICE = 5.00` constant — frontend cannot manipulate)
+- Successful payment via webhook/check_status creates a `download_passes` document (single-use, 30-min expiry, keyed by company+user+resource_id)
+- Download endpoints (`/api/payroll/runs/{id}/payslips/{emp}/pdf` + `/api/self-service/payslips/{id}/pdf`) check the gate, consume the pass, then stream PDF
+- HTTP 402 response with helpful message when no pass + paywall mode active
+- Frontend `lib/payslipDownload.js` handles full flow: download → 402 → confirm → Stripe → return → poll status → re-download
+
+### Sandbox Demo Bypass ✅
+- Sandbox / demo companies (`is_sandbox=true` or `demo_mode=true`) bypass the £5 paywall — preserves the sales tour "feels like a real product" intent
+
+### Scheduler — 4 cron jobs now ✅
+- ukvi_alerts_daily (02:00) · sandbox_cleanup_hourly · retention_audit_weekly (Sun 03:00) · **trial_reminder_daily (09:00)** [NEW]
+
+---
+
 ## NEW (May 7, 2026 — Iteration 11)
 
 ### Stripe Customer Portal ✅
