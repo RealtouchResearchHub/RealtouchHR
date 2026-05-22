@@ -297,6 +297,89 @@ async def create_payslip_checkout(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/transactions/{transaction_id}/receipt")
+async def get_transaction_receipt(
+    transaction_id: str,
+    user: User = Depends(get_current_user)
+):
+    """Return Stripe receipt URL for a paid transaction owned by this company."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    tx = await db.payment_transactions.find_one(
+        {"transaction_id": transaction_id, "company_id": user.company_id},
+        {"_id": 0}
+    )
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.get("payment_status") != "paid":
+        raise HTTPException(status_code=400, detail="Transaction not paid yet")
+    if tx.get("receipt_url"):
+        return {"receipt_url": tx["receipt_url"]}
+
+    # Lazy fetch receipt from Stripe if missing
+    try:
+        import stripe
+        stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+        if tx.get("session_id"):
+            session = stripe.checkout.Session.retrieve(
+                tx["session_id"], expand=["payment_intent.latest_charge"]
+            )
+            charge = ((session.get("payment_intent") or {}).get("latest_charge")) if isinstance(session.get("payment_intent"), dict) else None
+            url = (charge or {}).get("receipt_url") if isinstance(charge, dict) else None
+            if url:
+                await db.payment_transactions.update_one(
+                    {"transaction_id": transaction_id},
+                    {"$set": {"receipt_url": url}}
+                )
+                return {"receipt_url": url}
+    except Exception as exc:
+        logger.error(f"Stripe receipt fetch failed: {exc}")
+    raise HTTPException(status_code=404, detail="Receipt not available")
+
+
+@router.get("/usage/this-month")
+async def get_download_usage(user: User = Depends(get_current_user)):
+    """Return how many of the plan's free downloads have been used this month + bulk-pass status."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    from services.trial_service import TrialService
+    from services.payment_service import PLAN_DOWNLOAD_QUOTA
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    month_key = now.strftime("%Y-%m")
+
+    status = await TrialService.get_trial_status(user.company_id)
+    plan_id = status.get("plan_id")
+    quota = PLAN_DOWNLOAD_QUOTA.get(plan_id, 0)
+
+    usage = await db.download_usage.find_one(
+        {"company_id": user.company_id, "month": month_key}, {"_id": 0}
+    ) or {"count": 0}
+
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+    bulk_active = False
+    bulk_until = company.get("bulk_downloads_active_until")
+    if bulk_until:
+        try:
+            bulk_dt = datetime.fromisoformat(bulk_until.replace("Z", "+00:00"))
+            bulk_active = bulk_dt > now
+        except (ValueError, TypeError):
+            bulk_active = False
+
+    return {
+        "month": month_key,
+        "plan_id": plan_id,
+        "quota": quota,  # -1 = unlimited, 0 = no plan
+        "used_this_month": usage.get("count", 0),
+        "remaining": (-1 if quota == -1 else max(0, quota - usage.get("count", 0))),
+        "bulk_downloads_active": bulk_active,
+        "bulk_downloads_until": bulk_until if bulk_active else None,
+        "price_per_download": 5.00,
+        "bulk_offer_price": 29.00,
+        "bulk_offer_id": "bulk_downloads_monthly",
+    }
+
+
 @router.post("/portal")
 async def create_billing_portal(
     data: dict,

@@ -88,6 +88,22 @@ def _tax_year_bounds(tax_year: str):
     return date(start_year, 4, 6), date(start_year + 1, 4, 5)
 
 
+async def _gate_or_402(company_id: str, user_id: str, resource_id: str):
+    """Apply trial + £5 paywall + quota + bulk-pass gate. Returns access dict if allowed, raises HTTPException otherwise."""
+    from services.trial_service import download_gate
+    access = await download_gate.check_access(company_id, user_id, resource_id)
+    if not access.get("allowed"):
+        raise HTTPException(
+            status_code=402 if access.get("needs_payment") else 403,
+            detail=access.get("reason", "Download not allowed")
+        )
+    if access.get("pass_id"):
+        await download_gate.consume_pass(access["pass_id"])
+    elif access.get("plan_quota_consume"):
+        await download_gate.consume_quota(company_id, access["month_key"])
+    return access
+
+
 # ==================== P45 ====================
 
 @router.get("/p45/{employee_id}")
@@ -95,6 +111,9 @@ async def download_p45(employee_id: str, user: CurrentUser = Depends(get_current
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     emp, company = await _get_employee_and_company(employee_id, user.company_id)
+
+    # Gate
+    await _gate_or_402(user.company_id, user.user_id, f"p45:{employee_id}")
 
     # Fetch the most recent P45 record generated during termination
     p45_doc = await db.tax_documents.find_one(
@@ -200,6 +219,9 @@ async def download_p60(employee_id: str, tax_year: str = "2024-25", user: Curren
         raise HTTPException(status_code=400, detail="No company setup")
     emp, company = await _get_employee_and_company(employee_id, user.company_id)
 
+    # Gate
+    await _gate_or_402(user.company_id, user.user_id, f"p60:{employee_id}:{tax_year}")
+
     p60_data = await _build_p60_data(employee_id, user.company_id, tax_year)
 
     # Persist for audit
@@ -261,6 +283,9 @@ async def download_p11d(employee_id: str, tax_year: str, user: CurrentUser = Dep
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     emp, company = await _get_employee_and_company(employee_id, user.company_id)
+
+    # Gate
+    await _gate_or_402(user.company_id, user.user_id, f"p11d:{employee_id}:{tax_year}")
 
     record = await db.p11d_records.find_one(
         {"employee_id": employee_id, "company_id": user.company_id, "tax_year": tax_year},

@@ -932,166 +932,8 @@ async def update_employee(employee_id: str, data: dict, user: User = Depends(get
     
     return {"message": "Employee updated"}
 
-# ==================== LEAVE ROUTES ====================
-
-@api_router.post("/leave", response_model=LeaveRequest)
-async def create_leave_request(data: LeaveRequestCreate, user: User = Depends(get_current_user)):
-    if not user.company_id:
-        raise HTTPException(status_code=400, detail="No company setup")
-    
-    leave_id = f"leave_{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc)
-    
-    # Calculate days (simplified)
-    start = datetime.fromisoformat(data.start_date)
-    end = datetime.fromisoformat(data.end_date)
-    days = (end - start).days + 1
-    
-    leave_doc = {
-        "leave_id": leave_id,
-        "employee_id": user.user_id,
-        "company_id": user.company_id,
-        "leave_type": data.leave_type,
-        "start_date": data.start_date,
-        "end_date": data.end_date,
-        "days": days,
-        "reason": data.reason,
-        "status": "pending",
-        "created_at": now.isoformat()
-    }
-    await db.leave_requests.insert_one(leave_doc)
-    await create_audit_entry(user.company_id, user, "create", "leave", leave_id, {"type": data.leave_type, "days": days})
-    
-    leave_doc["created_at"] = now
-    return LeaveRequest(**leave_doc)
-
-@api_router.get("/leave", response_model=List[LeaveRequest])
-async def get_leave_requests(user: User = Depends(get_current_user)):
-    if not user.company_id:
-        return []
-    
-    leaves = await db.leave_requests.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
-    
-    for leave in leaves:
-        if isinstance(leave.get("created_at"), str):
-            leave["created_at"] = datetime.fromisoformat(leave["created_at"])
-    
-    return [LeaveRequest(**leave) for leave in leaves]
-
-@api_router.put("/leave/{leave_id}")
-async def update_leave_request(leave_id: str, data: dict, user: User = Depends(get_current_user)):
-    if not user.company_id:
-        raise HTTPException(status_code=400, detail="No company setup")
-    
-    # Get the leave request first
-    leave = await db.leave_requests.find_one({"leave_id": leave_id, "company_id": user.company_id}, {"_id": 0})
-    if not leave:
-        raise HTTPException(status_code=404, detail="Leave request not found")
-    
-    # Get employee email for notification
-    employee = await db.employees.find_one({"employee_id": leave["employee_id"]}, {"_id": 0})
-    
-    update_fields = {}
-    if "status" in data:
-        update_fields["status"] = data["status"]
-        if data["status"] == "approved":
-            update_fields["approved_by"] = user.user_id
-            # Send in-app notification
-            await create_notification(
-                user.company_id,
-                leave["employee_id"],
-                "Leave Request Approved",
-                f"Your {leave['leave_type']} leave request from {leave['start_date']} to {leave['end_date']} has been approved.",
-                "leave_approved",
-                "leave",
-                leave_id
-            )
-            # Send email notification
-            if employee and employee.get("email"):
-                await send_email_notification(
-                    employee["email"],
-                    "Leave Request Approved - RealtouchHR",
-                    generate_email_template(
-                        "Your Leave Request Has Been Approved! ✓",
-                        f"Great news! Your {leave['leave_type']} leave request has been approved.<br><br>"
-                        f"<strong>Dates:</strong> {leave['start_date']} to {leave['end_date']}<br>"
-                        f"<strong>Days:</strong> {leave.get('days', 'N/A')}",
-                        None, None
-                    )
-                )
-        elif data["status"] == "rejected":
-            # Send in-app notification
-            await create_notification(
-                user.company_id,
-                leave["employee_id"],
-                "Leave Request Rejected",
-                f"Your {leave['leave_type']} leave request from {leave['start_date']} to {leave['end_date']} has been rejected.",
-                "leave_rejected",
-                "leave",
-                leave_id
-            )
-            # Send email notification
-            if employee and employee.get("email"):
-                await send_email_notification(
-                    employee["email"],
-                    "Leave Request Update - RealtouchHR",
-                    generate_email_template(
-                        "Leave Request Not Approved",
-                        f"Unfortunately, your {leave['leave_type']} leave request was not approved.<br><br>"
-                        f"<strong>Dates:</strong> {leave['start_date']} to {leave['end_date']}<br><br>"
-                        f"Please contact your manager if you have any questions.",
-                        None, None
-                    )
-                )
-    
-    await db.leave_requests.update_one({"leave_id": leave_id, "company_id": user.company_id}, {"$set": update_fields})
-    await create_audit_entry(user.company_id, user, "update", "leave", leave_id, update_fields)
-    
-    return {"message": "Leave request updated"}
-
-# ==================== DOCUMENT ROUTES ====================
-
-@api_router.post("/documents", response_model=Document)
-async def create_document(data: DocumentCreate, user: User = Depends(get_current_user)):
-    if not user.company_id:
-        raise HTTPException(status_code=400, detail="No company setup")
-    
-    document_id = f"doc_{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc)
-    
-    doc = {
-        "document_id": document_id,
-        "company_id": user.company_id,
-        "employee_id": data.employee_id,
-        "name": data.name,
-        "doc_type": data.doc_type,
-        "content": data.content,
-        "status": "draft",
-        "created_by": user.user_id,
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat()
-    }
-    await db.documents.insert_one(doc)
-    await create_audit_entry(user.company_id, user, "create", "document", document_id, {"name": data.name})
-    
-    doc["created_at"] = now
-    doc["updated_at"] = now
-    return Document(**doc)
-
-@api_router.get("/documents", response_model=List[Document])
-async def get_documents(user: User = Depends(get_current_user)):
-    if not user.company_id:
-        return []
-    
-    docs = await db.documents.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
-    
-    for doc in docs:
-        if isinstance(doc.get("created_at"), str):
-            doc["created_at"] = datetime.fromisoformat(doc["created_at"])
-        if isinstance(doc.get("updated_at"), str):
-            doc["updated_at"] = datetime.fromisoformat(doc["updated_at"])
-    
-    return [Document(**doc) for doc in docs]
+# ==================== LEAVE + DOCUMENTS ROUTES ====================
+# Moved to routes/leave.py and routes/documents.py during iter-13 refactor.
 
 # ==================== SHIFT/ROTA ROUTES ====================
 
@@ -1935,9 +1777,11 @@ async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = De
             detail=access.get("reason", "Download not allowed"),
             headers={"X-Payment-Required": "true"} if access.get("needs_payment") else {}
         )
-    # Consume the pass (single-use)
+    # Consume the pass (single-use) or quota
     if access.get("pass_id"):
         await download_gate.consume_pass(access["pass_id"])
+    elif access.get("plan_quota_consume"):
+        await download_gate.consume_quota(user.company_id, access["month_key"])
     
     # Get company
     company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
@@ -2787,6 +2631,8 @@ async def download_self_service_payslip(payrun_id: str, user: User = Depends(get
         )
     if access.get("pass_id"):
         await download_gate.consume_pass(access["pass_id"])
+    elif access.get("plan_quota_consume"):
+        await download_gate.consume_quota(pay_run.get("company_id"), access["month_key"])
     
     # Generate PDF
     pdf_bytes = generate_payslip_pdf(payslip, company or {}, pay_run)
@@ -2946,6 +2792,11 @@ try:
     from routes.demo import router as demo_router
     from routes.team import router as team_router
     from routes.trial import router as trial_router
+    from routes.leave import router as leave_router
+    from routes.documents import router as documents_router
+    from routes.performance import router as performance_router
+    from routes.employee_relations import router as er_router
+    from routes.super_admin import router as super_admin_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2964,6 +2815,11 @@ try:
     api_router.include_router(demo_router)
     api_router.include_router(team_router)
     api_router.include_router(trial_router)
+    api_router.include_router(leave_router)
+    api_router.include_router(documents_router)
+    api_router.include_router(performance_router)
+    api_router.include_router(er_router)
+    api_router.include_router(super_admin_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

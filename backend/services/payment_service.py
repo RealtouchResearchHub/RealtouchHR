@@ -99,7 +99,21 @@ ADDONS = {
         "name": "Data Migration Service",
         "price": 299.00,
         "currency": "gbp"
+    },
+    "bulk_downloads_monthly": {
+        "name": "Unlimited Downloads (30 days)",
+        "price": 29.00,
+        "currency": "gbp",
+        "type": "bulk_downloads",
+        "duration_days": 30
     }
+}
+
+# Plan-based monthly free download quota (payslip + tax-doc PDFs)
+PLAN_DOWNLOAD_QUOTA = {
+    "starter": 5,
+    "professional": 50,
+    "enterprise": -1,  # unlimited
 }
 
 
@@ -384,8 +398,22 @@ class PaymentService:
         new_status = "completed" if status_response.payment_status == "paid" else status_response.status
         new_payment_status = status_response.payment_status
         
-        # Capture Stripe customer id for future billing-portal access
+        # Capture Stripe customer id + receipt URL via direct stripe SDK
         customer_id = getattr(status_response, "customer_id", None) or getattr(status_response, "customer", None)
+        receipt_url = None
+        payment_intent_id = None
+        try:
+            import stripe
+            stripe.api_key = self.stripe_api_key
+            session = stripe.checkout.Session.retrieve(session_id, expand=["payment_intent.latest_charge"])
+            customer_id = customer_id or session.get("customer")
+            payment_intent_id = (session.get("payment_intent") or {}).get("id") if isinstance(session.get("payment_intent"), dict) else session.get("payment_intent")
+            charge = ((session.get("payment_intent") or {}).get("latest_charge")) if isinstance(session.get("payment_intent"), dict) else None
+            if charge and isinstance(charge, dict):
+                receipt_url = charge.get("receipt_url")
+        except Exception as exc:
+            logger.warning(f"Could not fetch Stripe receipt: {exc}")
+
         update_fields = {
             "status": new_status,
             "payment_status": new_payment_status,
@@ -394,6 +422,10 @@ class PaymentService:
         }
         if customer_id:
             update_fields["stripe_customer_id"] = customer_id
+        if receipt_url:
+            update_fields["receipt_url"] = receipt_url
+        if payment_intent_id:
+            update_fields["payment_intent_id"] = payment_intent_id
         
         await db.payment_transactions.update_one(
             {"session_id": session_id},
@@ -494,6 +526,28 @@ class PaymentService:
                 await db.companies.update_one(
                     {"company_id": company_id},
                     {"$inc": {"employee_limit": 10 * quantity}}
+                )
+            elif addon_id == "bulk_downloads_monthly":
+                # Activate 30-day unlimited downloads
+                duration_days = ADDONS["bulk_downloads_monthly"].get("duration_days", 30)
+                # Stack: extend existing window if active, else start fresh
+                existing = await db.companies.find_one(
+                    {"company_id": company_id},
+                    {"_id": 0, "bulk_downloads_active_until": 1}
+                ) or {}
+                start_from = now
+                existing_until = existing.get("bulk_downloads_active_until")
+                if existing_until:
+                    try:
+                        existing_dt = datetime.fromisoformat(existing_until.replace("Z", "+00:00"))
+                        if existing_dt > now:
+                            start_from = existing_dt
+                    except (ValueError, TypeError):
+                        pass
+                new_until = start_from + timedelta(days=duration_days)
+                await db.companies.update_one(
+                    {"company_id": company_id},
+                    {"$set": {"bulk_downloads_active_until": new_until.isoformat()}}
                 )
             
             # Create audit log

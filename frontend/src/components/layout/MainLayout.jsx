@@ -36,7 +36,9 @@ import {
     Receipt,
     HeartPulse,
     CalendarCheck,
-    Sparkles
+    Sparkles,
+    Target,
+    Scale
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -61,7 +63,10 @@ const navigation = [
     { name: 'Audit Log', href: '/audit', icon: Building2 },
     { name: 'Self-Service', href: '/self-service', icon: UserCircle },
     { name: 'Enterprise', href: '/enterprise', icon: Briefcase },
+    { name: 'Performance', href: '/performance', icon: Target },
+    { name: 'Cases', href: '/cases', icon: Scale, hrOnly: true },
     { name: 'Admin', href: '/admin', icon: Shield, adminOnly: true },
+    { name: 'Super Admin', href: '/super-admin', icon: Shield, platformAdminOnly: true },
     { name: 'Billing', href: '/billing', icon: Receipt, ownerOnly: true },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -154,6 +159,8 @@ export default function MainLayout({ children }) {
                             .filter((item) => {
                                 if (item.ownerOnly && user?.role !== 'owner') return false;
                                 if (item.adminOnly && user?.role !== 'owner' && user?.role !== 'admin') return false;
+                                if (item.hrOnly && !['owner', 'admin', 'hr_manager'].includes(user?.role)) return false;
+                                if (item.platformAdminOnly && !user?.is_platform_admin) return false;
                                 return true;
                             })
                             .map((item) => {

@@ -103,15 +103,26 @@ class DownloadGateService:
     async def check_access(company_id: str, user_id: str, resource_id: str) -> Dict[str, Any]:
         """
         Check if user can download a resource right now.
-        Returns {allowed: bool, reason: str, needs_payment: bool}
+        Returns {allowed, reason, needs_payment, ...}
+
+        Order of checks:
+          1. Sandbox bypass
+          2. Trial → block (no downloads)
+          3. Existing single-use pass → consume + allow
+          4. Active bulk-downloads window → allow (no consumption)
+          5. Plan-based monthly free quota → allow + record usage
+          6. Otherwise → 402 paywall
         """
-        # Sandbox / demo companies bypass the £5 paywall (intentional for sales tour)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        # 1) Sandbox / demo bypass
         company = await db.companies.find_one({"company_id": company_id}, {"_id": 0}) or {}
         if company.get("is_sandbox") or company.get("demo_mode"):
             return {"allowed": True, "reason": "Sandbox demo bypass", "needs_payment": False}
 
+        # 2) Trial blocks downloads
         status = await TrialService.get_trial_status(company_id)
-
         if status["trial_active"]:
             return {
                 "allowed": False,
@@ -120,26 +131,74 @@ class DownloadGateService:
                 "trial_active": True,
             }
 
-        # Check for an unused, unexpired download pass for this resource+user
-        now = datetime.now(timezone.utc).isoformat()
+        # 3) Existing single-use pass
         pass_doc = await db.download_passes.find_one({
             "company_id": company_id,
             "user_id": user_id,
             "resource_id": resource_id,
             "used": False,
-            "expires_at": {"$gt": now},
+            "expires_at": {"$gt": now.isoformat()},
         }, {"_id": 0})
         if pass_doc:
             return {"allowed": True, "reason": "Valid pass", "needs_payment": False, "pass_id": pass_doc["pass_id"]}
 
-        # No pass → payment required (only if subscription_active gets free downloads — NO, per spec every payslip is £5)
+        # 4) Bulk downloads package active?
+        bulk_until = company.get("bulk_downloads_active_until")
+        if bulk_until:
+            try:
+                bulk_dt = datetime.fromisoformat(bulk_until.replace("Z", "+00:00"))
+                if bulk_dt > now:
+                    return {
+                        "allowed": True,
+                        "reason": "Bulk downloads package active",
+                        "needs_payment": False,
+                        "bulk_active": True,
+                        "bulk_until": bulk_until,
+                    }
+            except (ValueError, TypeError):
+                pass
+
+        # 5) Plan-based monthly free quota
+        from services.payment_service import PLAN_DOWNLOAD_QUOTA
+        plan_id = status.get("plan_id")
+        quota = PLAN_DOWNLOAD_QUOTA.get(plan_id, 0)
+        if quota != 0 and status.get("subscription_active"):
+            month_key = now.strftime("%Y-%m")
+            usage = await db.download_usage.find_one(
+                {"company_id": company_id, "month": month_key}, {"_id": 0}
+            ) or {"count": 0}
+            used_count = usage.get("count", 0)
+            if quota == -1 or used_count < quota:
+                return {
+                    "allowed": True,
+                    "reason": "Within plan quota",
+                    "needs_payment": False,
+                    "quota_used": used_count,
+                    "quota_limit": quota,
+                    "plan_quota_consume": True,
+                    "month_key": month_key,
+                }
+            # Quota exhausted → fall through to paywall
+
+        # 6) Paywall
         return {
             "allowed": False,
-            "reason": f"Payment required — £{PAYSLIP_DOWNLOAD_PRICE:.2f} per payslip download",
+            "reason": f"Payment required — £{PAYSLIP_DOWNLOAD_PRICE:.2f} per download. Upgrade to Professional for 50/month free, or buy unlimited £29/month.",
             "needs_payment": True,
             "price": PAYSLIP_DOWNLOAD_PRICE,
             "currency": PAYSLIP_DOWNLOAD_CURRENCY,
+            "bulk_offer_price": 29.00,
+            "bulk_offer_id": "bulk_downloads_monthly",
         }
+
+    @staticmethod
+    async def consume_quota(company_id: str, month_key: str) -> None:
+        """Increment monthly download counter (idempotent — uses upsert + $inc)."""
+        await db.download_usage.update_one(
+            {"company_id": company_id, "month": month_key},
+            {"$inc": {"count": 1}, "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
 
     @staticmethod
     async def consume_pass(pass_id: str) -> bool:

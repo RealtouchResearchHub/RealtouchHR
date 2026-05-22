@@ -58,9 +58,37 @@ export async function downloadPayslipWithPaywall({
         }
         if (status === 402) {
             // Paywall — create checkout
+            // First try the new bulk upsell modal if onPaywall returns 'bulk'
             if (onPaywall) {
-                const proceed = await onPaywall(detail);
-                if (!proceed) return { status: 'cancelled' };
+                const choice = await onPaywall(detail);
+                if (choice === false || choice === 'cancel') return { status: 'cancelled' };
+                if (choice === 'bulk') {
+                    // Buy 30-day unlimited downloads instead
+                    try {
+                        const co = await axios.post(
+                            `${API_URL}/api/payments/checkout/addon`,
+                            {
+                                addon_id: 'bulk_downloads_monthly',
+                                origin_url: originUrl,
+                                quantity: 1,
+                            },
+                            { headers, withCredentials: true }
+                        );
+                        if (co.data?.checkout_url) {
+                            sessionStorage.setItem('pending_payslip_download', JSON.stringify({
+                                payrunId, employeeId, filename,
+                                session_id: co.data.session_id,
+                                isBulk: true,
+                            }));
+                            window.location.href = co.data.checkout_url;
+                            return { status: 'redirecting' };
+                        }
+                    } catch (coErr) {
+                        toast.error(coErr.response?.data?.detail || 'Could not start bulk checkout');
+                        return { status: 'error' };
+                    }
+                }
+                // choice === 'single' or true → default single £5 flow
             }
             try {
                 const co = await axios.post(
@@ -71,7 +99,6 @@ export async function downloadPayslipWithPaywall({
                     },
                     { headers, withCredentials: true }
                 );
-                // Persist a "pending download" so we can auto-resume after return
                 sessionStorage.setItem('pending_payslip_download', JSON.stringify({
                     payrunId, employeeId, filename,
                     session_id: co.data.session_id,

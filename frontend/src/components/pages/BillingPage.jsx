@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import {
     CreditCard, CheckCircle2, Sparkles, Zap, Building2,
-    Loader2, AlertCircle, Receipt, Plus, Crown
+    Loader2, AlertCircle, Receipt, Plus, Crown, Download, Infinity as InfinityIcon
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -35,6 +35,7 @@ export default function BillingPage() {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const [billing, setBilling] = useState(null);
+    const [usage, setUsage] = useState(null);
     const [loading, setLoading] = useState(true);
     const [checkoutLoading, setCheckoutLoading] = useState(null);
     const [pollStatus, setPollStatus] = useState(null);
@@ -47,10 +48,30 @@ export default function BillingPage() {
                 withCredentials: true,
             });
             setBilling(res.data);
+            const usageRes = await axios.get(`${API_URL}/api/payments/usage/this-month`, {
+                headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
+            }).catch(() => ({ data: null }));
+            setUsage(usageRes.data);
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Failed to load billing info');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchReceipt = async (transactionId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/api/payments/transactions/${transactionId}/receipt`, {
+                headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
+            });
+            if (res.data?.receipt_url) {
+                window.open(res.data.receipt_url, '_blank', 'noopener');
+            } else {
+                toast.info('Receipt not yet available');
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Receipt unavailable');
         }
     };
 
@@ -250,6 +271,51 @@ export default function BillingPage() {
                 </CardContent>
             </Card>
 
+            {/* Download usage / bulk pass status */}
+            {usage && (
+                <Card data-testid="download-usage-card">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Download className="w-4 h-4 text-indigo-600" />
+                                Download usage — {usage.month}
+                            </CardTitle>
+                            {usage.bulk_downloads_active && (
+                                <Badge className="bg-indigo-600 text-white">
+                                    <InfinityIcon className="w-3 h-3 mr-1" /> Unlimited until {(usage.bulk_downloads_until || '').slice(0, 10)}
+                                </Badge>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
+                                <p className="text-xs text-muted-foreground">Plan quota</p>
+                                <p className="font-bold text-lg">
+                                    {usage.quota === -1 ? '∞' : usage.quota || 0} / month
+                                </p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
+                                <p className="text-xs text-muted-foreground">Used this month</p>
+                                <p className="font-bold text-lg">{usage.used_this_month}</p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
+                                <p className="text-xs text-muted-foreground">Remaining free</p>
+                                <p className="font-bold text-lg">
+                                    {usage.remaining === -1 ? '∞' : usage.remaining}
+                                </p>
+                            </div>
+                        </div>
+                        {!usage.bulk_downloads_active && usage.quota !== -1 && (
+                            <p className="text-xs text-muted-foreground mt-3">
+                                After your free quota, each payslip download costs £{usage.price_per_download} —
+                                or buy <strong>unlimited 30 days for £{usage.bulk_offer_price}</strong>.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Plans */}
             <div>
                 <h2 className="text-2xl font-bold mb-2">Choose a plan</h2>
@@ -375,6 +441,7 @@ export default function BillingPage() {
                                         <th className="text-left p-3">Description</th>
                                         <th className="text-right p-3">Amount</th>
                                         <th className="text-center p-3">Status</th>
+                                        <th className="text-right p-3"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -405,6 +472,17 @@ export default function BillingPage() {
                                                 >
                                                     {(tx.payment_status || tx.status || '').toUpperCase()}
                                                 </Badge>
+                                            </td>
+                                            <td className="p-3 text-right">
+                                                {tx.payment_status === 'paid' && (
+                                                    <button
+                                                        className="text-xs text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 underline"
+                                                        onClick={() => fetchReceipt(tx.transaction_id)}
+                                                        data-testid={`receipt-${tx.transaction_id}`}
+                                                    >
+                                                        <Download className="w-3 h-3" /> Receipt
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

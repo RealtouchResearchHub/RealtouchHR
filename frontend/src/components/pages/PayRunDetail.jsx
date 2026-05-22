@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate, getStatusColor, getComplianceColor } from '../../lib/utils';
 import { toast } from 'sonner';
+import PaywallModal from '../shared/PaywallModal';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -41,6 +42,17 @@ export default function PayRunDetail() {
     const [payslips, setPayslips] = useState([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [paywallOpen, setPaywallOpen] = useState(false);
+    const [paywallMessage, setPaywallMessage] = useState('');
+    const [paywallResolver, setPaywallResolver] = useState(null);
+
+    const handlePaywallChoice = (choice) => {
+        setPaywallOpen(false);
+        if (paywallResolver) {
+            paywallResolver(choice);
+            setPaywallResolver(null);
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -102,11 +114,11 @@ export default function PayRunDetail() {
             payrunId: id,
             employeeId,
             filename: `payslip_${employeeId}.pdf`,
-            onPaywall: async (message) => {
-                return window.confirm(
-                    `${message}\n\nProceed to Stripe to pay £5.00 for this payslip download?`
-                );
-            },
+            onPaywall: (message) => new Promise((resolve) => {
+                setPaywallMessage(message);
+                setPaywallResolver(() => resolve);
+                setPaywallOpen(true);
+            }),
         });
     };
 
@@ -391,6 +403,12 @@ export default function PayRunDetail() {
                     )}
                 </CardContent>
             </Card>
+
+            <PaywallModal
+                open={paywallOpen}
+                message={paywallMessage}
+                onChoice={handlePaywallChoice}
+            />
         </div>
     );
 }
