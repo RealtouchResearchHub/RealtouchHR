@@ -46,6 +46,76 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 22, 2026 — Iteration 13) — Launch-Ready Multi-Tenant SaaS
+
+### Stripe Receipt Downloads ✅
+- `_process_successful_payment` now captures `stripe_customer_id`, `payment_intent_id`, and `receipt_url` from Stripe directly via SDK
+- `GET /api/payments/transactions/{transaction_id}/receipt` returns the Stripe-hosted receipt URL (or lazily fetches it)
+- BillingPage transaction history has per-row "Receipt" download link
+
+### Plan-Based Monthly Download Quota ✅
+- `PLAN_DOWNLOAD_QUOTA = {starter:5, professional:50, enterprise:-1}` (server-immutable)
+- DownloadGateService order: sandbox → trial → single-use pass → bulk-pass window → plan quota → £5 paywall
+- `GET /api/payments/usage/this-month` returns current quota state
+- BillingPage shows "Download usage — YYYY-MM" card with used/remaining/bulk-pass indicator
+
+### Bulk Download Pass (£29 / 30 days) ✅
+- New addon `bulk_downloads_monthly` — unlimited downloads for 30 days
+- Stacks if already active (extends end date)
+- PaywallModal upsell — when single £5 paywall hits, user sees "Or £29 unlimited 30 days" with "Best value" badge
+- payslipDownload.js routes to either single or bulk Stripe checkout based on user's choice
+
+### P45/P60/P11D Paywall ✅
+- `_gate_or_402` helper applied to all three tax-document endpoints
+- Identical gating: trial blocks, quota consumed, bulk pass honoured, single-use passes recognised
+- Resource IDs use `p45:{emp}` / `p60:{emp}:{year}` / `p11d:{emp}:{year}` naming
+
+### server.py Refactor ✅
+- `/api/leave` POST/GET/PUT moved to `routes/leave.py`
+- `/api/documents` POST/GET moved to `routes/documents.py`
+- Shared helpers (`create_audit_entry`, `create_notification`) extracted into `services/audit_service.py`
+- 100% backward-compatible — endpoints work identically
+
+### Performance Management ✅
+- `routes/performance.py` — Appraisals (cycle + period + 4-tier rating), SMART Objectives (with weight + progress slider), Review Notes (with `private` flag visible to HR/manager only)
+- Frontend `/performance` page with 3 tabs (Objectives / Appraisals / Notes)
+
+### Employee Relations (Disciplinary + Grievance) ✅
+- `routes/employee_relations.py` — Cases module with case_types (disciplinary, grievance, performance_improvement, investigation), statuses (open → investigating → hearing → decision → closed → appealed), ACAS severity stages (informal → verbal → written_first → written_final → summary_dismissal)
+- Auto-generated `case_number` (ER-YYYYMMDD-XXXX)
+- Timeline events on each case
+- HR/Admin/Owner only access
+- Frontend `/cases` page with table + create dialog + view dialog + close-with-outcome
+
+### Secured Document Storage ✅
+- `POST /api/cases/secure-docs` — base64 upload with SHA-256 integrity check, 10MB cap
+- `GET /api/cases/secure-docs/{id}/download` — logs access in audit_log + appends to per-document `access_log`
+- Categories: contract, policy, nda, personnel_file, case_evidence, other
+- Currently stored in MongoDB (production path: object storage — documented in LAUNCH_READINESS.md)
+
+### Super Admin Portal ✅
+- `routes/super_admin.py` — platform owner control plane
+- Gating: `is_platform_admin=true` on user OR email in `PLATFORM_ADMINS` env
+- Endpoints: `/metrics` (8 metrics including MRR), `/companies` (list + filter + search), `/companies/{id}` (detail with users + recent txs), `/companies/{id}/suspend|restore`, `/feature-flags` (global + company-scoped), `/impersonate` (30-min JWT with `is_impersonation=true` + full audit trail), `/audit-log`, `/emergency/kill-switch`
+- Frontend `/super-admin` page with 8-metric grid + searchable company table + audit log tab + impersonate/suspend/restore actions + emergency kill switch button
+
+### Role-based Sidebar Gating ✅
+- Performance — visible to everyone
+- Cases — HR/admin/owner only (`hrOnly: true`)
+- Admin — admin/owner (`adminOnly: true`)
+- Super Admin — platform admin only (`platformAdminOnly: true`)
+- Billing — owner only (`ownerOnly: true`)
+
+### Launch Readiness Audit ✅
+- `/app/memory/LAUNCH_READINESS.md` — 🟢 PASS / 🟡 PARTIAL / 🔴 BLOCKER columns
+- Maps every module against UK regulation (HMRC RTI 2025-26, Pensions Act 2008, UKVI, ACAS, GDPR, Equality Act, ERA 1996)
+- Final verdict: **GO with 3 pre-launch blockers** (live Stripe key, live Resend key, live APP_URL + PLATFORM_ADMINS configured)
+
+### Fix from testing agent ✅
+- Secure-docs upload returned 500 due to ObjectId leak — fixed (`doc.pop('_id', None)` + sanitised response)
+
+---
+
 ## NEW (May 8, 2026 — Iteration 12)
 
 ### 7-Day Free Trial ✅
