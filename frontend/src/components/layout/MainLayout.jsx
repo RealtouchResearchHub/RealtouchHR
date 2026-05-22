@@ -38,7 +38,9 @@ import {
     CalendarCheck,
     Sparkles,
     Target,
-    Scale
+    Scale,
+    Lock,
+    FileLock2
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -65,6 +67,8 @@ const navigation = [
     { name: 'Enterprise', href: '/enterprise', icon: Briefcase },
     { name: 'Performance', href: '/performance', icon: Target },
     { name: 'Cases', href: '/cases', icon: Scale, hrOnly: true },
+    { name: 'GDPR Centre', href: '/gdpr', icon: FileLock2 },
+    { name: 'Security', href: '/security', icon: Lock },
     { name: 'Admin', href: '/admin', icon: Shield, adminOnly: true },
     { name: 'Super Admin', href: '/super-admin', icon: Shield, platformAdminOnly: true },
     { name: 'Billing', href: '/billing', icon: Receipt, ownerOnly: true },

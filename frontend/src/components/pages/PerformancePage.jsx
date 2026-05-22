@@ -14,7 +14,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../ui/dialog';
 import { toast } from 'sonner';
-import { Target, ClipboardCheck, MessageSquare, Plus, Loader2 } from 'lucide-react';
+import { Target, ClipboardCheck, MessageSquare, Plus, Loader2, Scale } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
@@ -38,6 +38,18 @@ export default function PerformancePage() {
     const [objForm, setObjForm] = useState({ employee_id: '', title: '', description: '', target_date: '', weight: 100 });
     const [apprForm, setApprForm] = useState({ employee_id: '', cycle: '2025-Annual', period_start: '', period_end: '', overall_rating: '', manager_assessment: '' });
     const [noteForm, setNoteForm] = useState({ employee_id: '', note_type: 'one_on_one', title: '', content: '', private: false });
+    const [biasScan, setBiasScan] = useState(null);
+    const [scanLoading, setScanLoading] = useState(false);
+
+    const runBiasScan = async () => {
+        setScanLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/api/fairness/appraisals/bias-scan`, auth());
+            setBiasScan(res.data);
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Bias scan failed');
+        } finally { setScanLoading(false); }
+    };
 
     const load = async () => {
         try {
@@ -123,6 +135,7 @@ export default function PerformancePage() {
                     <TabsTrigger value="objectives" data-testid="tab-objectives"><Target className="w-4 h-4 mr-2" /> Objectives ({objectives.length})</TabsTrigger>
                     <TabsTrigger value="appraisals" data-testid="tab-appraisals"><ClipboardCheck className="w-4 h-4 mr-2" /> Appraisals ({appraisals.length})</TabsTrigger>
                     <TabsTrigger value="notes" data-testid="tab-notes"><MessageSquare className="w-4 h-4 mr-2" /> Notes ({notes.length})</TabsTrigger>
+                    <TabsTrigger value="fairness" data-testid="tab-fairness"><Scale className="w-4 h-4 mr-2" /> Fairness</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="objectives">
@@ -235,6 +248,73 @@ export default function PerformancePage() {
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="fairness">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Equality Act 2010 — Bias Scan</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-1">Detects rating distribution bias across protected characteristics using the 80% rule.</p>
+                            </div>
+                            <Button onClick={runBiasScan} disabled={scanLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="run-bias-scan-btn">
+                                {scanLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Scale className="w-4 h-4 mr-2" />}
+                                Run scan
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {!biasScan ? (
+                                <p className="text-center py-6 text-muted-foreground">Click "Run scan" to analyse current appraisal data for potential bias.</p>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span>Total appraisals scanned: <strong>{biasScan.total_appraisals}</strong></span>
+                                        <span className="text-muted-foreground">·</span>
+                                        <span className="text-muted-foreground">{biasScan.method}</span>
+                                    </div>
+                                    <div>
+                                        <p className="font-medium mb-2">Alerts</p>
+                                        <div className="space-y-1" data-testid="bias-alerts">
+                                            {biasScan.alerts.map((a, i) => (
+                                                <div key={i} className={`p-2 rounded text-sm ${a.level === 'info' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200'}`}>
+                                                    <span className="font-medium">[{a.category}]</span> {a.issue}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {Object.keys(biasScan.groups || {}).map((cat) => (
+                                        <div key={cat}>
+                                            <p className="font-medium capitalize mt-2 mb-1">{cat}</p>
+                                            <div className="overflow-x-auto border rounded">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-muted">
+                                                        <tr>
+                                                            <th className="text-left p-2">Group</th>
+                                                            <th className="text-right p-2">Total</th>
+                                                            <th className="text-right p-2">Favourable</th>
+                                                            <th className="text-right p-2">Rate</th>
+                                                            <th className="text-right p-2">Avg weight</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {Object.entries(biasScan.groups[cat]).map(([g, b]) => (
+                                                            <tr key={g} className="border-t">
+                                                                <td className="p-2">{g}</td>
+                                                                <td className="p-2 text-right">{b.total}</td>
+                                                                <td className="p-2 text-right">{b.favourable}</td>
+                                                                <td className="p-2 text-right">{(b.favourable_rate * 100).toFixed(0)}%</td>
+                                                                <td className="p-2 text-right">{b.average_weight ?? '—'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </>
                             )}
                         </CardContent>
                     </Card>

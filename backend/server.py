@@ -70,6 +70,36 @@ SUPPORTED_CURRENCIES = {
 # Create the main app
 app = FastAPI(title="RealtouchHR API", version="2.0.0")
 
+# Rate limiting (slowapi) — applies to public endpoints (login, register, demo sandbox)
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from starlette.responses import JSONResponse as _StarletteJSONResponse
+
+def _client_ip(request: Request) -> str:
+    """Resolve the originating client IP behind the K8s ingress."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # first IP in the list is the original client
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=_client_ip, default_limits=[])
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def _ratelimit_handler(request: Request, exc: RateLimitExceeded):
+    return _StarletteJSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later.", "retry_after": str(getattr(exc, 'detail', ''))}
+    )
+
+app.add_middleware(SlowAPIMiddleware)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -519,7 +549,8 @@ async def create_audit_entry(company_id: str, user: User, action: str, entity_ty
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserCreate, response: Response):
+@limiter.limit("10/hour")
+async def register(request: Request, data: UserCreate, response: Response):
     # Check if user exists
     existing = await db.users.find_one({"email": data.email}, {"_id": 0})
     if existing:
@@ -585,8 +616,9 @@ async def register(data: UserCreate, response: Response):
     user_doc["created_at"] = now
     return TokenResponse(token=token, user=User(**user_doc))
 
-@api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: UserLogin, response: Response):
+@api_router.post("/auth/login")
+@limiter.limit("20/minute")
+async def login(request: Request, data: UserLogin, response: Response):
     user_doc = await db.users.find_one({"email": data.email}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -596,6 +628,21 @@ async def login(data: UserLogin, response: Response):
     
     user_id = user_doc["user_id"]
     now = datetime.now(timezone.utc)
+
+    # 2FA gate — if enabled, return a short-lived "pending" token. Frontend must call /2fa/login/verify.
+    twofa = await db.user_2fa.find_one({"user_id": user_id}, {"_id": 0, "totp_secret": 0, "backup_codes_hashed": 0})
+    if twofa and twofa.get("enabled"):
+        pending_payload = {
+            "user_id": user_id,
+            "stage": "2fa_pending",
+            "exp": now + timedelta(minutes=5),
+        }
+        pending_token = jwt.encode(pending_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        return {
+            "two_factor_required": True,
+            "pending_token": pending_token,
+            "message": "Enter your 2FA code to complete sign-in",
+        }
     
     token = create_jwt_token(user_id, data.email)
     session_doc = {
@@ -2797,6 +2844,9 @@ try:
     from routes.performance import router as performance_router
     from routes.employee_relations import router as er_router
     from routes.super_admin import router as super_admin_router
+    from routes.gdpr import router as gdpr_router
+    from routes.two_factor import router as twofa_router
+    from routes.fairness import router as fairness_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2820,6 +2870,9 @@ try:
     api_router.include_router(performance_router)
     api_router.include_router(er_router)
     api_router.include_router(super_admin_router)
+    api_router.include_router(gdpr_router)
+    api_router.include_router(twofa_router)
+    api_router.include_router(fairness_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

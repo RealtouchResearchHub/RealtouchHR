@@ -39,6 +39,21 @@ export function AuthProvider({ children }) {
             { email, password },
             { withCredentials: true }
         );
+        // 2FA required — caller will navigate to verification screen
+        if (response.data?.two_factor_required) {
+            return { two_factor_required: true, pending_token: response.data.pending_token };
+        }
+        setUser(response.data.user);
+        localStorage.setItem('token', response.data.token);
+        await fetchUser();
+        return response.data;
+    };
+
+    const verifyTwoFactor = async (pending_token, code) => {
+        const response = await axios.post(`${API_URL}/api/2fa/login/verify`,
+            { pending_token, code },
+            { withCredentials: true }
+        );
         setUser(response.data.user);
         localStorage.setItem('token', response.data.token);
         await fetchUser();
@@ -114,6 +129,7 @@ export function AuthProvider({ children }) {
         company,
         loading,
         login,
+        verifyTwoFactor,
         register,
         loginWithGoogle,
         processGoogleSession,

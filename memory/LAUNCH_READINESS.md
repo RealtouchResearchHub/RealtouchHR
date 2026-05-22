@@ -38,14 +38,15 @@
 | Area | Gap | Priority |
 |---|---|---|
 | **Object storage** | Secure documents stored as base64 in MongoDB. Production should move to S3/GCS object storage for files > 1MB. | P1 |
-| **GDPR data export** | No "Download all my data" self-service endpoint yet. HR has manual access via secure docs API. | P1 |
-| **Right to be forgotten** | Manual deletion via super-admin only; no employee-initiated workflow. | P1 |
-| **2FA** | Not implemented. JWT-only. Recommended for owner/admin roles. | P1 |
-| **API rate limiting** | No rate limits on public endpoints (register, sandbox, login). Could be exploited. | P1 |
+| **GDPR data export** | ✅ **DONE (iter-14)** — self-service `/api/gdpr/my-data` JSON export + download endpoint. | DONE |
+| **Right to be forgotten** | ✅ **DONE (iter-14)** — employee-initiated `/api/gdpr/erasure` workflow + HR approval flow (anonymise or delete) with HMRC-retention guardrails. | DONE |
+| **2FA** | ✅ **DONE (iter-14)** — TOTP (pyotp) + QR code + 10 backup codes; login `/api/auth/login` returns `pending_token` then `/api/2fa/login/verify` issues real JWT. | DONE |
+| **API rate limiting** | ✅ **DONE (iter-14)** — slowapi: register 10/h, login 20/min. Returns 429 with retry message. | DONE |
 | **Stripe live mode** | Currently using pod test key `sk_test_emergent`. Swap to `sk_live_...` before launch. | P0 (pre-launch) |
 | **Resend live mode** | RESEND_API_KEY empty → mock log mode. Add real key before launch. | P0 (pre-launch) |
 | **APP_URL env** | Points to default localhost in some emails. Set to production domain before launch. | P0 (pre-launch) |
 | **HMRC live credentials** | Sandbox creds in `.env`. Replace with the company's actual HMRC Government Gateway creds before submitting real FPS. | P0 (pre-launch per company) |
+| **Equality Act fairness** | ✅ **DONE (iter-14)** — `/api/fairness/appraisals/bias-scan` applies 80% rule across protected groups. | DONE |
 
 ---
 

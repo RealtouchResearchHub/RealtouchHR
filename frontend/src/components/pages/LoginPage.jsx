@@ -6,24 +6,45 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Separator } from '../ui/separator';
-import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Building2, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const { login, loginWithGoogle } = useAuth();
+    const { login, verifyTwoFactor, loginWithGoogle } = useAuth();
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [loading, setLoading] = useState(false);
+    const [twoFactorState, setTwoFactorState] = useState(null); // { pending_token }
+    const [twoFactorCode, setTwoFactorCode] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await login(formData.email, formData.password);
+            const result = await login(formData.email, formData.password);
+            if (result?.two_factor_required) {
+                setTwoFactorState({ pending_token: result.pending_token });
+                toast.info('Two-factor authentication required');
+            } else {
+                toast.success('Welcome back!');
+                navigate('/dashboard');
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Login failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyTwoFactor = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await verifyTwoFactor(twoFactorState.pending_token, twoFactorCode.trim());
             toast.success('Welcome back!');
             navigate('/dashboard');
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Login failed');
+            toast.error(error.response?.data?.detail || 'Invalid code');
         } finally {
             setLoading(false);
         }
@@ -88,6 +109,37 @@ export default function LoginPage() {
                         <CardDescription>Sign in to your account to continue</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
+                        {twoFactorState ? (
+                            <form onSubmit={handleVerifyTwoFactor} className="space-y-4" data-testid="2fa-verify-form">
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900">
+                                    <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                                    <p className="text-sm text-indigo-900 dark:text-indigo-100">Enter the 6-digit code from your authenticator app, or a backup code.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="2fa-code">Authentication code</Label>
+                                    <Input
+                                        id="2fa-code"
+                                        type="text"
+                                        autoComplete="one-time-code"
+                                        inputMode="numeric"
+                                        value={twoFactorCode}
+                                        onChange={(e) => setTwoFactorCode(e.target.value)}
+                                        placeholder="000000"
+                                        required
+                                        autoFocus
+                                        data-testid="input-2fa-code"
+                                    />
+                                </div>
+                                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading} data-testid="2fa-verify-submit-btn">
+                                    {loading ? 'Verifying...' : 'Verify & Sign in'}
+                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                </Button>
+                                <Button type="button" variant="ghost" className="w-full" onClick={() => { setTwoFactorState(null); setTwoFactorCode(''); }} data-testid="2fa-cancel-btn">
+                                    Cancel
+                                </Button>
+                            </form>
+                        ) : (
+                        <>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
@@ -154,6 +206,8 @@ export default function LoginPage() {
                                 Sign up
                             </Link>
                         </p>
+                        </>
+                        )}
                     </CardContent>
                 </Card>
             </div>

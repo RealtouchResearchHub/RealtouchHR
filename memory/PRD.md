@@ -46,7 +46,53 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
-## NEW (May 22, 2026 — Iteration 13) — Launch-Ready Multi-Tenant SaaS
+## NEW (May 22, 2026 — Iteration 14) — Launch Hardening Sprint (P0 Production)
+
+### GDPR / Data Protection Centre ✅
+- `routes/gdpr.py` + `services/gdpr_service.py`
+- `GET /api/gdpr/my-data` — self-service Article 15 export (JSON bundle of all personal data; password hashes & 2FA secrets excluded)
+- `GET /api/gdpr/my-data/download` — same as attachment with Content-Disposition for browser save
+- `POST /api/gdpr/erasure` — submit Article 17 "right to be forgotten" (duplicate pending blocked, 400)
+- `GET /api/gdpr/erasure?status=pending` — HR/Admin list (non-HR → 403)
+- `POST /api/gdpr/erasure/{id}/process` — actions: `approve_anonymize` (PII → "Erased User" + `ERASED_xxx@erased.local`, sessions/notifications dropped, payroll history preserved per HMRC 6-year retention), `approve_delete` (refuses if payroll records exist), `reject`
+- `GET /api/gdpr/overview` — HR/Admin: counts per data collection + retention policy mapping
+- Frontend `/gdpr` — 3-tab page (My Data / Right to be Forgotten / Company Overview) with preview, JSON download, erasure submit, HR processing dialog
+
+### Two-Factor Authentication (TOTP) ✅
+- `routes/two_factor.py` using `pyotp` + `qrcode`
+- `GET /api/2fa/status` — enabled flag + backup codes remaining + enrolled_at
+- `POST /api/2fa/setup/begin` — issues TOTP secret + `otpauth://` URI + base64 PNG QR
+- `POST /api/2fa/setup/verify` — verifies first 6-digit code, enables 2FA, returns 10 one-time backup codes (SHA-256 hashed in DB)
+- `POST /api/2fa/disable` — accepts either current TOTP code or a backup code
+- `POST /api/2fa/login/verify` — second-step in login when 2FA enabled
+- `POST /api/auth/login` now returns `{two_factor_required: true, pending_token}` (5-min JWT, stage=2fa_pending) instead of JWT when user has 2FA enabled; backward-compatible when 2FA off
+- Backup codes are strictly one-time (verified by test)
+- Frontend `/security` page with QR display, manual secret copy, verify form, backup codes panel, disable form
+- LoginPage shows 2FA verification screen automatically when `two_factor_required=true`
+
+### API Rate Limiting (slowapi) ✅
+- `POST /api/auth/login` — 20/minute per IP → returns 429 after burst
+- `POST /api/auth/register` — 10/hour per IP
+- `key_func=_client_ip` reads `X-Forwarded-For` first (correct behind K8s ingress), falls back to `X-Real-IP` then `request.client.host`
+- Custom 429 handler returns `{detail: "Too many requests..."}`
+- `SlowAPIMiddleware` registered on app
+
+### Equality Act 2010 Fairness Scan ✅
+- `routes/fairness.py` — `GET /api/fairness/appraisals/bias-scan?cycle=...`
+- Applies the 80% rule (EEOC-inspired) on favourable outcomes (exceeds + meets) per protected group: gender, ethnicity, department
+- Returns per-group counts, favourable rate, average rating weight, plus alerts for groups <80% of the top group
+- HR/Admin only access
+- Frontend Performance page now has 4th "Fairness" tab with "Run scan" button + per-category breakdown tables
+
+### Quality Improvements (RCA fixes from testing agent)
+- `routes/gdpr.py` CurrentUser model now declares `is_platform_admin: bool` (was getattr no-op)
+- `routes/fairness.py` removed dead `_age_band` helper
+- `server.py` rate limiter uses `X-Forwarded-For` → reliable per-client keys behind ingress
+- Backend tests in `/app/backend/tests/test_iter14_gdpr_2fa_fairness.py` — **23/23 PASS**, iter-13 regression suite still **21/21 PASS**
+
+---
+
+
 
 ### Stripe Receipt Downloads ✅
 - `_process_successful_payment` now captures `stripe_customer_id`, `payment_intent_id`, and `receipt_url` from Stripe directly via SDK

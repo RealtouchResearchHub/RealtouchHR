@@ -46,6 +46,8 @@ import InviteAcceptPage from './components/pages/InviteAcceptPage';
 import SuperAdminPage from './components/pages/SuperAdminPage';
 import PerformancePage from './components/pages/PerformancePage';
 import EmployeeRelationsPage from './components/pages/EmployeeRelationsPage';
+import GDPRCenterPage from './components/pages/GDPRCenterPage';
+import SecurityPage from './components/pages/SecurityPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -139,6 +141,8 @@ function AppRouter() {
             <Route path="/super-admin" element={<ProtectedRoute><SuperAdminPage /></ProtectedRoute>} />
             <Route path="/performance" element={<ProtectedRoute><PerformancePage /></ProtectedRoute>} />
             <Route path="/cases" element={<ProtectedRoute><EmployeeRelationsPage /></ProtectedRoute>} />
+            <Route path="/gdpr" element={<ProtectedRoute><GDPRCenterPage /></ProtectedRoute>} />
+            <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
             <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
