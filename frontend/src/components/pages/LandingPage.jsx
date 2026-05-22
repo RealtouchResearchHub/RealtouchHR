@@ -91,7 +91,7 @@ export default function LandingPage() {
                     <p className="mt-6 text-lg md:text-xl text-white/70 max-w-2xl leading-relaxed">
                         From RTI submissions to UKVI sponsor licence monitoring, statutory pay calculators
                         and Stripe-powered billing — RealtouchHR replaces a stack of spreadsheets and
-                        consultants for under £49/month.
+                        consultants for under £39/month.
                     </p>
 
                     <div className="mt-10 flex flex-wrap gap-3">
@@ -181,9 +181,9 @@ export default function LandingPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
                     {[
-                        { name: 'Starter', price: 49, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI', 'UKVI checks', 'Email support'] },
-                        { name: 'Professional', price: 149, employees: '50', featured: true, features: ['Everything in Starter', 'Statutory pay automation', 'AI Copilot', 'Priority chat support'] },
-                        { name: 'Enterprise', price: 399, employees: 'Unlimited', features: ['Multi-entity', 'SCIM/SAML SSO', 'Dedicated CSM', 'Sponsor licence health'] },
+                        { name: 'Starter', price: 39, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI', 'UKVI checks', 'Email support'] },
+                        { name: 'Professional', price: 59, employees: '50', featured: true, features: ['Everything in Starter', 'Statutory pay automation', 'AI Copilot', 'Priority chat support'] },
+                        { name: 'Enterprise', price: 149, employees: 'Unlimited', features: ['Multi-entity', 'SCIM/SAML SSO', 'Dedicated CSM', 'Sponsor licence health'] },
                     ].map((p) => (
                         <Card
                             key={p.name}

@@ -2847,6 +2847,7 @@ try:
     from routes.gdpr import router as gdpr_router
     from routes.two_factor import router as twofa_router
     from routes.fairness import router as fairness_router
+    from routes.trust_badge import router as trust_badge_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2873,6 +2874,7 @@ try:
     api_router.include_router(gdpr_router)
     api_router.include_router(twofa_router)
     api_router.include_router(fairness_router)
+    api_router.include_router(trust_badge_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

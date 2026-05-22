@@ -1,0 +1,49 @@
+{
+  "summary": "Iter-15 — Compliance Trust Badge + Pricing change. Backend: 17/17 PASS (pricing £39/£59/£149, owner /me, public /verify JSON, /badge.svg, /page HTML, tier escalation via 2FA, deterministic HMAC badge_id, regression). Frontend: /trust/:badgeId public page, /trust-badge owner page, and landing-page pricing all verified. Iter-14 regression: 23/23 PASS. ONE CRITICAL ISSUE: the badge_svg_url / verify_url returned by /api/trust-badge/me is built from request.base_url and points to an internal preview URL (378af53a-3df1-4ff4-aa44-070ffa404da9.preview.emergentagent.com) that is NOT publicly resolvable — so the embed snippets handed to customers contain broken image URLs.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/trust-badge/me",
+        "issue": "badge_svg_url / verify_url / embed_html / embed_markdown all use internal preview host (request.base_url) instead of the public REACT_APP_BACKEND_URL. The internal host returns 404 from the public internet — so the embed snippet customers paste on their site shows a broken image and the verify link 404s.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TrustBadgePage owner preview",
+        "issue": "The <img> in the 'Your badge' preview shows the broken-image icon because data.badge_svg_url is the internal preview host (same root cause as backend critical above). The public /trust/:badgeId page works because it constructs the SVG URL from REACT_APP_BACKEND_URL directly.",
+        "selector": "[data-testid='trust-badge-preview']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_trust_badge_pricing.py",
+    "/app/test_reports/pytest/iter15_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/trust-badge/me to build app_url from REACT_APP_BACKEND_URL / a public APP_URL env var, OR from request headers x-forwarded-host + x-forwarded-proto. Currently request.base_url resolves to the internal preview host that 404s publicly, breaking the entire embed-on-customer-site value prop.",
+    "Optional: persist badge_id on the company document (one-time) and look up directly instead of brute-force scanning all companies in _lookup_company_by_badge (will not scale beyond a few thousand companies)."
+  ],
+  "critical_code_review_comments": [
+    "trust_badge.py: _lookup_company_by_badge does a full collection scan on every public verify/SVG/page hit — O(N) lookup. Add a `badge_id` indexed field on company at creation time, or cache the map in memory.",
+    "trust_badge.py L156: app_url fallback to request.base_url returns internal hostname behind k8s ingress — never the customer-facing URL. Must read X-Forwarded-Host or hard-set APP_URL.",
+    "trust_badge.py: SUBSCRIPTION_PLANS-derived attestation 'subscription_active' is fine, but new accounts on free trial show as PENDING — consider treating trial users as subscription_active=True for badge purposes or document the policy.",
+    "Pricing updated correctly to £39/£59/£149 server-side; no residue of £49/£399 on landing page."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_trust_badge_pricing.py"
+  ],
+  "success_rate": {"backend": "100% (17/17 + 23/23 regression)", "frontend": "100% (with the noted broken-preview bug above)"},
+  "test_credentials": "Auto-registered TEST_iter15_*@example.com / Test123!; the FE test user with token is at /tmp/iter15_fe_creds.txt",
+  "seed_data_creation": "Module-scoped fresh users registered via /api/auth/register with TEST_ prefix.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests pass cleanly. The only real bug is the URL host used to build badge_svg_url/verify_url/embed snippets in /api/trust-badge/me. After main agent fix, re-run pytest backend/tests/test_iter15_trust_badge_pricing.py and verify the badge_svg_url returned by /me starts with the public REACT_APP_BACKEND_URL (https://ukvi-staging.preview.emergentagent.com), not the 378af53a-... internal preview host.",
+  "rca of the issue": "In /app/backend/routes/trust_badge.py line 156: `app_url = os.environ.get('APP_URL') or str(request.base_url).rstrip('/')`. APP_URL is not set in backend/.env. request.base_url returns the URL FastAPI sees AFTER k8s ingress termination — internally it points to an emergent preview hostname (378af53a-3df1-4ff4-aa44-070ffa404da9.preview.emergentagent.com) which 404s when hit from the public internet. Fix: either (a) add APP_URL=https://ukvi-staging.preview.emergentagent.com to backend/.env, or (b) derive from request.headers['x-forwarded-host'] + 'x-forwarded-proto' (preferred since it auto-adapts to deploy env). Reproduction: register a user, GET /api/trust-badge/me, then curl the returned badge_svg_url from a different machine → 404."
+}

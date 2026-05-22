@@ -40,7 +40,8 @@ import {
     Target,
     Scale,
     Lock,
-    FileLock2
+    FileLock2,
+    Award
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -69,6 +70,7 @@ const navigation = [
     { name: 'Cases', href: '/cases', icon: Scale, hrOnly: true },
     { name: 'GDPR Centre', href: '/gdpr', icon: FileLock2 },
     { name: 'Security', href: '/security', icon: Lock },
+    { name: 'Trust Badge', href: '/trust-badge', icon: Award, ownerOnly: true },
     { name: 'Admin', href: '/admin', icon: Shield, adminOnly: true },
     { name: 'Super Admin', href: '/super-admin', icon: Shield, platformAdminOnly: true },
     { name: 'Billing', href: '/billing', icon: Receipt, ownerOnly: true },

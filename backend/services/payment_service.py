@@ -44,7 +44,7 @@ class SubscriptionPlan(str, Enum):
 SUBSCRIPTION_PLANS = {
     "starter": {
         "name": "Starter",
-        "price": 49.00,  # Monthly in GBP
+        "price": 39.00,  # Monthly in GBP
         "currency": "gbp",
         "features": [
             "Up to 10 employees",
@@ -56,7 +56,7 @@ SUBSCRIPTION_PLANS = {
     },
     "professional": {
         "name": "Professional",
-        "price": 149.00,
+        "price": 59.00,
         "currency": "gbp",
         "features": [
             "Up to 50 employees",
@@ -69,7 +69,7 @@ SUBSCRIPTION_PLANS = {
     },
     "enterprise": {
         "name": "Enterprise",
-        "price": 399.00,
+        "price": 149.00,
         "currency": "gbp",
         "features": [
             "Unlimited employees",

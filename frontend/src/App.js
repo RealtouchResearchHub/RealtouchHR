@@ -48,6 +48,8 @@ import PerformancePage from './components/pages/PerformancePage';
 import EmployeeRelationsPage from './components/pages/EmployeeRelationsPage';
 import GDPRCenterPage from './components/pages/GDPRCenterPage';
 import SecurityPage from './components/pages/SecurityPage';
+import TrustBadgePage from './components/pages/TrustBadgePage';
+import TrustVerifyPage from './components/pages/TrustVerifyPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -143,6 +145,8 @@ function AppRouter() {
             <Route path="/cases" element={<ProtectedRoute><EmployeeRelationsPage /></ProtectedRoute>} />
             <Route path="/gdpr" element={<ProtectedRoute><GDPRCenterPage /></ProtectedRoute>} />
             <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
+            <Route path="/trust-badge" element={<ProtectedRoute><TrustBadgePage /></ProtectedRoute>} />
+            <Route path="/trust/:badgeId" element={<TrustVerifyPage />} />
             <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
