@@ -46,6 +46,30 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 23, 2026 — Iterations 15 & 16) — Trust Badge + Pricing
+
+### Compliance Trust Badge ✅
+- `routes/trust_badge.py` — auto-issued per company, deterministic HMAC-derived `badge_id` (`rthr-<16hex>`)
+- Owner endpoint `GET /api/trust-badge/me` returns badge SVG URL, embed HTML/Markdown snippets, live attestations, and Bronze/Silver/Gold tier
+- Public `GET /api/trust-badge/{badge_id}/verify` (JSON), `/badge.svg` (image), `/page` (server-rendered HTML) — re-checks attestations on every load so badges cannot be faked
+- Live attestations: UK GDPR, Owner 2FA, Audit log activity, HMRC RTI, UKVI Sponsor Licence, Pension auto-enrolment, Active subscription
+- Public React page at `/trust/:badgeId` for human-readable verification
+- Frontend owner page at `/trust-badge` with live preview, 4-format embed snippets (HTML, Markdown, Image URL, Verify URL), attestation breakdown
+- **17/17 tests PASS** (`/app/backend/tests/test_iter15_trust_badge_pricing.py`)
+
+### Subscription Pricing Update ✅
+- Starter: ~~£49~~ → **£39/mo** (10 employees)
+- Professional: ~~£149~~ → **£59/mo** (50 employees)
+- Enterprise: ~~£399~~ → **£149/mo** (unlimited)
+- Updated in `services/payment_service.py SUBSCRIPTION_PLANS` (server-side fixed pricing) and landing-page pricing table
+
+### Public URL Fix (iter-16) ✅
+- Backend now reads `REACT_APP_BACKEND_URL` from `/app/frontend/.env` at module load and caches as `_PUBLIC_BASE_URL_CACHE`
+- All trust-badge URLs (svg, verify, embed snippets) use the customer-facing public host instead of the internal K8s preview hostname
+- **61/61 backend tests PASS** across iter-13, iter-14, iter-15
+
+---
+
 ## NEW (May 22, 2026 — Iteration 14) — Launch Hardening Sprint (P0 Production)
 
 ### GDPR / Data Protection Centre ✅

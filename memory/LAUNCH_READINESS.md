@@ -1,7 +1,8 @@
 # RealtouchHR — Launch Readiness Audit
-**Date:** May 2026
+**Date:** May 23, 2026
 **Auditor:** E1 (automated)
 **Scope:** Multi-tenant SaaS readiness for production launch
+**Latest iteration:** 16 (Trust Badge + £39/£59/£149 pricing + URL-fix retest — 61/61 tests PASS)
 
 ---
 
@@ -29,6 +30,8 @@
 | **Audit Log** | PASS | Every mutating action logged with user_name + entity + details + timestamp (7-year retention) |
 | **Email Notifications** | PASS (mocked) | Visa expiry, timesheet approval, pension enrolment, invite, trial reminder, subscription. **Set RESEND_API_KEY to enable real sending.** |
 | **Demo Tour** | PASS | One-click sandbox account, 6 seeded employees, 6-step guided walkthrough, auto-expire 24h |
+| **Compliance Trust Badge** | PASS | Auto-issued per company, embeddable HTML/Markdown snippets, public `/trust/{badge_id}` verification page with live attestation re-check (GDPR, 2FA, Audit, HMRC, UKVI, Pension, Subscription). Bronze/Silver/Gold tiers. Cannot be self-issued or forged (HMAC over company_id + JWT_SECRET). |
+| **Subscription pricing** | PASS | Starter £39/mo · Professional £59/mo · Enterprise £149/mo — server-side fixed (frontend cannot manipulate). |
 | **APScheduler cron** | PASS | UKVI alerts daily, sandbox cleanup hourly, retention audit weekly, trial reminder daily |
 
 ---
