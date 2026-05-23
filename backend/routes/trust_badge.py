@@ -61,6 +61,48 @@ async def get_current_user(request: Request) -> CurrentUser:
 
 # ==================== HELPERS ====================
 
+def _read_frontend_public_url() -> Optional[str]:
+    """Read REACT_APP_BACKEND_URL from /app/frontend/.env — the canonical
+    customer-facing URL set by the deploy platform. Falls back to None."""
+    try:
+        fe_env = Path('/app/frontend/.env')
+        if not fe_env.exists():
+            return None
+        for line in fe_env.read_text().splitlines():
+            if line.startswith('REACT_APP_BACKEND_URL='):
+                val = line.split('=', 1)[1].strip().strip('"').strip("'")
+                return val.rstrip('/') if val else None
+    except Exception:
+        return None
+    return None
+
+
+_PUBLIC_BASE_URL_CACHE = _read_frontend_public_url()
+
+
+def _resolve_public_base_url(request: Request) -> str:
+    """
+    Resolve the customer-facing public base URL. The K8s ingress rewrites
+    Host headers to internal hostnames, so we prefer:
+      1. PUBLIC_APP_URL env var (explicitly set by operator at deploy)
+      2. REACT_APP_BACKEND_URL from /app/frontend/.env (canonical at this platform)
+      3. X-Forwarded-Proto + X-Forwarded-Host
+      4. request.base_url (last resort, may be internal)
+    """
+    env_url = os.environ.get('PUBLIC_APP_URL')
+    if env_url:
+        return env_url.rstrip('/')
+    if _PUBLIC_BASE_URL_CACHE:
+        return _PUBLIC_BASE_URL_CACHE
+    proto = request.headers.get('x-forwarded-proto')
+    host = request.headers.get('x-forwarded-host') or request.headers.get('host')
+    if proto and host:
+        return f"{proto}://{host}".rstrip('/')
+    if host:
+        return f"https://{host}".rstrip('/')
+    return str(request.base_url).rstrip('/')
+
+
 def _badge_id_for(company_id: str) -> str:
     """Deterministic, non-guessable badge id from company_id + JWT secret."""
     sig = hmac.new(JWT_SECRET.encode(), company_id.encode(), hashlib.sha256).hexdigest()[:16]
@@ -153,7 +195,7 @@ async def my_badge(request: Request, user: CurrentUser = Depends(get_current_use
     att = await _company_attestations(company)
     level = _verified_level(att)
 
-    app_url = os.environ.get('APP_URL') or str(request.base_url).rstrip('/')
+    app_url = _resolve_public_base_url(request)
     badge_svg_url = f"{app_url}/api/trust-badge/{badge_id}/badge.svg"
     verify_url = f"{app_url}/trust/{badge_id}"
 
@@ -310,7 +352,7 @@ async def verify_page(badge_id: str, request: Request):
     att = await _company_attestations(company)
     level = _verified_level(att)
     company_name = _xml_escape(company.get("name") or "Company")
-    app_url = os.environ.get('APP_URL') or str(request.base_url).rstrip('/')
+    app_url = _resolve_public_base_url(request)
 
     def _icon(ok):
         return "✓" if ok else "✗"

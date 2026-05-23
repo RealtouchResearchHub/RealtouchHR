@@ -1,0 +1,33 @@
+{
+  "summary": "Iter-16 RETEST of critical trust badge public URL bug fix. Verified GET /api/trust-badge/me now returns badge_svg_url, verify_url, embed_html, embed_markdown all using the public host from /app/frontend/.env REACT_APP_BACKEND_URL (https://ukvi-staging.preview.emergentagent.com) instead of the internal 378af53a-* preview hostname. Public SVG and verify endpoints reachable without auth. All regression suites pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_trust_badge_pricing.py",
+    "/app/test_reports/pytest/iter16_iter15_retest.xml",
+    "/app/test_reports/pytest/iter16_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "trust_badge.py uses _lookup_company_by_badge() which scans ALL companies on every public verify/SVG call (O(N) per request). With growth this becomes a hotspot — recommend persisting badge_id on the company document and adding an index, as the code comment itself notes.",
+    "_PUBLIC_BASE_URL_CACHE is read once at module import; if /app/frontend/.env REACT_APP_BACKEND_URL changes the backend must be restarted. Acceptable trade-off for now but worth a comment for ops.",
+    "load_dotenv(ROOT_DIR / '.env') is called in trust_badge.py but server.py likely already does this. Minor — no functional impact."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_trust_badge_pricing.py (added explicit assertions that badge URLs contain REACT_APP_BACKEND_URL public host and do NOT contain internal 378af53a hostname)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only request)"},
+  "test_credentials": "Tests register fresh users via POST /api/auth/register with TEST_iter15_* prefix.",
+  "seed_data_creation": "Each test run creates ~3-4 TEST_-prefixed users/companies (fresh_user fixture + determinism test + no-company test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-15 trust badge + pricing fully validated. Bug fix confirmed: badge URLs now use public REACT_APP_BACKEND_URL from /app/frontend/.env (cached at module import via _read_frontend_public_url -> _PUBLIC_BASE_URL_CACHE). Live curl from public URL returns image/svg+xml 200. All 17 iter-15 + 23 iter-14 + 21 iter-13 tests pass (61/61). If /app/frontend/.env REACT_APP_BACKEND_URL is ever changed, backend must be restarted to refresh the cache.",
+  "rca_of_the_issue": "Previously the trust badge route built URLs from request.base_url (internal K8s hostname 378af53a-*) or APP_URL env var (also set to internal). Fix: trust_badge.py now reads REACT_APP_BACKEND_URL directly from /app/frontend/.env at module import time via _read_frontend_public_url(), caches in _PUBLIC_BASE_URL_CACHE, and _resolve_public_base_url() prefers that over request headers. Verified by live curl: badge_svg_url -> https://ukvi-staging.preview.emergentagent.com/api/trust-badge/rthr-.../badge.svg returns 200 image/svg+xml."
+}

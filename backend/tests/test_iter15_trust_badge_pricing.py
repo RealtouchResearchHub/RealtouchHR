@@ -91,6 +91,19 @@ class TestTrustBadgeOwner:
         assert data.get("badge_svg_url") and "/badge.svg" in data["badge_svg_url"]
         assert "<a " in (data.get("embed_html") or "") and "<img" in data["embed_html"]
         assert "![" in (data.get("embed_markdown") or "")
+        # CRITICAL (iter-15 retest fix): all badge URLs must use the public REACT_APP_BACKEND_URL
+        public_host = BASE_URL  # already from REACT_APP_BACKEND_URL
+        assert data["badge_svg_url"].startswith(public_host), \
+            f"badge_svg_url leaks internal host: {data['badge_svg_url']} (expected prefix {public_host})"
+        assert data["verify_url"].startswith(public_host), \
+            f"verify_url leaks internal host: {data['verify_url']}"
+        assert public_host in data["embed_html"], \
+            f"embed_html missing public host: {data['embed_html']}"
+        assert public_host in data["embed_markdown"], \
+            f"embed_markdown missing public host: {data['embed_markdown']}"
+        # And it MUST NOT contain the internal 378af53a- preview hostname
+        assert "378af53a" not in data["badge_svg_url"], "internal hostname leaked in badge_svg_url"
+        assert "378af53a" not in data["embed_html"], "internal hostname leaked in embed_html"
         att = data.get("attestations") or {}
         for k in ("gdpr_compliant", "owner_2fa_enabled", "audit_logged",
                   "subscription_active", "hmrc_rti_configured",
