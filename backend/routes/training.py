@@ -117,8 +117,9 @@ async def create_record(data: TrainingRecordCreate, user: CurrentUser = Depends(
     expiry = None
     if data.completion_date and course.get("renewal_months"):
         try:
+            from dateutil.relativedelta import relativedelta
             dt = datetime.fromisoformat(data.completion_date.replace("Z", "+00:00"))
-            expiry = (dt + timedelta(days=30 * course["renewal_months"])).date().isoformat()
+            expiry = (dt + relativedelta(months=course["renewal_months"])).date().isoformat()
         except Exception:
             pass
 
@@ -154,8 +155,9 @@ async def update_record(record_id: str, data: TrainingRecordCreate, user: Curren
     expiry = None
     if data.completion_date and course and course.get("renewal_months"):
         try:
+            from dateutil.relativedelta import relativedelta
             dt = datetime.fromisoformat(data.completion_date.replace("Z", "+00:00"))
-            expiry = (dt + timedelta(days=30 * course["renewal_months"])).date().isoformat()
+            expiry = (dt + relativedelta(months=course["renewal_months"])).date().isoformat()
         except Exception:
             pass
     res = await db.training_records.update_one(

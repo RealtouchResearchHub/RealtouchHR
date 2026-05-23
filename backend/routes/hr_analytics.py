@@ -304,7 +304,17 @@ async def org_chart(user: CurrentUser = Depends(get_current_user)):
         else:
             children.setdefault(lm, []).append(e)
 
-    def build_node(emp_id: str) -> Dict[str, Any]:
+    def build_node(emp_id: str, visited: Optional[set] = None) -> Dict[str, Any]:
+        if visited is None:
+            visited = set()
+        if emp_id in visited:
+            # cycle detected — stop recursion
+            e = by_id[emp_id]
+            return {"employee_id": emp_id,
+                    "name": f"{e.get('first_name','')} {e.get('last_name','')}".strip(),
+                    "title": e.get("job_title"), "department": e.get("department"),
+                    "email": e.get("email"), "reports": [], "cycle_detected": True}
+        visited = visited | {emp_id}
         e = by_id[emp_id]
         return {
             "employee_id": emp_id,
@@ -312,7 +322,7 @@ async def org_chart(user: CurrentUser = Depends(get_current_user)):
             "title": e.get("job_title"),
             "department": e.get("department"),
             "email": e.get("email"),
-            "reports": [build_node(c["employee_id"]) for c in children.get(emp_id, [])]
+            "reports": [build_node(c["employee_id"], visited) for c in children.get(emp_id, [])]
         }
 
     tree = [build_node(r) for r in roots]

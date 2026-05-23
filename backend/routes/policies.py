@@ -193,10 +193,19 @@ async def acknowledge_policy(policy_id: str, user: CurrentUser = Depends(get_cur
     if not emp:
         raise HTTPException(status_code=400, detail="No linked employee record")
     now = datetime.now(timezone.utc).isoformat()
-    upd = await db.policy_acknowledgements.update_one(
+    # Require an existing assignment (acknowledgement row) for this version — prevents
+    # any employee from self-acknowledging policies they were never assigned.
+    assignment = await db.policy_acknowledgements.find_one(
         {"policy_id": policy_id, "employee_id": emp["employee_id"], "version": policy.get("version", 1)},
-        {"$set": {"status": "acknowledged", "acknowledged_at": now}},
-        upsert=True
+        {"_id": 0}
+    )
+    if not assignment:
+        raise HTTPException(status_code=403, detail="Policy not assigned to you")
+    if assignment.get("status") == "acknowledged":
+        return {"ok": True, "acknowledged_at": assignment.get("acknowledged_at"), "already": True}
+    await db.policy_acknowledgements.update_one(
+        {"policy_id": policy_id, "employee_id": emp["employee_id"], "version": policy.get("version", 1)},
+        {"$set": {"status": "acknowledged", "acknowledged_at": now}}
     )
     return {"ok": True, "acknowledged_at": now}
 

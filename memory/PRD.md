@@ -46,6 +46,51 @@ RealtouchHR is a next-generation HR, Payroll, and Compliance SaaS platform desig
 
 ---
 
+## NEW (May 23, 2026 — Iteration 17) — Audit Gap Fill
+
+Implementation triggered by user-supplied 16-section "RealtouchHR SaaS Launch Readiness Audit" document. Gap analysis identified 7 genuine missing modules:
+
+### Policies Module ✅
+- `routes/policies.py` — CRUD + assignment + acknowledgement tracking + version control (snapshots each version to `policy_versions`, supersedes old acks on bump)
+- Endpoints: `/api/policies`, `/{id}/assign`, `/{id}/acknowledge`, `/my/pending`, `/{id}/acknowledgements`
+- HR-only writes; employee self-service for acknowledging assigned policies (returns 403 if not assigned)
+- Frontend `/policies` page with category badges, mandatory flag, version display
+
+### Training Records ✅
+- `routes/training.py` — Courses + completion records + training matrix + renewal tracking
+- Auto-expiry: `completion_date + renewal_months` (uses `dateutil.relativedelta` for calendar-accurate dates)
+- `/api/training/matrix` returns employees × courses grid with status (completed/expiring_soon/expired/not_started)
+- Frontend `/training` page with 3 tabs (Courses, Records, Matrix)
+
+### Absence & Sickness ✅
+- `routes/absence.py` — Distinct from Leave. Sickness, fit notes, return-to-work interviews
+- Bradford Factor: `S² × D` over rolling 12 months with risk classification (low/medium/high)
+- Frontend `/absence` page with 2 tabs (Records, Bradford Factor)
+
+### Compliance Calendar ✅
+- `routes/hr_analytics.py` (`/api/compliance-calendar`) — Aggregates 180-day horizon of: visa expiry, RTW expiry, probation end, training renewal, policy review, sponsor licence renewal
+- Severity grading (high <30d, medium <60d, low otherwise)
+
+### HR Reports & Analytics ✅
+- `/api/hr-reports/summary` — Headcount, starters/leavers 12m, turnover %, dept & gender breakdown, absence stats, mandatory training compliance %
+- `/api/hr-reports/headcount.csv` — CSV export
+- Frontend `/hr-analytics` page with 3 tabs (Calendar, Reports, Org Chart)
+
+### Organisation Chart ✅
+- `/api/org-chart` — Tree built from `line_manager_id`; returns stats (employees/managers/max_depth)
+- **Cycle protection** (visited-set guard prevents stack overflow on A→B→A loops)
+
+### Data Protection Centre Extensions ✅
+- `routes/dpo.py` — Article 30 Processing Activities, DSAR Tracker (30-day deadline), Breach Incident Register (72h ICO deadline auto-computed), Processors register, Retention Schedule with 12 UK statutory defaults, DPIA records
+- Frontend `/dpo` page with 5 tabs (Processing Activities, DSAR Tracker, Breaches, Processors, Retention)
+
+### Testing — 57/57 tests PASS
+- iter-14 (23) + iter-15 (17) + iter-17 (17) all green
+- Tenant isolation verified · Auth required on every endpoint · HR-only guards enforced
+- Defensive fixes applied: relativedelta for renewal dates, org-chart cycle protection, policies-assignment-required-for-acknowledge
+
+---
+
 ## NEW (May 23, 2026 — Iterations 15 & 16) — Trust Badge + Pricing
 
 ### Compliance Trust Badge ✅
