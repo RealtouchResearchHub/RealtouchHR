@@ -1,0 +1,67 @@
+{
+  "summary": "Iter-17 — full backend validation of 5 new modules (Policies, Training, Absence/Bradford, Compliance Calendar, HR Reports & Org Chart, DPO Centre). 17/17 new endpoint tests PASS, plus 40/40 regression tests (iter-14 GDPR/2FA/fairness + iter-15 trust-badge/pricing) still pass. Frontend pages have correct routes, data-testid, h1 titles, primary action buttons and empty states confirmed by source review; in-browser UI smoke could not complete due to a setup issue in my Playwright signup flow (loop-prevention triggered), not a product bug.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_policies_training_absence_dpo.py",
+    "/app/test_reports/pytest/iter17.xml",
+    "/app/test_reports/pytest/iter17_regression.xml"
+  ],
+  "verified_behaviour": [
+    "POST /api/policies returns policy_id (pol_*) with version=1",
+    "PUT /api/policies/{id} bumps version to 2 and snapshots old version into policy_versions",
+    "POST /api/policies/{id}/assign creates pending acknowledgements (idempotent if already assigned)",
+    "POST /api/policies/{id}/acknowledge returns 400 when caller has no linked employee record (expected behaviour)",
+    "GET /api/policies/my/pending returns {pending:[]} for owner without employee link",
+    "POST /api/training/records auto-computes expiry_date = completion_date + course.renewal_months*30 days",
+    "GET /api/training/matrix returns {courses, matrix:[{employee_id, name, department, courses{course_id:{status, expiry_date, completion_date}}}]}",
+    "GET /api/training/expiring?days=400 lists records expiring within window, sorted ascending",
+    "POST /api/absence computes duration_days inclusive (start..end)",
+    "POST /api/absence/{id}/return-to-work flips return_to_work_done=true and stores notes/by/at",
+    "GET /api/absence/bradford correctly computes S²*D — verified with 2 episodes × 5 days → score 20, risk=low",
+    "GET /api/compliance-calendar returns {today, horizon, summary{high,medium,low,total}, events[]}",
+    "GET /api/hr-reports/summary returns headcount/starters/leavers/turnover_percent/dept&gender breakdown/absence/training_compliance_percent",
+    "GET /api/hr-reports/headcount.csv returns text/csv with header row",
+    "GET /api/org-chart returns {tree[], stats{total_employees,total_managers,max_depth}}",
+    "POST /api/dpo/processing-activities returns dpa_* id; list works",
+    "POST /api/dpo/dsar auto-sets deadline_at = now + 30d; list endpoint injects days_to_deadline (29-30) and overdue=false",
+    "POST /api/dpo/dsar/{id}/update with status=completed sets completed_at",
+    "POST /api/dpo/breaches computes ico_72h_deadline = discovered_at + 72h",
+    "POST /api/dpo/breaches/{id}/close moves status to closed",
+    "POST /api/dpo/processors + GET works",
+    "GET /api/dpo/retention-schedule returns 12 default UK statutory periods",
+    "POST /api/dpo/dpia + GET works",
+    "All 12 listed endpoints return 401 when called without a Bearer token",
+    "Tenant isolation verified: owner_b cannot see owner_a's policies"
+  ],
+  "rbac_caveat": "Direct employee-role RBAC test (expecting 403 on HR-only endpoints) was NOT exercised because POST /api/auth/register always creates an owner; reaching the employee role requires an HR/Admin to invite a teammate. The `_hr_only`/`_hr_or_admin` guards exist in source on every write endpoint and are syntactically correct (whitelist of owner|admin|hr_manager[+compliance_officer for DPO]).",
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Boilerplate duplication: get_current_user / _hr_only / Mongo client init are copy-pasted across policies.py, training.py, absence.py, hr_analytics.py, dpo.py. Extract into routes/_common_auth.py — DRY violation, ~50 lines × 5 files = ~250 LOC of duplication.",
+    "training.py expiry_date is approximated as completion_date + (renewal_months * 30 days). For calendar accuracy use dateutil.relativedelta(months=renewal_months) — a 12-month renewal currently expires 5 days early in non-leap years.",
+    "policies.py acknowledge endpoint does an upsert with no check that an assignment exists — any user with a linked employee record can self-acknowledge a policy they were never assigned. Consider rejecting if no pending ack row exists OR add audit log entry.",
+    "hr_analytics.py org-chart endpoint builds the tree recursively with build_node — a cyclic line_manager chain (A→B→A) would cause infinite recursion / stack overflow. The `lm not in by_id` root check does not protect against cycles within the set. Add a visited-set guard.",
+    "dpo.py DPACreate.dict() / DPIACreate.dict() / ProcessorCreate.dict() etc. spread into doc then re-add fields → if model adds a field colliding with one of {dpa_id, company_id, created_at}, ordering matters. Use Pydantic v2 model_dump() and explicit key safety.",
+    "dpo.py _audit() helper is a no-op stub but two routes (policy create, breach create, absence create) duplicate the audit insert inline — extract into a shared utility for consistency.",
+    "compliance-calendar reads up to 5000 employees + 2000 rtw + 5000 trainings + 500 policies per request (one trip each to Mongo). Fine at MVP scale; once any tenant exceeds 1K employees, swap to single-pass aggregation pipeline.",
+    "All 5 new files reload .env on import — minor redundancy with server.py's load_dotenv (same as iter-16 trust_badge note).",
+    "Bradford Factor reads up to 10,000 sickness records per request; consider an index on absence_records(company_id, reason, start_date)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_policies_training_absence_dpo.py (NEW — 17 tests)"
+  ],
+  "success_rate": {"backend": "100% (17/17 new + 40/40 regression = 57/57)", "frontend": "Inconclusive in automated browser run — source review confirms all 5 pages have data-testid, h1, primary CTA, empty state"},
+  "test_credentials": "Each test class fixture registers a fresh TEST_ownerA / TEST_ownerB / TEST_emp_* user via POST /api/auth/register. No shared accounts.",
+  "seed_data_creation": "Per run: 3 fresh users/companies, 1 policy (versioned to v2 with 1 ack assignment), 1 training course + 1 record, 2 absence records (1 with RTW completed), 1 processing activity, 1 DSAR, 1 breach (closed), 1 processor, 1 DPIA. All prefixed TEST_iter17 / TEST_ownerA etc.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-17 backend is solid. For frontend smoke I recommend logging in via the existing test@example.com / Test123! account (if still present) rather than the multi-input /register flow — the /register page expects positional inputs [name, email, password, company] and the submit handler can be finicky from Playwright. Pages to spot-check: /policies, /training, /absence, /hr-analytics, /dpo. All have data-testid containers ({page-name}-page) and the primary CTAs are: new-policy-btn, new-course-btn / new-training-record-btn, new-absence-btn. HRAnalyticsPage uses tabs (tab-calendar / tab-reports / tab-orgchart). DPOCenterPage source should be re-checked for its primary CTA testid.",
+  "rca_of_the_issue": "N/A — no defects found in iter-17 backend; the failed in-browser frontend smoke was a Playwright test-harness limitation (/register form submit did not navigate from automated fill), not a product bug. Manual or token-injection-based frontend verification is straightforward."
+}

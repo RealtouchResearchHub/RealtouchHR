@@ -50,6 +50,11 @@ import GDPRCenterPage from './components/pages/GDPRCenterPage';
 import SecurityPage from './components/pages/SecurityPage';
 import TrustBadgePage from './components/pages/TrustBadgePage';
 import TrustVerifyPage from './components/pages/TrustVerifyPage';
+import PoliciesPage from './components/pages/PoliciesPage';
+import TrainingPage from './components/pages/TrainingPage';
+import AbsencePage from './components/pages/AbsencePage';
+import HRAnalyticsPage from './components/pages/HRAnalyticsPage';
+import DPOCenterPage from './components/pages/DPOCenterPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -147,6 +152,11 @@ function AppRouter() {
             <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
             <Route path="/trust-badge" element={<ProtectedRoute><TrustBadgePage /></ProtectedRoute>} />
             <Route path="/trust/:badgeId" element={<TrustVerifyPage />} />
+            <Route path="/policies" element={<ProtectedRoute><PoliciesPage /></ProtectedRoute>} />
+            <Route path="/training" element={<ProtectedRoute><TrainingPage /></ProtectedRoute>} />
+            <Route path="/absence" element={<ProtectedRoute><AbsencePage /></ProtectedRoute>} />
+            <Route path="/hr-analytics" element={<ProtectedRoute><HRAnalyticsPage /></ProtectedRoute>} />
+            <Route path="/dpo" element={<ProtectedRoute><DPOCenterPage /></ProtectedRoute>} />
             <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/settings/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />

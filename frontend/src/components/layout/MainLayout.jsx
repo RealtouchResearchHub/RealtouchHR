@@ -41,7 +41,12 @@ import {
     Scale,
     Lock,
     FileLock2,
-    Award
+    Award,
+    ScrollText,
+    GraduationCap,
+    Thermometer,
+    CalendarClock,
+    ClipboardList
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import AICopilot from '../shared/AICopilot';
@@ -68,6 +73,11 @@ const navigation = [
     { name: 'Enterprise', href: '/enterprise', icon: Briefcase },
     { name: 'Performance', href: '/performance', icon: Target },
     { name: 'Cases', href: '/cases', icon: Scale, hrOnly: true },
+    { name: 'Absence', href: '/absence', icon: Thermometer, hrOnly: true },
+    { name: 'Policies', href: '/policies', icon: ScrollText },
+    { name: 'Training', href: '/training', icon: GraduationCap },
+    { name: 'HR Analytics', href: '/hr-analytics', icon: CalendarClock, hrOnly: true },
+    { name: 'Data Protection', href: '/dpo', icon: ClipboardList, hrOnly: true },
     { name: 'GDPR Centre', href: '/gdpr', icon: FileLock2 },
     { name: 'Security', href: '/security', icon: Lock },
     { name: 'Trust Badge', href: '/trust-badge', icon: Award, ownerOnly: true },

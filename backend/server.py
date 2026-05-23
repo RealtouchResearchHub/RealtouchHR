@@ -2848,6 +2848,11 @@ try:
     from routes.two_factor import router as twofa_router
     from routes.fairness import router as fairness_router
     from routes.trust_badge import router as trust_badge_router
+    from routes.policies import router as policies_router
+    from routes.training import router as training_router
+    from routes.absence import router as absence_router
+    from routes.hr_analytics import router as hr_analytics_router
+    from routes.dpo import router as dpo_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2875,6 +2880,11 @@ try:
     api_router.include_router(twofa_router)
     api_router.include_router(fairness_router)
     api_router.include_router(trust_badge_router)
+    api_router.include_router(policies_router)
+    api_router.include_router(training_router)
+    api_router.include_router(absence_router)
+    api_router.include_router(hr_analytics_router)
+    api_router.include_router(dpo_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")
