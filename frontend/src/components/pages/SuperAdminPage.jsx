@@ -9,8 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { toast } from 'sonner';
 import {
     Building2, Users, PoundSterling, AlertTriangle, Shield, ShieldOff,
-    Search, Loader2, Activity, Sparkles, Eye, PowerOff,
+    Search, Loader2, Activity, Sparkles, Eye, PowerOff, Package, ToggleLeft, CreditCard, Save, X,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -19,6 +22,10 @@ export default function SuperAdminPage() {
     const [metrics, setMetrics] = useState(null);
     const [companies, setCompanies] = useState([]);
     const [auditLog, setAuditLog] = useState([]);
+    const [plans, setPlans] = useState([]);
+    const [moduleDialog, setModuleDialog] = useState(null);  // {company_id, name, modules}
+    const [planDialog, setPlanDialog] = useState(null);       // selected plan
+    const [planForm, setPlanForm] = useState({ plan_id: '', name: '', price: 0, employee_limit: 10, features: '' });
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [error, setError] = useState(null);
@@ -28,14 +35,16 @@ export default function SuperAdminPage() {
         setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token()}` };
-            const [mRes, cRes, aRes] = await Promise.all([
+            const [mRes, cRes, aRes, pRes] = await Promise.all([
                 axios.get(`${API_URL}/api/super-admin/metrics`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/super-admin/companies`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/super-admin/audit-log?limit=50`, { headers, withCredentials: true }),
+                axios.get(`${API_URL}/api/super-admin/plans`, { headers, withCredentials: true }),
             ]);
             setMetrics(mRes.data);
             setCompanies(cRes.data.companies || []);
             setAuditLog(aRes.data.audit_log || []);
+            setPlans(pRes.data.plans || []);
             setError(null);
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to load platform data');
@@ -45,6 +54,44 @@ export default function SuperAdminPage() {
     };
 
     useEffect(() => { load(); }, []);
+
+    const openModulesDialog = async (company_id, name) => {
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            const res = await axios.get(`${API_URL}/api/super-admin/companies/${company_id}/modules`, { headers, withCredentials: true });
+            setModuleDialog({ company_id, name, modules: res.data.modules });
+        } catch (e) { toast.error('Failed to load modules'); }
+    };
+
+    const toggleModule = async (module_key, enabled) => {
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            await axios.post(`${API_URL}/api/super-admin/companies/${moduleDialog.company_id}/modules`,
+                { module_key, enabled }, { headers, withCredentials: true });
+            setModuleDialog({ ...moduleDialog, modules: moduleDialog.modules.map((m) => m.key === module_key ? { ...m, enabled } : m) });
+        } catch (e) { toast.error('Failed'); }
+    };
+
+    const openPlanEditor = (plan) => {
+        setPlanForm({
+            plan_id: plan.plan_id, name: plan.name, price: plan.price,
+            employee_limit: plan.employee_limit, features: (plan.features || []).join('\n')
+        });
+        setPlanDialog(plan);
+    };
+
+    const savePlan = async () => {
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            const features = planForm.features.split('\n').map((s) => s.trim()).filter(Boolean);
+            await axios.put(`${API_URL}/api/super-admin/plans/${planForm.plan_id}`,
+                { ...planForm, price: Number(planForm.price), employee_limit: Number(planForm.employee_limit), features, currency: 'gbp' },
+                { headers, withCredentials: true });
+            toast.success('Plan saved');
+            setPlanDialog(null);
+            load();
+        } catch (e) { toast.error('Failed'); }
+    };
 
     const suspend = async (company_id) => {
         const reason = window.prompt('Reason for suspension:');
@@ -177,6 +224,7 @@ export default function SuperAdminPage() {
             <Tabs defaultValue="companies">
                 <TabsList>
                     <TabsTrigger value="companies" data-testid="tab-companies">Companies ({companies.length})</TabsTrigger>
+                    <TabsTrigger value="plans" data-testid="tab-plans"><CreditCard className="w-4 h-4 mr-1" />Plans</TabsTrigger>
                     <TabsTrigger value="audit" data-testid="tab-audit-log">Audit Log</TabsTrigger>
                 </TabsList>
 
@@ -228,6 +276,10 @@ export default function SuperAdminPage() {
                                                         data-testid={`impersonate-${c.company_id}`}>
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </Button>
+                                                    <Button size="sm" variant="outline" onClick={() => openModulesDialog(c.company_id, c.name)}
+                                                        data-testid={`modules-${c.company_id}`} title="Modules">
+                                                        <Package className="w-3.5 h-3.5" />
+                                                    </Button>
                                                     {c.suspended ? (
                                                         <Button size="sm" variant="outline" onClick={() => restore(c.company_id)}
                                                             data-testid={`restore-${c.company_id}`}>
@@ -245,6 +297,36 @@ export default function SuperAdminPage() {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="plans">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Subscription Plans</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {plans.map((p) => (
+                                    <Card key={p.plan_id} className="border-2" data-testid={`plan-card-${p.plan_id}`}>
+                                        <CardHeader>
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="text-lg">{p.name}</CardTitle>
+                                                {p.overridden && <Badge variant="secondary">Overridden</Badge>}
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-3xl font-bold mb-2">£{p.price}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+                                            <p className="text-xs text-muted-foreground mb-3">Employee limit: {p.employee_limit === -1 ? 'Unlimited' : p.employee_limit}</p>
+                                            <ul className="text-xs space-y-1 text-muted-foreground mb-4">
+                                                {(p.features || []).slice(0, 5).map((f, i) => <li key={i}>· {f}</li>)}
+                                            </ul>
+                                            <Button size="sm" variant="outline" onClick={() => openPlanEditor(p)} data-testid={`edit-plan-${p.plan_id}`}>Edit price/features</Button>
+                                        </CardContent>
+                                    </Card>
+                                ))}
                             </div>
                         </CardContent>
                     </Card>
@@ -278,6 +360,43 @@ export default function SuperAdminPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Module toggle dialog */}
+            <Dialog open={!!moduleDialog} onOpenChange={(o) => !o && setModuleDialog(null)}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader><DialogTitle>Modules · {moduleDialog?.name}</DialogTitle></DialogHeader>
+                    <p className="text-xs text-muted-foreground">Disable modules for this tenant. Disabled modules are hidden from their sidebar and protected APIs return 403.</p>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto" data-testid="module-toggle-list">
+                        {(moduleDialog?.modules || []).map((m) => (
+                            <div key={m.key} className="flex items-center justify-between p-2 border rounded">
+                                <Label htmlFor={`mod-${m.key}`} className="text-sm cursor-pointer flex-1">{m.name}</Label>
+                                <Switch id={`mod-${m.key}`} checked={m.enabled} onCheckedChange={(c) => toggleModule(m.key, c)} data-testid={`module-toggle-${m.key}`} />
+                            </div>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Plan editor dialog */}
+            <Dialog open={!!planDialog} onOpenChange={(o) => !o && setPlanDialog(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Edit plan · {planForm.name}</DialogTitle></DialogHeader>
+                    <div className="space-y-3">
+                        <div><Label>Display name</Label><Input value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} /></div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div><Label>Price (£/month)</Label><Input type="number" step="0.01" value={planForm.price} onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })} data-testid="plan-price-input" /></div>
+                            <div><Label>Employee limit (-1 unlimited)</Label><Input type="number" value={planForm.employee_limit} onChange={(e) => setPlanForm({ ...planForm, employee_limit: e.target.value })} /></div>
+                        </div>
+                        <div><Label>Features (one per line)</Label>
+                            <textarea className="w-full p-2 border rounded text-sm bg-background" rows={6} value={planForm.features} onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPlanDialog(null)}><X className="w-4 h-4 mr-1" />Cancel</Button>
+                        <Button onClick={savePlan} data-testid="save-plan-btn"><Save className="w-4 h-4 mr-1" />Save</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -319,21 +319,30 @@ export default function BillingPage() {
             {/* Plans */}
             <div>
                 <h2 className="text-2xl font-bold mb-2">Choose a plan</h2>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-6 text-sm">
                     All plans are billed in GBP. Test keys are active — use Stripe test cards like
-                    <code className="mx-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-xs">
+                    <code className="mx-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-xs whitespace-nowrap">
                         4242 4242 4242 4242
                     </code>
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {Object.entries(billing?.available_plans || {}).map(([planId, plan]) => {
+                {(!billing?.available_plans || Object.keys(billing.available_plans).length === 0) ? (
+                    <Card className="border-amber-200 bg-amber-50/40 dark:bg-amber-950/20">
+                        <CardContent className="p-6 text-center">
+                            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-amber-600" />
+                            <p className="font-medium">Plans could not load.</p>
+                            <Button onClick={() => { setLoading(true); fetchBilling(); }} variant="outline" size="sm" className="mt-3">Retry</Button>
+                        </CardContent>
+                    </Card>
+                ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                    {Object.entries(billing.available_plans).map(([planId, plan]) => {
                         const style = PLAN_STYLES[planId] || PLAN_STYLES.starter;
                         const Icon = style.icon;
                         const isCurrent = currentPlanId === planId;
                         return (
                             <Card
                                 key={planId}
-                                className={`relative overflow-hidden transition-all ${
+                                className={`relative overflow-hidden transition-all min-w-0 ${
                                     style.featured ? 'ring-2 ring-indigo-500 shadow-xl' : ''
                                 }`}
                                 data-testid={`plan-${planId}`}
@@ -382,6 +391,7 @@ export default function BillingPage() {
                         );
                     })}
                 </div>
+                )}
             </div>
 
             {/* Add-ons */}

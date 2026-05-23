@@ -100,6 +100,10 @@ async def _ratelimit_handler(request: Request, exc: RateLimitExceeded):
 
 app.add_middleware(SlowAPIMiddleware)
 
+# Tenant suspension enforcement — blocks suspended / unpaid tenants from accessing the app
+from middleware.tenant_suspension import TenantSuspensionMiddleware
+app.add_middleware(TenantSuspensionMiddleware)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -2853,6 +2857,7 @@ try:
     from routes.absence import router as absence_router
     from routes.hr_analytics import router as hr_analytics_router
     from routes.dpo import router as dpo_router
+    from routes.platform_mgmt import router as platform_mgmt_router
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)
@@ -2885,6 +2890,7 @@ try:
     api_router.include_router(absence_router)
     api_router.include_router(hr_analytics_router)
     api_router.include_router(dpo_router)
+    api_router.include_router(platform_mgmt_router)
     logging.info("Modular routes loaded successfully")
 except Exception as e:
     logging.error(f"Failed to load modular routes: {e}")

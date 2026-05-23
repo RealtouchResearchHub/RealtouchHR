@@ -16,8 +16,9 @@ import {
 import { toast } from 'sonner';
 import {
     Users, UserPlus, Shield, Trash2, Clock, Mail, Send,
-    Loader2, AlertTriangle, Key, Activity, RefreshCw, Copy,
+    Loader2, AlertTriangle, Key, Activity, RefreshCw, Copy, Download, Lock,
 } from 'lucide-react';
+import { Switch } from '../ui/switch';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -38,6 +39,8 @@ export default function AdminPortalPage() {
     const [loading, setLoading] = useState(true);
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
     const [inviteForm, setInviteForm] = useState({ email: '', name: '', role: 'hr_manager' });
+    const [securityPolicy, setSecurityPolicy] = useState(null);
+    const [exportLoading, setExportLoading] = useState(false);
     const [sending, setSending] = useState(false);
 
     const token = () => localStorage.getItem('token');
@@ -46,19 +49,45 @@ export default function AdminPortalPage() {
         setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token()}` };
-            const [uRes, iRes, aRes] = await Promise.all([
+            const [uRes, iRes, aRes, sRes] = await Promise.all([
                 axios.get(`${API_URL}/api/users`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/users/invites`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/enterprise/audit-log?limit=50`, { headers, withCredentials: true }).catch(() => ({ data: { audit_log: [] } })),
+                axios.get(`${API_URL}/api/company/security-policy`, { headers, withCredentials: true }).catch(() => null),
             ]);
             setUsers(uRes.data.users || []);
             setInvites(iRes.data.invites || []);
             setAuditLog(aRes.data.audit_log || aRes.data.logs || []);
+            if (sRes) setSecurityPolicy(sRes.data);
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Failed to load admin data');
         } finally {
             setLoading(false);
         }
+    };
+
+    const downloadCompanyData = async () => {
+        setExportLoading(true);
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            const res = await axios.get(`${API_URL}/api/company/data-export`, { headers, withCredentials: true, responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const a = document.createElement('a');
+            a.href = url; a.download = `company_data_export_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click(); window.URL.revokeObjectURL(url);
+            toast.success('Export downloaded');
+        } catch (e) { toast.error(e.response?.data?.detail || 'Export failed'); }
+        finally { setExportLoading(false); }
+    };
+
+    const updateSecurityPolicy = async (key, value) => {
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            const newPolicy = { ...(securityPolicy?.policy || {}), [key]: value };
+            await axios.put(`${API_URL}/api/company/security-policy`, newPolicy, { headers, withCredentials: true });
+            setSecurityPolicy({ ...securityPolicy, policy: newPolicy });
+            toast.success('Policy updated');
+        } catch (e) { toast.error('Failed'); }
     };
 
     useEffect(() => { fetchAll(); }, []);
@@ -169,6 +198,8 @@ export default function AdminPortalPage() {
                         <TabsTrigger value="team" data-testid="tab-team"><Users className="w-4 h-4 mr-2" /> Team ({users.length})</TabsTrigger>
                         <TabsTrigger value="invites" data-testid="tab-invites"><Mail className="w-4 h-4 mr-2" /> Invites ({invites.filter(i => i.status === 'pending').length})</TabsTrigger>
                         <TabsTrigger value="audit" data-testid="tab-audit"><Activity className="w-4 h-4 mr-2" /> Audit Log</TabsTrigger>
+                        <TabsTrigger value="security" data-testid="tab-security-policy"><Lock className="w-4 h-4 mr-2" /> Security</TabsTrigger>
+                        <TabsTrigger value="data" data-testid="tab-data"><Download className="w-4 h-4 mr-2" /> Data export</TabsTrigger>
                         <TabsTrigger value="danger" data-testid="tab-danger"><AlertTriangle className="w-4 h-4 mr-2" /> Danger Zone</TabsTrigger>
                     </TabsList>
 
@@ -303,6 +334,81 @@ export default function AdminPortalPage() {
                                         ))}
                                     </div>
                                 )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* SECURITY POLICY TAB */}
+                    <TabsContent value="security">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Company security policy</CardTitle>
+                                <CardDescription>Enforce 2FA, session timeouts and password minimums across all staff in this company.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {securityPolicy ? (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div className="p-3 rounded border">
+                                                <p className="text-xs text-muted-foreground">Users</p>
+                                                <p className="text-2xl font-semibold">{securityPolicy.stats.total_users}</p>
+                                            </div>
+                                            <div className="p-3 rounded border">
+                                                <p className="text-xs text-muted-foreground">Admins</p>
+                                                <p className="text-2xl font-semibold">{securityPolicy.stats.total_admins}</p>
+                                            </div>
+                                            <div className="p-3 rounded border">
+                                                <p className="text-xs text-muted-foreground">2FA coverage</p>
+                                                <p className="text-2xl font-semibold">{securityPolicy.stats.twofa_coverage_percent}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3 pt-3 border-t">
+                                            <div className="flex items-center justify-between p-3 rounded border">
+                                                <div>
+                                                    <p className="font-medium text-sm">Force 2FA for admins</p>
+                                                    <p className="text-xs text-muted-foreground">Owners + admins must enable TOTP on next login.</p>
+                                                </div>
+                                                <Switch checked={securityPolicy.policy.force_2fa_for_admins} onCheckedChange={(c) => updateSecurityPolicy('force_2fa_for_admins', c)} data-testid="toggle-force-2fa-admins" />
+                                            </div>
+                                            <div className="flex items-center justify-between p-3 rounded border">
+                                                <div>
+                                                    <p className="font-medium text-sm">Force 2FA for all staff</p>
+                                                    <p className="text-xs text-muted-foreground">Every user including employees must enable TOTP.</p>
+                                                </div>
+                                                <Switch checked={securityPolicy.policy.force_2fa_for_all} onCheckedChange={(c) => updateSecurityPolicy('force_2fa_for_all', c)} data-testid="toggle-force-2fa-all" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <Label className="text-xs">Session timeout (minutes)</Label>
+                                                    <Input type="number" value={securityPolicy.policy.session_timeout_minutes} onChange={(e) => setSecurityPolicy({ ...securityPolicy, policy: { ...securityPolicy.policy, session_timeout_minutes: Number(e.target.value) } })} onBlur={(e) => updateSecurityPolicy('session_timeout_minutes', Number(e.target.value))} data-testid="input-session-timeout" />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs">Password min length</Label>
+                                                    <Input type="number" value={securityPolicy.policy.password_min_length} onChange={(e) => setSecurityPolicy({ ...securityPolicy, policy: { ...securityPolicy.policy, password_min_length: Number(e.target.value) } })} onBlur={(e) => updateSecurityPolicy('password_min_length', Number(e.target.value))} data-testid="input-password-length" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : <Loader2 className="w-5 h-5 animate-spin" />}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* DATA EXPORT TAB */}
+                    <TabsContent value="data">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Full company data export</CardTitle>
+                                <CardDescription>Download a complete JSON of every record in your tenant — employees, payroll, leave, audits, compliance, policies, training, absence, performance, cases, GDPR records.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="p-3 rounded border bg-amber-50 dark:bg-amber-950/20 border-amber-200 text-amber-900 dark:text-amber-100 text-sm">
+                                    <strong>Note:</strong> Sensitive credentials (password hashes, 2FA secrets, backup codes) are intentionally excluded. The export is signed in your audit log.
+                                </div>
+                                <Button onClick={downloadCompanyData} disabled={exportLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="company-export-btn">
+                                    {exportLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                    Download full export (.json)
+                                </Button>
                             </CardContent>
                         </Card>
                     </TabsContent>
