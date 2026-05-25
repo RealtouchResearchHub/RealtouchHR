@@ -25,7 +25,7 @@ import { cn, formatCurrency, formatDate, getStatusColor, getComplianceColor } fr
 import { toast } from 'sonner';
 import PaywallModal from '../shared/PaywallModal';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const payrollSteps = [
     { id: 'draft', label: 'Prepare', nextStatus: 'validated' },

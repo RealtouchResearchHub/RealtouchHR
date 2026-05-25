@@ -12,7 +12,7 @@ import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { FileText, Plus, ScrollText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const CATEGORIES = [

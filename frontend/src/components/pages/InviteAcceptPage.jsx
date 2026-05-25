@@ -9,7 +9,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { Building2, UserCheck, Loader2, AlertCircle, Mail } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function InviteAcceptPage() {
     const { token } = useParams();

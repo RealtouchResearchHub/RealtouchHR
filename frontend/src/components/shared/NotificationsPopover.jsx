@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn, formatDateTime } from '../../lib/utils';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const notificationIcons = {
     leave_approved: CheckCircle2,

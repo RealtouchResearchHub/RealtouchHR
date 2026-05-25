@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { cn, formatCurrency, getStatusColor } from '../../lib/utils';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function Dashboard() {
     const { user, company } = useAuth();

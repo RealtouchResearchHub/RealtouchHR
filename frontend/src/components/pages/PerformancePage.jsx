@@ -16,7 +16,7 @@ import {
 import { toast } from 'sonner';
 import { Target, ClipboardCheck, MessageSquare, Plus, Loader2, Scale } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const RATINGS = [

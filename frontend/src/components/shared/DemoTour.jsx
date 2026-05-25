@@ -9,7 +9,7 @@ import {
     PlayCircle, X, ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, Sparkles
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 // Demo tour overlay — shown after demo seed; walks user through key features
 export default function DemoTour({ open, onClose, steps, onComplete }) {

@@ -31,7 +31,7 @@ import {
 import { cn, formatDate, getStatusColor } from '../../lib/utils';
 import { toast } from 'sonner';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function SchedulingPage() {
     const [shifts, setShifts] = useState([]);

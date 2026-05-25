@@ -6,7 +6,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { X, Send, Bot, User, AlertTriangle, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function AICopilot({ open, onClose }) {
     const [messages, setMessages] = useState([

@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const hdrs = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 const ax = (method, url, data) =>

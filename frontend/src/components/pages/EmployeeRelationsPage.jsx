@@ -17,7 +17,7 @@ import {
     Shield, FileText, AlertTriangle, Plus, Loader2, Eye,
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function EmployeeRelationsPage() {

@@ -12,7 +12,7 @@ import {
     PoundSterling, FileText, Send,
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const TAX_YEARS = ["2024-25", "2023-24", "2025-26"];
 

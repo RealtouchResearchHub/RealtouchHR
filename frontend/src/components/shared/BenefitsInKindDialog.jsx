@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, Trash2, FileDown, Loader2 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const BENEFIT_CATEGORIES = [
     { id: "company_car", label: "Company car" },

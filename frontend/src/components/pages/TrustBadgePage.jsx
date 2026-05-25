@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { toast } from 'sonner';
 import { ShieldCheck, Copy, ExternalLink, Loader2, Award, Code2 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function TrustBadgePage() {

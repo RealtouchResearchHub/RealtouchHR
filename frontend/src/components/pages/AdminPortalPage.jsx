@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Switch } from '../ui/switch';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const ROLES = [
     { id: 'admin', label: 'Administrator', desc: 'Full system access (except billing & ownership transfer)' },

@@ -10,7 +10,7 @@ import {
     Loader2, AlertCircle, Receipt, Plus, Crown, Download, Infinity as InfinityIcon
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const PLAN_STYLES = {
     starter: {

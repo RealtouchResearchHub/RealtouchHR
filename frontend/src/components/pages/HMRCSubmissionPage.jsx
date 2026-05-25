@@ -14,7 +14,7 @@ import {
   Info, ExternalLink, Eye
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 // Submission state labels
 const STATE_LABELS = {

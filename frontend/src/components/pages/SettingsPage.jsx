@@ -31,7 +31,7 @@ import {
 import { cn, getStatusColor } from '../../lib/utils';
 import { toast } from 'sonner';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function SettingsPage() {
     const { user, company, updatePreferences, refreshCompany } = useAuth();
