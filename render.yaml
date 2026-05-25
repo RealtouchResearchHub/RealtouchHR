@@ -1,11 +1,9 @@
 services:
-  # ── Backend (FastAPI) ─────────────────────────────────────────────────────
   - type: web
-    name: realtouchhr-backend
+    name: realtouchhr
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT
     plan: free
     envVars:
       # Supabase
@@ -16,17 +14,20 @@ services:
       # Auth
       - key: JWT_SECRET
         generateValue: true
-      # App URLs — set APP_URL to your Render frontend URL after first deploy
+      # Set both to your Render service URL: https://realtouchhr.onrender.com
       - key: APP_URL
         sync: false
       - key: PUBLIC_APP_URL
         sync: false
-      # Google OAuth
-      - key: GOOGLE_API_KEY
+      # React — set to same Render URL so frontend calls the right backend
+      - key: REACT_APP_BACKEND_URL
         sync: false
+      # Google OAuth
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_API_KEY
         sync: false
       # Stripe
       - key: STRIPE_API_KEY
@@ -46,26 +47,10 @@ services:
         value: RealtouchHR
       - key: PLATFORM_ADMINS
         sync: false
-      # HMRC / RTI (keep false until ready for live)
+      # HMRC / RTI
       - key: RTI_LIVE_SUBMISSION_ENABLED
         value: "false"
       - key: RTI_AUTO_PREPARE_ENABLED
         value: "false"
       - key: RTI_SYNC_MODE
         value: sandbox
-
-  # ── Frontend (React static site) ─────────────────────────────────────────
-  - type: static
-    name: realtouchhr-frontend
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./build
-    plan: free
-    envVars:
-      # Set this to your backend Render URL, e.g. https://realtouchhr-backend.onrender.com
-      - key: REACT_APP_BACKEND_URL
-        sync: false
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html

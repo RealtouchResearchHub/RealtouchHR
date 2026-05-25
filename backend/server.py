@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
-from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -2995,3 +2996,17 @@ async def shutdown_db_client():
     except Exception:
         pass
     client.close()
+
+# Serve React frontend — only active after `npm run build` has run
+FRONTEND_BUILD = ROOT_DIR.parent / "frontend" / "build"
+if FRONTEND_BUILD.exists():
+    _static_dir = FRONTEND_BUILD / "static"
+    if _static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(_static_dir)), name="react-static")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        candidate = FRONTEND_BUILD / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(FRONTEND_BUILD / "index.html"))
