@@ -491,6 +491,19 @@ class SelfServicePayslip(BaseModel):
     net_pay: float
     status: str
 
+# ==================== HEALTH CHECK ====================
+
+@api_router.get("/health")
+async def health_check():
+    """Returns DB connectivity status — useful for diagnosing deployment issues."""
+    checks: dict = {"api": "ok", "db": "unknown", "supabase_url_set": bool(os.environ.get("SUPABASE_URL"))}
+    try:
+        await db.users.find_one({"_probe": True}, {"_id": 1})
+        checks["db"] = "ok"
+    except Exception as e:
+        checks["db"] = f"error: {str(e)[:200]}"
+    return checks
+
 # ==================== AUTH HELPERS ====================
 
 def create_jwt_token(user_id: str, email: str) -> str:
@@ -519,9 +532,14 @@ async def get_current_user(request: Request) -> User:
     
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Check session in database
-    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+
+    # Check session in database — wrapped so a DB outage falls through to JWT decode
+    session = None
+    try:
+        session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    except Exception as db_err:
+        logger.warning("Session DB lookup failed, falling back to JWT decode: %s", db_err)
+
     if not session:
         # Try JWT token
         try:
@@ -3004,7 +3022,6 @@ async def shutdown_db_client():
         stop_scheduler()
     except Exception:
         pass
-    client.close()
 
 # Serve React frontend — only active after `npm run build` has run
 FRONTEND_BUILD = ROOT_DIR.parent / "frontend" / "build"
