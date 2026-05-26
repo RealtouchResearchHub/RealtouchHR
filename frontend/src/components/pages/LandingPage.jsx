@@ -48,7 +48,7 @@ export default function LandingPage() {
             <header className="border-b border-white/5 backdrop-blur-md bg-slate-950/30">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center">
-                        <img src="/logo.png" alt="RealtouchHR" className="h-9 w-auto" />
+                        <img src="/logo-dark.png" alt="RealtouchHR" className="h-9 w-auto" />
                     </div>
                     <nav className="hidden md:flex items-center gap-6 text-sm">
                         <a href="#features" className="text-white/80 hover:text-white transition">Features</a>
