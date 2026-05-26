@@ -63,7 +63,7 @@ export default function LoginPage() {
             <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 to-purple-700 p-12 flex-col justify-between text-white">
                 <div>
                     <div className="flex items-center">
-                        <img src="/logo-dark.png" alt="RealtouchHR" className="h-11 w-auto" />
+                        <img src="/logo-dark.png" alt="RealtouchHR" className="h-12 lg:h-16 w-auto" />
                     </div>
                 </div>
                 
@@ -97,8 +97,8 @@ export default function LoginPage() {
                 <Card className="w-full max-w-md border-0 shadow-none lg:shadow-lg lg:border">
                     <CardHeader className="text-center space-y-2">
                         <div className="lg:hidden flex items-center justify-center mb-4">
-                            <img src="/logo-white.png" alt="RealtouchHR" className="h-9 w-auto block dark:hidden" />
-                            <img src="/logo-dark.png" alt="RealtouchHR" className="h-9 w-auto hidden dark:block" />
+                            <img src="/logo-white.png" alt="RealtouchHR" className="h-10 sm:h-12 w-auto block dark:hidden" />
+                            <img src="/logo-dark.png" alt="RealtouchHR" className="h-10 sm:h-12 w-auto hidden dark:block" />
                         </div>
                         <CardTitle className="text-2xl font-bold font-['Plus_Jakarta_Sans']">Welcome back</CardTitle>
                         <CardDescription>Sign in to your account to continue</CardDescription>
