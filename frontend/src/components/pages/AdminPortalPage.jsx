@@ -17,18 +17,46 @@ import { toast } from 'sonner';
 import {
     Users, UserPlus, Shield, Trash2, Clock, Mail, Send,
     Loader2, AlertTriangle, Key, Activity, RefreshCw, Copy, Download, Lock,
+    LayoutDashboard, Settings, Package, Star, Bell, Building2, CreditCard,
+    CheckCircle2, XCircle, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { Switch } from '../ui/switch';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const ROLES = [
-    { id: 'admin', label: 'Administrator', desc: 'Full system access (except billing & ownership transfer)' },
-    { id: 'hr_manager', label: 'HR Manager', desc: 'Manage employees, leave, documents, UKVI' },
-    { id: 'payroll_admin', label: 'Payroll Admin', desc: 'Run payroll, manage RTI, compliance' },
-    { id: 'manager', label: 'Line Manager', desc: 'Approve team leave and timesheets' },
-    { id: 'employee', label: 'Employee', desc: 'Self-service access only' },
-    { id: 'viewer', label: 'Viewer', desc: 'Read-only access' },
+    { id: 'owner', label: 'Owner', desc: 'Full platform control including billing and danger zone', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-200' },
+    { id: 'admin', label: 'Administrator', desc: 'Full system access except billing ownership transfer', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200' },
+    { id: 'hr_admin', label: 'HR Admin', desc: 'Manage employees, leave, documents, UKVI', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200' },
+    { id: 'hr_manager', label: 'HR Manager', desc: 'View and manage HR records, approve leave', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200' },
+    { id: 'payroll_admin', label: 'Payroll Admin', desc: 'Run payroll, manage RTI, HMRC submissions', color: 'bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' },
+    { id: 'compliance_manager', label: 'Compliance Manager', desc: 'UKVI compliance, right to work, audit logs', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' },
+    { id: 'manager', label: 'Line Manager', desc: 'Approve team leave, timesheets, and performance', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' },
+    { id: 'auditor', label: 'Auditor', desc: 'Read-only access to audit logs and reports', color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-200' },
+    { id: 'employee', label: 'Employee', desc: 'Self-service portal access only', color: 'bg-stone-100 text-stone-800 dark:bg-stone-900/40 dark:text-stone-200' },
+    { id: 'viewer', label: 'Viewer', desc: 'Read-only access to basic data', color: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-200' },
+];
+
+const MODULES = [
+    { key: 'payroll', label: 'Payroll', desc: 'Pay runs, payslips, PAYE calculations' },
+    { key: 'hmrc_rti', label: 'HMRC RTI', desc: 'Real Time Information FPS/EPS submissions' },
+    { key: 'ukvi_compliance', label: 'UKVI Compliance', desc: 'Visa tracking, RTW checks, CoS register' },
+    { key: 'leave_management', label: 'Leave Management', desc: 'Leave requests, balances, approvals' },
+    { key: 'performance', label: 'Performance', desc: 'Appraisals, objectives, reviews' },
+    { key: 'training', label: 'Training', desc: 'Course catalogue and completion tracking' },
+    { key: 'documents', label: 'Documents', desc: 'Document management and e-signatures' },
+    { key: 'time_tracking', label: 'Time Tracking', desc: 'Timesheets, clock-in/out, shifts' },
+    { key: 'hr_analytics', label: 'HR Analytics', desc: 'Workforce reports and data insights' },
+    { key: 'gdpr', label: 'GDPR Centre', desc: 'DSAR, DPIA, breach reporting, processors' },
+];
+
+const PREMIUM_FEATURES = [
+    { key: 'ukvi_compliance_scanner', label: 'UKVI Compliance Scanner', desc: '2 automated scans per billing month', plans: 'All plans' },
+    { key: 'ukvi_report_download', label: 'UKVI Report Downloads', desc: 'PDF/DOCX compliance reports', plans: 'Professional + Enterprise' },
+    { key: 'hmrc_rti', label: 'HMRC RTI Submissions', desc: 'FPS/EPS live submission to HMRC', plans: 'Professional + Enterprise' },
+    { key: 'enterprise_multi_entity', label: 'Multi-Entity Support', desc: 'Manage multiple companies', plans: 'Enterprise' },
+    { key: 'enterprise_sso', label: 'SSO / SAML', desc: 'Single sign-on via SCIM/SAML', plans: 'Enterprise' },
+    { key: 'ai_copilot', label: 'AI Copilot', desc: 'AI-powered HR assistant', plans: 'All plans' },
 ];
 
 export default function AdminPortalPage() {
@@ -42,6 +70,8 @@ export default function AdminPortalPage() {
     const [securityPolicy, setSecurityPolicy] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
     const [sending, setSending] = useState(false);
+    const [companyModules, setCompanyModules] = useState([]);
+    const [moduleTogglingKey, setModuleTogglingKey] = useState(null);
 
     const token = () => localStorage.getItem('token');
 
@@ -49,20 +79,36 @@ export default function AdminPortalPage() {
         setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token()}` };
-            const [uRes, iRes, aRes, sRes] = await Promise.all([
+            const [uRes, iRes, aRes, sRes, mRes] = await Promise.all([
                 axios.get(`${API_URL}/api/users`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/users/invites`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/enterprise/audit-log?limit=50`, { headers, withCredentials: true }).catch(() => ({ data: { audit_log: [] } })),
                 axios.get(`${API_URL}/api/company/security-policy`, { headers, withCredentials: true }).catch(() => null),
+                axios.get(`${API_URL}/api/admin/modules`, { headers, withCredentials: true }).catch(() => ({ data: { modules: [] } })),
             ]);
             setUsers(uRes.data.users || []);
             setInvites(iRes.data.invites || []);
             setAuditLog(aRes.data.audit_log || aRes.data.logs || []);
             if (sRes) setSecurityPolicy(sRes.data);
+            setCompanyModules(mRes.data.modules || []);
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Failed to load admin data');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleModule = async (moduleKey, enabled) => {
+        setModuleTogglingKey(moduleKey);
+        try {
+            const headers = { Authorization: `Bearer ${token()}` };
+            await axios.patch(`${API_URL}/api/admin/modules/${moduleKey}`, { module_key: moduleKey, enabled }, { headers, withCredentials: true });
+            setCompanyModules(prev => prev.map(m => m.key === moduleKey ? { ...m, enabled } : m));
+            toast.success(`${moduleKey.replace('_', ' ')} ${enabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            toast.error(e.response?.data?.detail || 'Module toggle failed');
+        } finally {
+            setModuleTogglingKey(null);
         }
     };
 
@@ -193,15 +239,84 @@ export default function AdminPortalPage() {
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
                 </div>
             ) : (
-                <Tabs defaultValue="team" className="space-y-4">
-                    <TabsList>
-                        <TabsTrigger value="team" data-testid="tab-team"><Users className="w-4 h-4 mr-2" /> Team ({users.length})</TabsTrigger>
-                        <TabsTrigger value="invites" data-testid="tab-invites"><Mail className="w-4 h-4 mr-2" /> Invites ({invites.filter(i => i.status === 'pending').length})</TabsTrigger>
-                        <TabsTrigger value="audit" data-testid="tab-audit"><Activity className="w-4 h-4 mr-2" /> Audit Log</TabsTrigger>
-                        <TabsTrigger value="security" data-testid="tab-security-policy"><Lock className="w-4 h-4 mr-2" /> Security</TabsTrigger>
-                        <TabsTrigger value="data" data-testid="tab-data"><Download className="w-4 h-4 mr-2" /> Data export</TabsTrigger>
-                        <TabsTrigger value="danger" data-testid="tab-danger"><AlertTriangle className="w-4 h-4 mr-2" /> Danger Zone</TabsTrigger>
+                <Tabs defaultValue="overview" className="space-y-4">
+                    <TabsList className="flex-wrap h-auto gap-1">
+                        <TabsTrigger value="overview" data-testid="tab-overview"><LayoutDashboard className="w-3.5 h-3.5 mr-1.5" /> Overview</TabsTrigger>
+                        <TabsTrigger value="team" data-testid="tab-team"><Users className="w-3.5 h-3.5 mr-1.5" /> Team</TabsTrigger>
+                        <TabsTrigger value="invites" data-testid="tab-invites"><Mail className="w-3.5 h-3.5 mr-1.5" /> Invites</TabsTrigger>
+                        <TabsTrigger value="roles" data-testid="tab-roles"><Shield className="w-3.5 h-3.5 mr-1.5" /> Roles & Permissions</TabsTrigger>
+                        <TabsTrigger value="modules" data-testid="tab-modules"><Package className="w-3.5 h-3.5 mr-1.5" /> Modules</TabsTrigger>
+                        <TabsTrigger value="premium" data-testid="tab-premium"><Star className="w-3.5 h-3.5 mr-1.5" /> Premium Features</TabsTrigger>
+                        <TabsTrigger value="security" data-testid="tab-security-policy"><Lock className="w-3.5 h-3.5 mr-1.5" /> Security</TabsTrigger>
+                        <TabsTrigger value="audit" data-testid="tab-audit"><Activity className="w-3.5 h-3.5 mr-1.5" /> Audit Log</TabsTrigger>
+                        <TabsTrigger value="data" data-testid="tab-data"><Download className="w-3.5 h-3.5 mr-1.5" /> Data Export</TabsTrigger>
+                        <TabsTrigger value="notifications" data-testid="tab-notifications"><Bell className="w-3.5 h-3.5 mr-1.5" /> Alerts</TabsTrigger>
+                        <TabsTrigger value="company" data-testid="tab-company"><Building2 className="w-3.5 h-3.5 mr-1.5" /> Company</TabsTrigger>
+                        <TabsTrigger value="billing" data-testid="tab-billing"><CreditCard className="w-3.5 h-3.5 mr-1.5" /> Billing</TabsTrigger>
+                        <TabsTrigger value="danger" data-testid="tab-danger"><AlertTriangle className="w-3.5 h-3.5 mr-1.5" /> Danger Zone</TabsTrigger>
                     </TabsList>
+
+                    {/* OVERVIEW TAB */}
+                    <TabsContent value="overview">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/40 flex items-center justify-center">
+                                            <Users className="w-5 h-5 text-indigo-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">Team Members</p>
+                                            <p className="text-2xl font-bold">{users.length}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center">
+                                            <Mail className="w-5 h-5 text-amber-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">Pending Invites</p>
+                                            <p className="text-2xl font-bold">{invites.filter(i => i.status === 'pending').length}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center">
+                                            <Activity className="w-5 h-5 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">Audit Events (last 50)</p>
+                                            <p className="text-2xl font-bold">{auditLog.length}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                        <Card className="mt-4">
+                            <CardHeader>
+                                <CardTitle className="text-base">Quick Actions</CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {[
+                                    { label: 'Invite a team member', icon: <UserPlus className="w-4 h-4" />, action: () => setInviteDialogOpen(true) },
+                                    { label: 'View audit log', icon: <Activity className="w-4 h-4" />, action: () => document.querySelector('[data-testid="tab-audit"]')?.click() },
+                                    { label: 'Security settings', icon: <Lock className="w-4 h-4" />, action: () => document.querySelector('[data-testid="tab-security-policy"]')?.click() },
+                                    { label: 'Export company data', icon: <Download className="w-4 h-4" />, action: downloadCompanyData },
+                                ].map((a, i) => (
+                                    <Button key={i} variant="outline" className="justify-start" onClick={a.action}>
+                                        {a.icon} <span className="ml-2">{a.label}</span>
+                                    </Button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
 
                     {/* TEAM TAB */}
                     <TabsContent value="team">
@@ -308,6 +423,101 @@ export default function AdminPortalPage() {
                         </Card>
                     </TabsContent>
 
+                    {/* ROLES & PERMISSIONS TAB */}
+                    <TabsContent value="roles">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Roles & Permissions</CardTitle>
+                                <CardDescription>
+                                    RealtouchHR uses role-based access control (RBAC). Each user is assigned one role.
+                                    The Owner cannot be changed. Change roles in the Team tab.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {ROLES.map((r) => (
+                                    <div key={r.id} className="flex items-start gap-4 p-4 rounded-lg border">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${r.color}`}>
+                                            {r.label}
+                                        </span>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">{r.desc}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                {users.filter(u => u.role === r.id).length} user(s) with this role
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* MODULES & FEATURES TAB */}
+                    <TabsContent value="modules">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Modules & Features</CardTitle>
+                                <CardDescription>
+                                    Enable or disable modules for your company. Disabled modules are hidden in navigation and blocked at the API level. Changes are audit-logged.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {(companyModules.length > 0 ? companyModules : MODULES.map(m => ({ ...m, enabled: true }))).map((mod) => (
+                                    <div key={mod.key} className="flex items-center justify-between p-4 rounded-lg border">
+                                        <div>
+                                            <p className="font-medium text-sm">{mod.label}</p>
+                                            <p className="text-xs text-muted-foreground">{mod.desc || ''}</p>
+                                            {mod.plan_required && (
+                                                <span className="text-xs text-indigo-600 mt-0.5">Requires: {mod.plan_required} plan</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {mod.enabled
+                                                ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                                : <XCircle className="w-4 h-4 text-rose-400" />}
+                                            <span className={`text-xs ${mod.enabled ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                {mod.enabled ? 'Enabled' : 'Disabled'}
+                                            </span>
+                                            <Switch
+                                                checked={mod.enabled}
+                                                disabled={moduleTogglingKey === mod.key}
+                                                onCheckedChange={(checked) => toggleModule(mod.key, checked)}
+                                                data-testid={`module-toggle-${mod.key}`}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* PREMIUM FEATURES TAB */}
+                    <TabsContent value="premium">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Premium Features</CardTitle>
+                                <CardDescription>
+                                    Features available on specific subscription plans. Upgrade your plan in Billing to unlock more features.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {PREMIUM_FEATURES.map((f) => (
+                                    <div key={f.key} className="flex items-start justify-between p-4 rounded-lg border">
+                                        <div className="flex items-start gap-3">
+                                            <Star className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                                            <div>
+                                                <p className="font-medium text-sm">{f.label}</p>
+                                                <p className="text-xs text-muted-foreground">{f.desc}</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full flex-shrink-0">
+                                            {f.plans}
+                                        </span>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
                     {/* AUDIT TAB */}
                     <TabsContent value="audit">
                         <Card>
@@ -409,6 +619,109 @@ export default function AdminPortalPage() {
                                     {exportLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                                     Download full export (.json)
                                 </Button>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* NOTIFICATIONS TAB */}
+                    <TabsContent value="notifications">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Notifications & Alerts</CardTitle>
+                                <CardDescription>
+                                    Configure which events trigger notifications for your team.
+                                    Notifications are sent in-app and optionally by email.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {[
+                                    { label: 'UKVI alert raised', desc: 'When a new compliance alert is triggered for a visa holder' },
+                                    { label: 'Visa expiry within 90 days', desc: 'Alert HR when an employee\'s visa is about to expire' },
+                                    { label: 'Right to Work expiry within 60 days', desc: 'Remind HR to re-verify time-limited RTW documents' },
+                                    { label: 'RTI submission accepted/rejected', desc: 'Notify payroll admin of HMRC response' },
+                                    { label: 'New employee onboarding complete', desc: 'Alert HR when all readiness flags are green' },
+                                    { label: 'Leave request pending approval', desc: 'Notify line managers of pending leave requests' },
+                                ].map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
+                                        <div>
+                                            <p className="text-sm font-medium">{item.label}</p>
+                                            <p className="text-xs text-muted-foreground">{item.desc}</p>
+                                        </div>
+                                        <Switch defaultChecked={true} />
+                                    </div>
+                                ))}
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Full notification webhook configuration is available in Settings → Integrations.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* COMPANY SETTINGS TAB */}
+                    <TabsContent value="company">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Company Settings</CardTitle>
+                                <CardDescription>
+                                    Core company configuration — HMRC references, payroll frequency, and compliance settings.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    {[
+                                        { label: 'PAYE Reference', desc: 'Required for HMRC RTI submissions' },
+                                        { label: 'Accounts Office Reference', desc: 'For employer payment summaries' },
+                                        { label: 'Payroll Frequency', desc: 'Monthly, weekly, or bi-weekly' },
+                                        { label: 'Sponsor Licence Number', desc: 'Required if you employ sponsored workers' },
+                                        { label: 'Sponsor Licence Expiry', desc: 'Alert before expiry to avoid compliance gaps' },
+                                        { label: 'Company Currency', desc: 'Default currency for salaries and payroll' },
+                                    ].map((s, i) => (
+                                        <div key={i} className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-900/30">
+                                            <p className="font-medium text-sm">{s.label}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{s.desc}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    Edit company settings in <strong>Settings → Company Profile</strong>.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* BILLING TAB */}
+                    <TabsContent value="billing">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Billing & Subscription</CardTitle>
+                                <CardDescription>Manage your subscription plan and view payment history.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {[
+                                        { label: 'Starter', price: '£29', employees: '10', features: 'Core HR, Payroll, UKVI Scanner' },
+                                        { label: 'Professional', price: '£39', employees: '50', features: '+ HMRC RTI, UKVI Reports, Analytics' },
+                                        { label: 'Enterprise', price: '£129', employees: 'Unlimited', features: '+ Multi-entity, SSO, Dedicated support' },
+                                    ].map((plan) => (
+                                        <div key={plan.label} className="p-4 rounded-lg border text-center">
+                                            <p className="font-bold">{plan.label}</p>
+                                            <p className="text-2xl font-bold text-indigo-600 mt-1">{plan.price}<span className="text-sm text-muted-foreground font-normal">/mo</span></p>
+                                            <p className="text-xs text-muted-foreground mt-1">Up to {plan.employees} employees</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{plan.features}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-start mt-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => window.location.href = '/billing'}
+                                    >
+                                        <CreditCard className="w-4 h-4 mr-2" /> Go to full Billing page
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Payslip PDF downloads are £5 per payslip (preview free). UKVI scans: 2 per billing month on all plans.
+                                </p>
                             </CardContent>
                         </Card>
                     </TabsContent>

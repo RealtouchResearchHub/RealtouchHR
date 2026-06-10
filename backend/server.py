@@ -979,7 +979,20 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
 async def create_employee(data: EmployeeCreate, user: User = Depends(get_current_user)):
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
+    # Duplicate detection: warn if same email or NI number already exists in this company
+    dup_query: dict = {"company_id": user.company_id}
+    or_clauses = [{"email": data.email}]
+    if data.ni_number:
+        or_clauses.append({"ni_number": data.ni_number})
+    dup_query["$or"] = or_clauses
+    existing = await db.employees.find_one(dup_query, {"_id": 0, "employee_id": 1, "first_name": 1, "last_name": 1})
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A duplicate employee may already exist: {existing.get('first_name')} {existing.get('last_name')} ({existing.get('employee_id')}). Check existing records before adding."
+        )
+
     employee_id = f"emp_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
@@ -1066,7 +1079,41 @@ async def update_employee(employee_id: str, data: dict, user: User = Depends(get
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
-    allowed_fields = ["first_name", "last_name", "email", "job_title", "department", "start_date", "salary", "ni_number", "tax_code", "bank_account", "bank_sort_code", "status", "ni_letter", "immigration_status", "student_loan_plan", "has_postgrad_loan", "pension_enrolled", "leaving_date", "termination_reason"]
+    allowed_fields = [
+        # Personal
+        "title", "first_name", "middle_name", "last_name", "preferred_name",
+        "date_of_birth", "gender", "nationality", "ni_number", "picture",
+        # Contact
+        "email", "work_email", "phone", "mobile_phone", "alternative_phone",
+        "address_line1", "address_line2", "town", "county", "postcode", "country",
+        "address",
+        # Employment
+        "job_title", "department", "work_location", "line_manager_id",
+        "employment_type", "contract_type",
+        "start_date", "end_date", "probation_period", "probation_end_date",
+        "working_pattern", "weekly_hours", "notice_period",
+        "reason_for_leaving", "leaving_date", "termination_reason",
+        # Payroll
+        "payroll_status", "pay_frequency", "salary_type", "salary",
+        "ni_category", "ni_letter", "tax_code",
+        "student_loan", "student_loan_plan", "has_postgrad_loan", "postgraduate_loan",
+        "pension_enrolled", "pension_status", "auto_enrolment_status",
+        "director_payroll", "payroll_start_date", "starter_declaration",
+        # Bank
+        "bank_account", "bank_sort_code", "bank_name", "bank_account_holder",
+        "account_holder_name", "building_society_roll", "payment_reference", "payment_method",
+        # RTW / UKVI
+        "right_to_work_status", "rtw_check_date", "rtw_expiry_date",
+        "rtw_followup_date", "rtw_document_type",
+        "is_sponsored_worker", "cos_number", "soc_code", "visa_type",
+        "visa_expiry_date", "cos_salary", "cos_job_title", "cos_work_location",
+        "sponsorship_start_date", "sponsorship_end_date",
+        # Emergency contact (simple fields)
+        "emergency_name", "emergency_relationship", "emergency_phone",
+        "emergency_alt_phone", "emergency_email", "emergency_contact",
+        # Lifecycle / misc
+        "status", "immigration_status", "custom_fields",
+    ]
     update_fields = {k: v for k, v in data.items() if k in allowed_fields}
     update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     
@@ -1084,8 +1131,322 @@ async def update_employee(employee_id: str, data: dict, user: User = Depends(get
     
     await db.employees.update_one({"employee_id": employee_id, "company_id": user.company_id}, {"$set": update_fields})
     await create_audit_entry(user.company_id, user, "update", "employee", employee_id, update_fields)
-    
+
     return {"message": "Employee updated"}
+
+
+# ==================== EMPLOYEE LIFECYCLE & READINESS ====================
+
+VALID_EMPLOYEE_STATUSES = {
+    "draft", "onboarding", "active", "on_leave",
+    "suspended", "notice_period", "leaver", "archived",
+}
+
+
+@api_router.post("/employees/{employee_id}/lifecycle")
+async def change_employee_lifecycle(
+    employee_id: str,
+    data: dict,
+    user: User = Depends(get_current_user),
+):
+    """Change an employee's lifecycle status with immutable history record."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    if user.role not in ("owner", "admin", "hr_admin", "payroll_admin"):
+        raise HTTPException(status_code=403, detail="HR Admin or above required")
+
+    new_status = (data.get("new_status") or data.get("status") or "").lower()
+    if new_status not in VALID_EMPLOYEE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(sorted(VALID_EMPLOYEE_STATUSES))}"
+        )
+
+    emp = await db.employees.find_one(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    previous_status = emp.get("status", "active")
+    now_ts = datetime.now(timezone.utc).isoformat()
+
+    # Record immutable history
+    await db.employee_status_history.insert_one({
+        "record_id": f"esh_{uuid.uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "employee_id": employee_id,
+        "previous_status": previous_status,
+        "new_status": new_status,
+        "changed_by": user.user_id,
+        "reason": data.get("reason"),
+        "created_at": now_ts,
+    })
+
+    update: dict = {"status": new_status, "updated_at": now_ts}
+    if new_status == "leaver":
+        update["end_date"] = data.get("end_date") or now_ts[:10]
+    if new_status == "archived":
+        update["archived_at"] = now_ts
+
+    await db.employees.update_one(
+        {"employee_id": employee_id, "company_id": user.company_id},
+        {"$set": update},
+    )
+    await create_audit_entry(user.company_id, user, "lifecycle_change", "employee", employee_id,
+                             {"from": previous_status, "to": new_status, "reason": data.get("reason")})
+
+    return {"message": f"Employee status changed to {new_status}", "previous_status": previous_status}
+
+
+@api_router.post("/employees/{employee_id}/archive")
+async def archive_employee(
+    employee_id: str,
+    data: dict,
+    user: User = Depends(get_current_user),
+):
+    """Soft-archive an employee (no hard deletes from UI)."""
+    if user.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owner or admin can archive employees")
+    data["status"] = "archived"
+    return await change_employee_lifecycle(employee_id, data, user)
+
+
+@api_router.get("/employees/{employee_id}/readiness")
+async def get_employee_readiness(employee_id: str, user: User = Depends(get_current_user)):
+    """
+    Compute and return employee readiness flags:
+      hr_profile_ready, payroll_ready, rti_ready,
+      right_to_work_ready, ukvi_ready, documents_ready
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    emp = await db.employees.find_one(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    issues = []
+
+    # HR Profile Ready: name, email, job title, department, start date
+    hr_ready = all([emp.get("first_name"), emp.get("last_name"), emp.get("email"),
+                    emp.get("job_title"), emp.get("start_date")])
+    if not hr_ready:
+        missing = [f for f in ["first_name", "last_name", "email", "job_title", "start_date"] if not emp.get(f)]
+        issues.append({"flag": "hr_profile_ready", "message": f"Missing: {', '.join(missing)}"})
+
+    # Payroll Ready: NI number, tax code, salary, bank details
+    payroll_ready = all([emp.get("ni_number"), emp.get("tax_code"), emp.get("salary"),
+                         emp.get("bank_account"), emp.get("bank_sort_code")])
+    if not payroll_ready:
+        missing = [f for f in ["ni_number", "tax_code", "salary", "bank_account", "bank_sort_code"] if not emp.get(f)]
+        issues.append({"flag": "payroll_ready", "message": f"Missing payroll data: {', '.join(missing)}"})
+
+    # RTI Ready: NI number + tax code (minimum for RTI)
+    rti_ready = bool(emp.get("ni_number") and emp.get("tax_code"))
+    if not rti_ready:
+        issues.append({"flag": "rti_ready", "message": "NI number and tax code required for RTI"})
+
+    # Right to Work Ready: RTW check on file
+    rtw_records = await db.rtw_checks.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    ).to_list(10)
+    rtw_ready = bool(emp.get("right_to_work") or rtw_records)
+    if not rtw_ready:
+        issues.append({"flag": "right_to_work_ready", "message": "No Right to Work check recorded"})
+
+    # UKVI Ready: if sponsored, must have visa type + expiry + CoS
+    vt = (emp.get("visa_type") or "").lower()
+    is_sponsored = any(sv in vt for sv in ["skilled", "tier 2", "t2", "health", "intra"])
+    if is_sponsored:
+        cos_records = await db.certificates_of_sponsorship.find(
+            {"employee_id": employee_id, "company_id": user.company_id, "status": "active"}, {"_id": 0}
+        ).to_list(5)
+        ukvi_ready = bool(emp.get("visa_type") and emp.get("visa_expiry") and cos_records)
+        if not ukvi_ready:
+            issues.append({"flag": "ukvi_ready", "message": "Sponsored employee missing visa details or CoS"})
+    else:
+        ukvi_ready = True
+
+    # Documents Ready: at least one document uploaded
+    docs = await db.documents.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    ).limit(1).to_list(1)
+    docs_ready = bool(docs)
+    if not docs_ready:
+        issues.append({"flag": "documents_ready", "message": "No documents uploaded for this employee"})
+
+    readiness = {
+        "employee_id": employee_id,
+        "hr_profile_ready": hr_ready,
+        "payroll_ready": payroll_ready,
+        "rti_ready": rti_ready,
+        "right_to_work_ready": rtw_ready,
+        "ukvi_ready": ukvi_ready,
+        "documents_ready": docs_ready,
+        "overall_ready": all([hr_ready, payroll_ready, rti_ready, rtw_ready, ukvi_ready]),
+        "readiness_issues": issues,
+    }
+
+    # Persist/update readiness check record
+    await db.employee_readiness_checks.update_one(
+        {"employee_id": employee_id},
+        {"$set": {**readiness, "company_id": user.company_id,
+                  "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+
+    return readiness
+
+
+@api_router.get("/employees/{employee_id}/status-history")
+async def get_employee_status_history(employee_id: str, user: User = Depends(get_current_user)):
+    """Get immutable lifecycle status change history for an employee."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    emp = await db.employees.find_one(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    history = await db.employee_status_history.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0},
+        sort=[("created_at", -1)],
+    ).to_list(100)
+    return {"employee_id": employee_id, "history": history}
+
+
+@api_router.get("/employees/{employee_id}/audit-log")
+async def get_employee_audit_log(employee_id: str, user: User = Depends(get_current_user)):
+    """Get the audit log for a specific employee (admin/hr only)."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    if user.role not in ("owner", "admin", "hr_admin", "hr_manager", "auditor"):
+        raise HTTPException(status_code=403, detail="HR Admin or above required")
+    emp = await db.employees.find_one({"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    entries = await db.audit_log.find(
+        {"entity_id": employee_id, "company_id": user.company_id}, {"_id": 0},
+        sort=[("timestamp", -1)]
+    ).to_list(200)
+    return entries
+
+
+@api_router.get("/employees/{employee_id}/documents")
+async def get_employee_documents(employee_id: str, user: User = Depends(get_current_user)):
+    """Get documents for a specific employee."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    docs = await db.documents.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0},
+        sort=[("created_at", -1)]
+    ).to_list(500)
+    return docs
+
+
+@api_router.get("/employees/{employee_id}/emergency-contacts")
+async def get_employee_emergency_contacts(employee_id: str, user: User = Depends(get_current_user)):
+    """Get emergency contacts for a specific employee."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    # First try dedicated collection
+    contacts = await db.employee_emergency_contacts.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    ).to_list(10)
+    if contacts:
+        return contacts
+    # Fall back to fields on the employee record
+    emp = await db.employees.find_one(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0}
+    )
+    if not emp:
+        return []
+    # Construct from flat fields if present
+    result = []
+    if emp.get("emergency_name"):
+        result.append({
+            "name": emp.get("emergency_name"),
+            "relationship": emp.get("emergency_relationship"),
+            "phone": emp.get("emergency_phone"),
+            "alt_phone": emp.get("emergency_alt_phone"),
+            "email": emp.get("emergency_email"),
+            "is_primary": True,
+        })
+    return result
+
+
+@api_router.post("/employees/{employee_id}/notes")
+async def add_employee_note(employee_id: str, data: dict, user: User = Depends(get_current_user)):
+    """Add an internal HR note to an employee record (not visible to employee)."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    if user.role not in ("owner", "admin", "hr_admin", "hr_manager"):
+        raise HTTPException(status_code=403, detail="HR Manager or above required")
+    content = (data.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Note content is required")
+    note = {
+        "note_id": f"note_{uuid.uuid4().hex[:12]}",
+        "employee_id": employee_id,
+        "company_id": user.company_id,
+        "content": content,
+        "author": user.name,
+        "author_id": user.user_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "visibility": "hr_only",
+    }
+    await db.employee_notes.insert_one(note)
+    return {"message": "Note added", "note_id": note["note_id"]}
+
+
+@api_router.get("/employees/{employee_id}/notes")
+async def get_employee_notes(employee_id: str, user: User = Depends(get_current_user)):
+    """Get internal HR notes for an employee."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    if user.role not in ("owner", "admin", "hr_admin", "hr_manager"):
+        raise HTTPException(status_code=403, detail="HR Manager or above required")
+    notes = await db.employee_notes.find(
+        {"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0},
+        sort=[("created_at", -1)]
+    ).to_list(100)
+    return notes
+
+
+@api_router.get("/employees-export")
+async def export_employees(user: User = Depends(get_current_user)):
+    """Export all employees as CSV. Restricted and audit-logged."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    if user.role not in ("owner", "admin", "hr_admin"):
+        raise HTTPException(status_code=403, detail="HR Admin or above required to export employee data")
+    employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(10000)
+    await create_audit_entry(user.company_id, user, "export_employees", "employee", "all", {"count": len(employees)})
+    output = io.StringIO()
+    if not employees:
+        return StreamingResponse(iter([""]), media_type="text/csv")
+    fieldnames = [
+        "employee_id", "first_name", "last_name", "email", "job_title", "department",
+        "work_location", "status", "start_date", "contract_type", "employment_type",
+        "salary", "pay_frequency", "tax_code", "ni_category", "payroll_status",
+        "right_to_work_status", "is_sponsored_worker", "visa_expiry_date",
+        "payroll_ready", "rti_ready", "right_to_work_ready",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for emp in employees:
+        writer.writerow(emp)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=employees_{datetime.now().strftime('%Y%m%d')}.csv"}
+    )
+
 
 # ==================== LEAVE + DOCUMENTS ROUTES ====================
 # Moved to routes/leave.py and routes/documents.py during iter-13 refactor.

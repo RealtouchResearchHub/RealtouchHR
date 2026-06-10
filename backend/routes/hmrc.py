@@ -5,6 +5,7 @@ Full Payment Submission (FPS) and Employer Payment Summary (EPS)
 from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
+import hashlib
 import logging
 import os
 import sys
@@ -82,6 +83,9 @@ class PayrollHealthCheckResult(BaseModel):
     can_proceed: bool
 
 class EPSData(BaseModel):
+    eps_reason: Optional[str] = None          # e.g. 'no_payment', 'smp_recovery', 'final_submission'
+    test_mode: bool = True
+    no_payment_period: Optional[str] = None   # e.g. '2026-04'
     no_payment_dates: Optional[List[str]] = None
     period_of_inactivity: Optional[Dict[str, str]] = None
     smp_recovered: float = 0
@@ -90,6 +94,7 @@ class EPSData(BaseModel):
     shpp_recovered: float = 0
     nic_compensation: float = 0
     cis_deductions: float = 0
+    employment_allowance: bool = False
     final_submission: bool = False
     cessation_date: Optional[str] = None
 
@@ -727,6 +732,8 @@ async def submit_fps(
         "validation_errors": [],
         "validation_warnings": validation.get("warnings", []),
         "test_mode": request.test_mode,
+        "approved_by": user.user_id,
+        "approved_at": now.isoformat(),
         "created_by": user.user_id,
         "created_at": now.isoformat()
     }
@@ -742,11 +749,11 @@ async def submit_fps(
         xml_content = await hmrc_service.generate_fps_xml(
             company, payrun, employees, payslips, credentials
         )
-        
+        payload_hash = hashlib.sha256(xml_content.encode()).hexdigest()
         # Store XML for reference
         await db.rti_submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED}}
+            {"$set": {"xml_content": xml_content, "payload_hash": payload_hash, "status": RTIStatus.VALIDATED}}
         )
         
         # Submit to HMRC (test mode)
@@ -878,10 +885,10 @@ async def submit_eps(
         xml_content = await hmrc_service.generate_eps_xml(
             company, tax_month, tax_year, eps_data.dict(), credentials
         )
-        
+        payload_hash = hashlib.sha256(xml_content.encode()).hexdigest()
         await db.rti_submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {"xml_content": xml_content, "status": RTIStatus.VALIDATED}}
+            {"$set": {"xml_content": xml_content, "payload_hash": payload_hash, "status": RTIStatus.VALIDATED}}
         )
         
         # Submit (test mode only for now)
@@ -1007,4 +1014,278 @@ async def poll_submission_status(
         "submission_id": submission_id,
         "status": new_status,
         "hmrc_response": result
+    }
+
+
+# ===========================================================================
+# HMRC RTI CONFIGURATION — Sandbox / Production mode management
+# ===========================================================================
+
+class RTIConfigUpdate(BaseModel):
+    rti_mode: Optional[str] = None          # "sandbox" | "production"
+    gateway_user_id: Optional[str] = None
+    gateway_password: Optional[str] = None  # write-only; stored hashed
+    paye_reference: Optional[str] = None
+    accounts_office_ref: Optional[str] = None
+    employer_name: Optional[str] = None
+    employer_address: Optional[dict] = None
+    sender_id: Optional[str] = None
+
+
+GO_LIVE_CHECKLIST_ITEMS = [
+    {"key": "test_scenarios_passed", "label": "All 20 sandbox test scenarios passed (T01–T20)", "required": True},
+    {"key": "credentials_verified", "label": "Live Government Gateway credentials verified", "required": True},
+    {"key": "paye_reference_confirmed", "label": "PAYE reference confirmed with HMRC", "required": True},
+    {"key": "accounts_office_ref_confirmed", "label": "Accounts Office Reference confirmed", "required": True},
+    {"key": "employer_details_accurate", "label": "Employer name and address match HMRC records", "required": True},
+    {"key": "employee_data_validated", "label": "All employee NI numbers and tax codes validated", "required": True},
+    {"key": "first_fps_dry_run_passed", "label": "First FPS dry-run passed without errors", "required": True},
+    {"key": "eps_configuration_verified", "label": "EPS configuration tested in sandbox", "required": True},
+    {"key": "leaver_process_tested", "label": "Leaver FPS process tested", "required": True},
+    {"key": "p45_generation_verified", "label": "P45 generation verified", "required": True},
+    {"key": "bank_details_encrypted", "label": "Bank details encrypted at rest", "required": True},
+    {"key": "audit_trail_active", "label": "RTI audit trail confirmed active", "required": True},
+    {"key": "webhook_alerts_configured", "label": "Submission status webhook alerts configured", "required": False},
+    {"key": "team_briefed", "label": "Payroll team briefed on live RTI workflow", "required": False},
+    {"key": "rollback_plan_documented", "label": "Rollback plan documented in case of submission failure", "required": True},
+]
+
+
+async def _require_payroll_admin(request: Request) -> User:
+    """Require owner, admin, or payroll_admin role for RTI config."""
+    user = await get_current_user(request)
+    if user.role not in ("owner", "admin", "payroll_admin"):
+        raise HTTPException(status_code=403, detail="Payroll admin access required")
+    return user
+
+
+@router.get("/rti-config")
+async def get_rti_config(user: User = Depends(_require_payroll_admin)):
+    """
+    Get the company's HMRC RTI configuration.
+    Gateway password is never returned — only a boolean indicating if it is set.
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    cfg = await db.hmrc_rti_config.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+
+    # Mask sensitive fields — never return password hash; mask gateway_user_id to last 4 chars
+    safe = {k: v for k, v in cfg.items() if k not in ("gateway_password_hash",)}
+    safe["gateway_password_set"] = bool(cfg.get("gateway_password_hash"))
+    if safe.get("gateway_user_id") and len(safe["gateway_user_id"]) > 4:
+        uid = safe["gateway_user_id"]
+        safe["gateway_user_id_masked"] = f"{'*' * (len(uid) - 4)}{uid[-4:]}"
+    # Return the unmasked value for the form pre-fill (owner/admin can see it to edit)
+    # but flag that it's been set
+    safe.setdefault("rti_mode", "sandbox")
+    safe.setdefault("software_name", "RealtouchHR")
+
+    # Merge with go-live checklist — return as dict keyed by item key for easy frontend use
+    checklist_state = cfg.get("readiness_checklist") or {}
+    safe["go_live_checklist"] = {
+        item["key"]: bool(checklist_state.get(item["key"]))
+        for item in GO_LIVE_CHECKLIST_ITEMS
+    }
+    required_done = all(
+        checklist_state.get(i["key"])
+        for i in GO_LIVE_CHECKLIST_ITEMS
+        if i["required"]
+    )
+    safe["ready_for_go_live"] = required_done
+
+    return safe
+
+
+@router.put("/rti-config")
+async def update_rti_config(body: RTIConfigUpdate, user: User = Depends(_require_payroll_admin)):
+    """
+    Update HMRC RTI configuration.
+
+    SECURITY RULES enforced server-side:
+    - Switching to production mode requires all required go-live checklist items completed.
+    - Gateway password is hashed before storage; never exposed in responses or logs.
+    - Credentials must not appear in logs — this endpoint strips them before logging.
+    """
+    import bcrypt as _bcrypt
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    cfg = await db.hmrc_rti_config.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+    checklist_state = cfg.get("readiness_checklist") or {}
+
+    updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+
+    if body.rti_mode is not None:
+        if body.rti_mode not in ("sandbox", "production"):
+            raise HTTPException(status_code=400, detail="rti_mode must be 'sandbox' or 'production'")
+        if body.rti_mode == "production":
+            required_done = all(
+                checklist_state.get(i["key"])
+                for i in GO_LIVE_CHECKLIST_ITEMS
+                if i["required"]
+            )
+            if not required_done:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot switch to production mode: required go-live checklist items are not all completed."
+                )
+        updates["rti_mode"] = body.rti_mode
+
+    if body.gateway_user_id is not None:
+        updates["gateway_user_id"] = body.gateway_user_id
+
+    if body.gateway_password is not None:
+        # Hash before storing — never log the raw password
+        hashed = _bcrypt.hashpw(body.gateway_password.encode(), _bcrypt.gensalt()).decode()
+        updates["gateway_password_hash"] = hashed
+
+    for field in ("paye_reference", "accounts_office_ref", "employer_name", "employer_address", "sender_id"):
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+
+    existing = await db.hmrc_rti_config.find_one({"company_id": user.company_id}, {"_id": 0})
+    if existing:
+        await db.hmrc_rti_config.update_one({"company_id": user.company_id}, {"$set": updates})
+    else:
+        updates.update({
+            "config_id": f"rticfg_{uuid.uuid4().hex[:12]}",
+            "company_id": user.company_id,
+            "rti_mode": updates.get("rti_mode", "sandbox"),
+            "software_name": "RealtouchHR",
+            "go_live_approved": False,
+            "readiness_checklist": {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.hmrc_rti_config.insert_one(updates)
+
+    # Audit — exclude credentials from log details
+    await db.audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "user_id": user.user_id,
+        "action": "hmrc_rti_config_updated",
+        "entity_type": "hmrc_rti_config",
+        "entity_id": user.company_id,
+        "details": {
+            "fields_updated": [k for k in updates if k not in ("gateway_password_hash", "updated_at")],
+            "rti_mode": updates.get("rti_mode"),
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"message": "RTI configuration updated", "rti_mode": updates.get("rti_mode", cfg.get("rti_mode", "sandbox"))}
+
+
+class ChecklistItemUpdate(BaseModel):
+    completed: bool = True
+
+
+@router.patch("/rti-config/checklist/{item_key}")
+async def update_go_live_checklist_item(
+    item_key: str,
+    body: ChecklistItemUpdate = ChecklistItemUpdate(),
+    user: User = Depends(_require_payroll_admin),
+):
+    """
+    Toggle a go-live checklist item. Returns updated checklist so UI can sync.
+    Only owners and admins may approve checklist items.
+    """
+    if user.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owner or admin can approve go-live checklist items")
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    valid_keys = {i["key"] for i in GO_LIVE_CHECKLIST_ITEMS}
+    if item_key not in valid_keys:
+        raise HTTPException(status_code=400, detail=f"Unknown checklist item: {item_key}")
+
+    cfg = await db.hmrc_rti_config.find_one({"company_id": user.company_id}, {"_id": 0})
+    if cfg:
+        checklist = cfg.get("readiness_checklist") or {}
+        # Toggle: if no body provided (bare PATCH), flip the current value
+        current = checklist.get(item_key, False)
+        checklist[item_key] = not current
+        await db.hmrc_rti_config.update_one(
+            {"company_id": user.company_id},
+            {"$set": {"readiness_checklist": checklist, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    else:
+        checklist = {item_key: True}
+        await db.hmrc_rti_config.insert_one({
+            "config_id": f"rticfg_{uuid.uuid4().hex[:12]}",
+            "company_id": user.company_id,
+            "rti_mode": "sandbox",
+            "software_name": "RealtouchHR",
+            "go_live_approved": False,
+            "readiness_checklist": checklist,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    return {"go_live_checklist": checklist}
+
+
+@router.post("/rti-config/test-connection")
+async def test_rti_connection(
+    user: User = Depends(_require_payroll_admin),
+):
+    """
+    Test the HMRC RTI configuration without submitting any payroll data.
+    Validates that credentials and PAYE references are present and correctly formatted.
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    cfg = await db.hmrc_rti_config.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+
+    issues = []
+
+    # Check gateway credentials
+    if not cfg.get("gateway_user_id"):
+        issues.append({"field": "gateway_user_id", "message": "Government Gateway User ID is not configured"})
+    if not cfg.get("gateway_password_hash"):
+        issues.append({"field": "gateway_password", "message": "Government Gateway Password is not configured"})
+
+    # Check PAYE reference (pattern: e.g. 123/AB12345)
+    import re
+    paye = company.get("paye_reference") or cfg.get("paye_reference") or ""
+    if not paye:
+        issues.append({"field": "paye_reference", "message": "PAYE Reference is missing — configure in Settings"})
+    elif not re.match(r"^\d{3}/[A-Z]{2}\d+$", paye.upper().replace(" ", "")):
+        issues.append({"field": "paye_reference", "message": f"PAYE Reference format looks incorrect: '{paye}'. Expected format: 123/AB12345"})
+
+    # Check Accounts Office Reference
+    aor = company.get("accounts_office_reference") or cfg.get("accounts_office_reference") or ""
+    if not aor:
+        issues.append({"field": "accounts_office_reference", "message": "Accounts Office Reference is missing — configure in Settings"})
+    elif len(aor.replace(" ", "")) < 13:
+        issues.append({"field": "accounts_office_reference", "message": "Accounts Office Reference appears too short"})
+
+    # Check employer name
+    employer_name = company.get("name") or ""
+    if not employer_name:
+        issues.append({"field": "employer_name", "message": "Employer name is missing from company profile"})
+
+    mode = cfg.get("rti_mode", "sandbox")
+    passed = len(issues) == 0
+
+    # Audit log
+    await db.audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "user_id": user.user_id,
+        "action": "HMRC_RTI_CONNECTION_TEST",
+        "entity_type": "hmrc_rti_config",
+        "details": {"passed": passed, "issues_count": len(issues), "mode": mode},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {
+        "passed": passed,
+        "mode": mode,
+        "issues": issues,
+        "message": "Configuration validated successfully — ready for sandbox testing." if passed else f"{len(issues)} configuration issue(s) found.",
     }

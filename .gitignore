@@ -43,3 +43,9 @@ Thumbs.db
 # Test artifacts
 test_reports/
 *.pyc
+
+# Claude / Emergent tooling
+.emergent/
+.claude/
+memory/
+.gitconfig

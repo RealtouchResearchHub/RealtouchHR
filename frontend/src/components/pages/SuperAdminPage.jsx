@@ -12,6 +12,8 @@ import {
     Search, Loader2, Activity, Sparkles, Eye, PowerOff, Package,
     ToggleLeft, CreditCard, Save, X, ChevronRight, CalendarPlus,
     UserX, UserCheck, Trash2, Flag, RefreshCw, Mail, Clock,
+    UserCog, Zap, PlusCircle, Lock, HeartPulse, CheckCircle2,
+    AlertCircle, XCircle, Server, LogOut,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -34,16 +36,26 @@ function StatusBadge({ c }) {
 
 export default function SuperAdminPage() {
     const { user } = useAuth();
-    const [metrics, setMetrics]       = useState(null);
-    const [companies, setCompanies]   = useState([]);
-    const [auditLog, setAuditLog]     = useState([]);
-    const [plans, setPlans]           = useState([]);
-    const [allUsers, setAllUsers]     = useState([]);
-    const [flags, setFlags]           = useState([]);
-    const [loading, setLoading]       = useState(true);
-    const [search, setSearch]         = useState('');
-    const [userSearch, setUserSearch] = useState('');
-    const [error, setError]           = useState(null);
+    const [metrics, setMetrics]           = useState(null);
+    const [companies, setCompanies]       = useState([]);
+    const [auditLog, setAuditLog]         = useState([]);
+    const [platformAuditLog, setPlatformAuditLog] = useState([]);
+    const [plans, setPlans]               = useState([]);
+    const [allUsers, setAllUsers]         = useState([]);
+    const [flags, setFlags]               = useState([]);
+    const [operators, setOperators]       = useState([]);
+    const [emergencyActions, setEmergencyActions] = useState([]);
+    const [loading, setLoading]           = useState(true);
+    const [search, setSearch]             = useState('');
+    const [userSearch, setUserSearch]     = useState('');
+    const [error, setError]               = useState(null);
+    const [newOperatorForm, setNewOperatorForm] = useState({ email: '', name: '', role: 'platform_support' });
+    const [securitySettings, setSecuritySettings] = useState(null);
+    const [designatedAdmins, setDesignatedAdmins] = useState([]);
+    const [securityForm, setSecurityForm]     = useState({});
+    const [savingSecSettings, setSavingSecSettings] = useState(false);
+    const [systemHealth, setSystemHealth]     = useState(null);
+    const [healthLoading, setHealthLoading]   = useState(false);
 
     // Dialogs
     const [moduleDialog, setModuleDialog]   = useState(null);
@@ -60,19 +72,21 @@ export default function SuperAdminPage() {
     const load = useCallback(async () => {
         setLoading(true);
         const safe = async (promise) => { try { return await promise; } catch (e) { return { error: e }; } };
-        const [mRes, cRes, aRes, pRes, uRes, fRes] = await Promise.all([
+        const [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes, paRes, secRes, hlthRes] = await Promise.all([
             safe(ax('get', '/api/super-admin/metrics')),
             safe(ax('get', '/api/super-admin/companies')),
             safe(ax('get', '/api/super-admin/audit-log?limit=100')),
             safe(ax('get', '/api/super-admin/plans')),
             safe(ax('get', '/api/super-admin/users')),
             safe(ax('get', '/api/super-admin/feature-flags')),
+            safe(ax('get', '/api/super-admin/operators')),
+            safe(ax('get', '/api/super-admin/emergency-actions')),
+            safe(ax('get', '/api/super-admin/audit-log?limit=50')),
+            safe(ax('get', '/api/super-admin/security/settings')),
+            safe(ax('get', '/api/super-admin/system/health')),
         ]);
 
-        // Surface the first 403 as the page-level error (access denied)
-        const firstAuthErr = [mRes, cRes, aRes, pRes, uRes, fRes].find(
-            r => r?.error?.response?.status === 403
-        );
+        const firstAuthErr = [mRes, cRes].find(r => r?.error?.response?.status === 403);
         if (firstAuthErr) {
             setError(firstAuthErr.error.response.data?.detail || 'Platform admin only');
             setLoading(false);
@@ -81,13 +95,21 @@ export default function SuperAdminPage() {
 
         if (!mRes.error) setMetrics(mRes.data);
         if (!cRes.error) setCompanies(cRes.data.companies || []);
-        if (!aRes.error) setAuditLog(aRes.data.audit_log || []);
+        if (!aRes.error) setAuditLog(aRes.data.audit_log || aRes.data.logs || []);
         if (!pRes.error) setPlans(pRes.data.plans || []);
         if (!uRes.error) setAllUsers(uRes.data.users || []);
         if (!fRes.error) setFlags(fRes.data.flags || []);
+        if (!opRes.error) setOperators(opRes.data.operators || []);
+        if (!emgRes.error) setEmergencyActions(emgRes.data.actions || []);
+        if (!paRes.error) setPlatformAuditLog(paRes.data.logs || []);
+        if (!secRes.error) {
+            setSecuritySettings(secRes.data.settings || {});
+            setSecurityForm(secRes.data.settings || {});
+            setDesignatedAdmins(secRes.data.designated_admins || []);
+        }
+        if (!hlthRes.error) setSystemHealth(hlthRes.data);
 
-        // Log non-auth errors to console but don't block the page
-        [mRes, cRes, aRes, pRes, uRes, fRes].forEach((r, i) => {
+        [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes].forEach((r, i) => {
             if (r?.error) console.warn(`Super-admin load[${i}] failed:`, r.error?.response?.data || r.error?.message);
         });
 
@@ -186,16 +208,50 @@ export default function SuperAdminPage() {
     // ── Feature flags ─────────────────────────────────────────────
     const toggleFlag = async (key, enabled) => {
         try {
-            await ax('put', `/api/super-admin/feature-flags/${key}`, { enabled });
-            setFlags(f => f.map(x => x.key === key ? { ...x, enabled } : x));
-            toast.success(`Flag ${key} ${enabled ? 'enabled' : 'disabled'}`);
+            await ax('put', `/api/super-admin/feature-flags/${key}`, { global_enabled: enabled });
+            setFlags(f => f.map(x => (x.flag_key || x.key) === key ? { ...x, global_enabled: enabled, enabled } : x));
+            toast.success(`Flag '${key}' ${enabled ? 'enabled' : 'disabled'} globally`);
         } catch { toast.error('Failed'); }
     };
     const createFlag = async () => {
         if (!newFlagKey.trim()) return;
         try {
-            await ax('put', `/api/super-admin/feature-flags/${newFlagKey.trim()}`, { enabled: false, description: '' });
+            await ax('put', `/api/super-admin/feature-flags/${newFlagKey.trim()}`, { global_enabled: false });
             setNewFlagKey(''); load();
+        } catch { toast.error('Failed'); }
+    };
+
+    // ── Platform Operators ────────────────────────────────────────
+    const addOperator = async () => {
+        if (!newOperatorForm.email) return;
+        try {
+            await ax('post', '/api/super-admin/operators', newOperatorForm);
+            toast.success('Operator added');
+            setNewOperatorForm({ email: '', name: '', role: 'platform_support' });
+            load();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
+    };
+    const removeOperator = async (operatorId) => {
+        if (!window.confirm('Deactivate this operator?')) return;
+        try {
+            await ax('delete', `/api/super-admin/operators/${operatorId}`, {});
+            toast.success('Operator deactivated'); load();
+        } catch { toast.error('Failed'); }
+    };
+
+    // ── Emergency Actions ─────────────────────────────────────────
+    const freezeRTI = async (companyId) => {
+        const reason = window.prompt('Reason for RTI freeze:');
+        if (!reason) return;
+        try {
+            await ax('post', `/api/super-admin/emergency/rti-freeze/${companyId}`, { reason });
+            toast.success('RTI frozen'); load();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
+    };
+    const unfreezeRTI = async (companyId) => {
+        try {
+            await ax('post', `/api/super-admin/emergency/rti-unfreeze/${companyId}`, {});
+            toast.success('RTI unfrozen'); load();
         } catch { toast.error('Failed'); }
     };
 
@@ -208,6 +264,35 @@ export default function SuperAdminPage() {
             await ax('post', '/api/super-admin/emergency/kill-switch', { enabled: true, reason });
             toast.success('Kill switch activated');
         } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
+    };
+
+    // ── Security Settings ─────────────────────────────────────────
+    const saveSecuritySettings = async () => {
+        setSavingSecSettings(true);
+        try {
+            await ax('put', '/api/super-admin/security/settings', securityForm);
+            toast.success('Security settings saved');
+            setSecuritySettings({ ...securityForm });
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save settings'); }
+        finally { setSavingSecSettings(false); }
+    };
+    const revokeAllSessions = async () => {
+        const reason = window.prompt('Reason for revoking all sessions:');
+        if (!reason) return;
+        try {
+            const res = await ax('post', '/api/super-admin/security/revoke-all-sessions', { reason });
+            toast.success(res.data.message);
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
+    };
+
+    // ── System Health Refresh ─────────────────────────────────────
+    const refreshHealth = async () => {
+        setHealthLoading(true);
+        try {
+            const res = await ax('get', '/api/super-admin/system/health');
+            setSystemHealth(res.data);
+        } catch { toast.error('Failed to refresh health'); }
+        finally { setHealthLoading(false); }
     };
 
     // ── Impersonate ───────────────────────────────────────────────
@@ -298,11 +383,15 @@ export default function SuperAdminPage() {
 
             <Tabs defaultValue="companies">
                 <TabsList className="flex-wrap h-auto gap-1">
-                    <TabsTrigger value="companies"><Building2 className="w-4 h-4 mr-1" />Companies ({companies.length})</TabsTrigger>
-                    <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" />Users ({allUsers.length})</TabsTrigger>
-                    <TabsTrigger value="plans"><CreditCard className="w-4 h-4 mr-1" />Plans</TabsTrigger>
-                    <TabsTrigger value="flags"><Flag className="w-4 h-4 mr-1" />Feature Flags</TabsTrigger>
-                    <TabsTrigger value="audit"><Activity className="w-4 h-4 mr-1" />Audit Log</TabsTrigger>
+                    <TabsTrigger value="companies"><Building2 className="w-3.5 h-3.5 mr-1" />Companies ({companies.length})</TabsTrigger>
+                    <TabsTrigger value="users"><Users className="w-3.5 h-3.5 mr-1" />Users ({allUsers.length})</TabsTrigger>
+                    <TabsTrigger value="operators"><UserCog className="w-3.5 h-3.5 mr-1" />Operators ({operators.length})</TabsTrigger>
+                    <TabsTrigger value="flags"><Flag className="w-3.5 h-3.5 mr-1" />Feature Flags</TabsTrigger>
+                    <TabsTrigger value="plans"><CreditCard className="w-3.5 h-3.5 mr-1" />Plans</TabsTrigger>
+                    <TabsTrigger value="emergency"><Zap className="w-3.5 h-3.5 mr-1" />Emergency</TabsTrigger>
+                    <TabsTrigger value="audit"><Activity className="w-3.5 h-3.5 mr-1" />Audit Log</TabsTrigger>
+                    <TabsTrigger value="security"><Lock className="w-3.5 h-3.5 mr-1" />Security</TabsTrigger>
+                    <TabsTrigger value="health"><HeartPulse className="w-3.5 h-3.5 mr-1" />System Health</TabsTrigger>
                 </TabsList>
 
                 {/* ── Companies ── */}
@@ -435,15 +524,35 @@ export default function SuperAdminPage() {
                                                     </td>
                                                     <td className="p-2 text-xs text-muted-foreground">{u.created_at?.slice(0, 10)}</td>
                                                     <td className="p-2 text-right">
-                                                        {u.disabled ? (
-                                                            <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, false)}>
-                                                                <UserCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Enable
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            {u.disabled ? (
+                                                                <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, false)}>
+                                                                    <UserCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Enable
+                                                                </Button>
+                                                            ) : (
+                                                                <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, true)}>
+                                                                    <UserX className="w-3.5 h-3.5 mr-1 text-rose-600" /> Disable
+                                                                </Button>
+                                                            )}
+                                                            <Button size="sm" variant="ghost" title="Reset MFA" onClick={async () => {
+                                                                if (!window.confirm(`Reset 2FA for ${u.email}?`)) return;
+                                                                try {
+                                                                    await axios.post(`/api/super-admin/users/${u.user_id}/reset-mfa`);
+                                                                    toast.success('2FA reset');
+                                                                } catch { toast.error('Failed to reset 2FA'); }
+                                                            }}>
+                                                                <Shield className="w-3.5 h-3.5 text-amber-600" />
                                                             </Button>
-                                                        ) : (
-                                                            <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, true)}>
-                                                                <UserX className="w-3.5 h-3.5 mr-1 text-rose-600" /> Disable
+                                                            <Button size="sm" variant="ghost" title="Force logout" onClick={async () => {
+                                                                if (!window.confirm(`Force logout ${u.email}?`)) return;
+                                                                try {
+                                                                    await axios.post(`/api/super-admin/users/${u.user_id}/force-logout`);
+                                                                    toast.success('User logged out');
+                                                                } catch { toast.error('Failed to force logout'); }
+                                                            }}>
+                                                                <PowerOff className="w-3.5 h-3.5 text-rose-500" />
                                                             </Button>
-                                                        )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -520,6 +629,143 @@ export default function SuperAdminPage() {
                     </Card>
                 </TabsContent>
 
+                {/* ── Platform Operators ── */}
+                <TabsContent value="operators">
+                    <div className="space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <UserCog className="w-5 h-5 text-indigo-600" />
+                                    Platform Operators
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {/* Add operator form */}
+                                <div className="flex gap-2 flex-wrap p-4 rounded-lg border bg-slate-50 dark:bg-slate-900/30">
+                                    <input
+                                        className="flex-1 min-w-40 border rounded px-3 py-2 text-sm bg-background"
+                                        placeholder="Email address"
+                                        value={newOperatorForm.email}
+                                        onChange={e => setNewOperatorForm(f => ({ ...f, email: e.target.value }))}
+                                    />
+                                    <input
+                                        className="flex-1 min-w-32 border rounded px-3 py-2 text-sm bg-background"
+                                        placeholder="Display name"
+                                        value={newOperatorForm.name}
+                                        onChange={e => setNewOperatorForm(f => ({ ...f, name: e.target.value }))}
+                                    />
+                                    <select
+                                        className="border rounded px-3 py-2 text-sm bg-background"
+                                        value={newOperatorForm.role}
+                                        onChange={e => setNewOperatorForm(f => ({ ...f, role: e.target.value }))}
+                                    >
+                                        {['platform_owner', 'platform_admin', 'platform_support', 'platform_billing', 'platform_readonly'].map(r => (
+                                            <option key={r} value={r}>{r.replace('platform_', '').replace('_', ' ')}</option>
+                                        ))}
+                                    </select>
+                                    <Button size="sm" onClick={addOperator} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                                        <PlusCircle className="w-4 h-4 mr-1" /> Add
+                                    </Button>
+                                </div>
+
+                                {/* Operators list */}
+                                {operators.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground text-center py-4">No platform operators defined. Users in PLATFORM_ADMINS env are always allowed.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {operators.map(op => (
+                                            <div key={op.operator_id} className="flex items-center justify-between p-3 rounded-lg border">
+                                                <div>
+                                                    <p className="font-medium text-sm">{op.name || op.email}</p>
+                                                    <p className="text-xs text-muted-foreground">{op.email} — {op.role}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {op.is_active ? (
+                                                        <Badge className="bg-emerald-100 text-emerald-700">Active</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">Inactive</Badge>
+                                                    )}
+                                                    <Button variant="ghost" size="sm" className="text-rose-600 hover:text-rose-700" onClick={() => removeOperator(op.operator_id)}>
+                                                        <X className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── Emergency Controls ── */}
+                <TabsContent value="emergency">
+                    <div className="space-y-4">
+                        <Card className="border-rose-200">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-rose-700">
+                                    <Zap className="w-5 h-5" />
+                                    Emergency Controls
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="p-4 rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/20">
+                                    <p className="font-semibold text-rose-800 dark:text-rose-200 text-sm">Global Kill Switch</p>
+                                    <p className="text-xs text-muted-foreground mb-3">Disables all paid features for ALL companies immediately.</p>
+                                    <Button
+                                        variant="outline"
+                                        className="border-rose-400 text-rose-700 hover:bg-rose-100"
+                                        onClick={killSwitch}
+                                    >
+                                        <PowerOff className="w-4 h-4 mr-2" /> Activate Kill Switch
+                                    </Button>
+                                </div>
+
+                                <div className="p-4 rounded-lg border">
+                                    <p className="font-semibold text-sm">Freeze RTI Submissions</p>
+                                    <p className="text-xs text-muted-foreground mb-3">Prevent a specific company from submitting RTI to HMRC.</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {companies.filter(c => !c.rti_frozen).slice(0, 10).map(c => (
+                                            <Button key={c.company_id} variant="outline" size="sm" onClick={() => freezeRTI(c.company_id)}>
+                                                Freeze {c.name}
+                                            </Button>
+                                        ))}
+                                        {companies.filter(c => c.rti_frozen).map(c => (
+                                            <Button key={c.company_id} variant="outline" size="sm" className="border-amber-300 text-amber-700" onClick={() => unfreezeRTI(c.company_id)}>
+                                                Unfreeze {c.name}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Emergency action log */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Emergency Action Log</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {emergencyActions.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground text-center py-4">No emergency actions recorded.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {emergencyActions.map(a => (
+                                            <div key={a.action_id} className="p-3 rounded-lg border text-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-medium">{a.action_type}</span>
+                                                    <span className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">By: {a.operator_email} — {a.reason}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
                 {/* ── Audit Log ── */}
                 <TabsContent value="audit">
                     <Card>
@@ -550,6 +796,262 @@ export default function SuperAdminPage() {
                             </div>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* ── Security ── */}
+                <TabsContent value="security">
+                    <div className="space-y-4">
+                        {/* Designated Platform Admins */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Shield className="w-4 h-4 text-indigo-600" />
+                                    Designated Platform Admins
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {designatedAdmins.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No designated platform admins found.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {designatedAdmins.map((a, i) => (
+                                            <div key={i} className="flex items-center justify-between p-2 border rounded text-sm">
+                                                <div>
+                                                    <p className="font-medium">{a.email}</p>
+                                                    <p className="text-xs text-muted-foreground">{a.name}</p>
+                                                </div>
+                                                {a.mfa_active
+                                                    ? <Badge className="bg-emerald-100 text-emerald-700 text-xs">2FA Active</Badge>
+                                                    : <Badge className="bg-amber-100 text-amber-700 text-xs">No 2FA</Badge>
+                                                }
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-3">
+                                    Add admin emails via the <code className="bg-muted px-1 rounded">PLATFORM_ADMINS</code> environment variable or set <code className="bg-muted px-1 rounded">is_platform_admin=true</code> on a user record.
+                                </p>
+                            </CardContent>
+                        </Card>
+
+                        {/* Security Policy Settings */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Lock className="w-4 h-4 text-indigo-600" />
+                                    Platform Security Policy
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {securitySettings && (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <Label className="text-sm font-medium">MFA Enforcement</Label>
+                                                <Select
+                                                    value={securityForm.mfa_enforcement || 'optional'}
+                                                    onValueChange={v => setSecurityForm(f => ({ ...f, mfa_enforcement: v }))}
+                                                >
+                                                    <SelectTrigger className="mt-1">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="optional">Optional (users can choose)</SelectItem>
+                                                        <SelectItem value="required_for_admins">Required for admins only</SelectItem>
+                                                        <SelectItem value="required_for_all">Required for all users</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label className="text-sm font-medium">Session Timeout (hours)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    max={168}
+                                                    value={securityForm.session_timeout_hours || 24}
+                                                    onChange={e => setSecurityForm(f => ({ ...f, session_timeout_hours: Number(e.target.value) }))}
+                                                    className="mt-1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label className="text-sm font-medium">Max Sessions Per User</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    max={20}
+                                                    value={securityForm.max_sessions_per_user || 5}
+                                                    onChange={e => setSecurityForm(f => ({ ...f, max_sessions_per_user: Number(e.target.value) }))}
+                                                    className="mt-1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label className="text-sm font-medium">Login Attempt Lockout Threshold</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={3}
+                                                    max={50}
+                                                    value={securityForm.login_attempt_lockout || 10}
+                                                    onChange={e => setSecurityForm(f => ({ ...f, login_attempt_lockout: Number(e.target.value) }))}
+                                                    className="mt-1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label className="text-sm font-medium">Minimum Password Length</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={8}
+                                                    max={64}
+                                                    value={securityForm.password_min_length || 8}
+                                                    onChange={e => setSecurityForm(f => ({ ...f, password_min_length: Number(e.target.value) }))}
+                                                    className="mt-1"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-4 pt-1">
+                                            <div className="flex items-center gap-2">
+                                                <Switch
+                                                    checked={!!securityForm.require_uppercase}
+                                                    onCheckedChange={v => setSecurityForm(f => ({ ...f, require_uppercase: v }))}
+                                                />
+                                                <Label className="text-sm">Require uppercase in passwords</Label>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Switch
+                                                    checked={!!securityForm.require_special_char}
+                                                    onCheckedChange={v => setSecurityForm(f => ({ ...f, require_special_char: v }))}
+                                                />
+                                                <Label className="text-sm">Require special character in passwords</Label>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Switch
+                                                    checked={!!securityForm.ip_allowlist_enabled}
+                                                    onCheckedChange={v => setSecurityForm(f => ({ ...f, ip_allowlist_enabled: v }))}
+                                                />
+                                                <Label className="text-sm">Enable IP allowlist</Label>
+                                            </div>
+                                        </div>
+                                        {securityForm.ip_allowlist_enabled && (
+                                            <div>
+                                                <Label className="text-sm font-medium">Allowed IP Addresses (one per line)</Label>
+                                                <textarea
+                                                    className="w-full mt-1 p-2 border rounded text-sm bg-background font-mono"
+                                                    rows={4}
+                                                    placeholder="e.g. 192.168.1.0/24"
+                                                    value={(securityForm.ip_allowlist || []).join('\n')}
+                                                    onChange={e => setSecurityForm(f => ({ ...f, ip_allowlist: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) }))}
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between pt-2 border-t">
+                                            <Button onClick={saveSecuritySettings} disabled={savingSecSettings}>
+                                                {savingSecSettings ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                                                Save Settings
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
+                                {!securitySettings && <p className="text-sm text-muted-foreground">Loading security settings…</p>}
+                            </CardContent>
+                        </Card>
+
+                        {/* Session Management */}
+                        <Card className="border-rose-200">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base text-rose-700">
+                                    <LogOut className="w-4 h-4" />
+                                    Session Management
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200">
+                                    <p className="font-semibold text-sm text-rose-800 dark:text-rose-200">Revoke All Active Sessions</p>
+                                    <p className="text-xs text-muted-foreground mb-3">Forcibly log out every user across the entire platform. Use only in security emergencies.</p>
+                                    <Button variant="outline" className="border-rose-400 text-rose-700 hover:bg-rose-100" onClick={revokeAllSessions}>
+                                        <LogOut className="w-4 h-4 mr-2" /> Revoke All Sessions
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── System Health ── */}
+                <TabsContent value="health">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold flex items-center gap-2">
+                                <HeartPulse className="w-5 h-5 text-indigo-600" /> System Health
+                            </h2>
+                            <Button variant="outline" size="sm" onClick={refreshHealth} disabled={healthLoading}>
+                                {healthLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                <span className="ml-1">Refresh</span>
+                            </Button>
+                        </div>
+
+                        {systemHealth ? (
+                            <>
+                                {/* Platform stats bar */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {[
+                                        ['Total Companies', systemHealth.platform?.total_companies],
+                                        ['Active Companies', systemHealth.platform?.active_companies],
+                                        ['Active Sessions', systemHealth.platform?.active_sessions],
+                                        ['Audit Events (24h)', systemHealth.platform?.audit_events_24h],
+                                    ].map(([label, val]) => (
+                                        <Card key={label} className="p-3">
+                                            <p className="text-xs text-muted-foreground">{label}</p>
+                                            <p className="text-2xl font-bold">{val ?? '—'}</p>
+                                        </Card>
+                                    ))}
+                                </div>
+
+                                {/* Service health cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {Object.entries(systemHealth.services || {}).map(([svc, info]) => {
+                                        const StatusIcon = info.status === 'healthy' ? CheckCircle2
+                                            : info.status === 'warning' ? AlertCircle
+                                            : XCircle;
+                                        const statusColor = info.status === 'healthy' ? 'text-emerald-600'
+                                            : info.status === 'warning' ? 'text-amber-600'
+                                            : 'text-rose-600';
+                                        const svcLabel = svc.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                        return (
+                                            <Card key={svc} className="p-4">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <Server className="w-4 h-4 text-muted-foreground" />
+                                                        <span className="font-medium text-sm">{svcLabel}</span>
+                                                    </div>
+                                                    <div className={`flex items-center gap-1 text-xs font-semibold ${statusColor}`}>
+                                                        <StatusIcon className="w-3.5 h-3.5" />
+                                                        {info.status}
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground space-y-0.5">
+                                                    {info.pending !== undefined && <p>Pending: {info.pending}</p>}
+                                                    {info.failed !== undefined && <p>Failed: {info.failed}</p>}
+                                                    {info.processed_last_7d !== undefined && <p>Processed (7d): {info.processed_last_7d}</p>}
+                                                    {info.pending_notifications !== undefined && <p>Pending notifications: {info.pending_notifications}</p>}
+                                                    {info.open_alerts !== undefined && <p>Open alerts: {info.open_alerts}</p>}
+                                                    {info.last_activity && <p>Last activity: {new Date(info.last_activity).toLocaleString()}</p>}
+                                                    {info.note && <p className="italic">{info.note}</p>}
+                                                </div>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+
+                                <p className="text-xs text-muted-foreground text-right">
+                                    Last refreshed: {new Date(systemHealth.timestamp).toLocaleString()}
+                                </p>
+                            </>
+                        ) : (
+                            <Card className="p-6 text-center">
+                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                                <p className="text-sm text-muted-foreground">Loading system health…</p>
+                            </Card>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
 

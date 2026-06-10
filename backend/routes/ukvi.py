@@ -75,6 +75,11 @@ class MarkReportedRequest(BaseModel):
     sms_reference: str = Field(..., description="Reference from Sponsor Management System")
 
 
+class AlertStatusUpdate(BaseModel):
+    status: str = Field(..., description="New status: open | in_progress | dismissed | false_positive")
+    note: Optional[str] = None
+
+
 # ==================== AUTH HELPERS ====================
 
 async def get_current_user(request: Request) -> User:
@@ -444,7 +449,7 @@ async def list_visa_types(user: User = Depends(get_current_user)):
     Get list of supported UK visa types.
     """
     from services.ukvi_service import VisaType
-    
+
     return {
         "visa_types": [
             {"code": VisaType.SKILLED_WORKER.value, "name": "Skilled Worker", "sponsored": True},
@@ -460,3 +465,233 @@ async def list_visa_types(user: User = Depends(get_current_user)):
             {"code": VisaType.OTHER.value, "name": "Other", "sponsored": False}
         ]
     }
+
+
+# ===========================================================================
+# UKVI COMPLIANCE SCANNER — Premium feature (2 scans/billing month, all plans)
+# ===========================================================================
+
+@router.get("/compliance/status")
+async def get_compliance_scanner_status(user: User = Depends(require_hr_admin)):
+    """
+    Get compliance scanner quota status and recent scan history for this company.
+    Included in all subscription plans (2 scans per billing month).
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    from services.ukvi_compliance_service import ukvi_compliance_service
+
+    quota = await ukvi_compliance_service.get_scan_quota(user.company_id, db)
+
+    recent_scans = await db.ukvi_compliance_scans.find(
+        {"company_id": user.company_id},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    ).limit(10).to_list(10)
+
+    return {
+        "quota": quota,
+        "recent_scans": recent_scans,
+        "disclaimer": (
+            "This scanner assists with internal UKVI compliance record-keeping. "
+            "It does not constitute legal advice. Sponsor compliance is the employer's legal responsibility."
+        ),
+    }
+
+
+@router.post("/compliance/scans/run")
+async def run_compliance_scan(user: User = Depends(require_hr_admin)):
+    """
+    Trigger a full UKVI compliance scan for this company.
+    Deducts one scan from the monthly quota (2 per billing month, all plans).
+    Returns scan_id immediately; use GET /compliance/scans/{scan_id}/preview for results.
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    # Require an active subscription
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=400, detail="Company not found")
+    sub_status = company.get("subscription_status") or company.get("subscription_plan", "free")
+    if sub_status in ("free", "inactive") and not company.get("subscription_active"):
+        raise HTTPException(
+            status_code=402,
+            detail="A paid subscription is required to run UKVI compliance scans."
+        )
+
+    from services.ukvi_compliance_service import ukvi_compliance_service
+
+    try:
+        result = await ukvi_compliance_service.run_scan(
+            company_id=user.company_id,
+            initiated_by=user.user_id,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"UKVI scan error: {exc}")
+        raise HTTPException(status_code=500, detail="Scan failed — please try again.")
+
+    # Audit log
+    await db.audit_log.insert_one({
+        "audit_id": f"aud_{__import__('uuid').uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "user_id": user.user_id,
+        "action": "ukvi_compliance_scan_run",
+        "entity_type": "ukvi_scan",
+        "entity_id": result["scan_id"],
+        "details": {"score": result["overall_score"], "risk_level": result["risk_level"]},
+        "timestamp": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+    })
+
+    return result
+
+
+@router.get("/compliance/scans/{scan_id}/preview")
+async def get_scan_preview(scan_id: str, user: User = Depends(require_hr_admin)):
+    """
+    Get structured compliance scan results (free preview — no additional charge).
+    Returns per-employee and per-category breakdowns.
+    """
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    from services.ukvi_compliance_service import ukvi_compliance_service
+
+    try:
+        preview = await ukvi_compliance_service.get_scan_preview(scan_id, user.company_id, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return preview
+
+
+@router.post("/compliance/scans/{scan_id}/export")
+async def export_scan_report(
+    scan_id: str,
+    format: str = "pdf",
+    user: User = Depends(require_hr_admin),
+):
+    """
+    Export a compliance scan as PDF or DOCX.
+    Requires ukvi_report_download feature entitlement (Professional/Enterprise plans).
+    Format: ?format=pdf (default) or ?format=docx
+    """
+    from fastapi.responses import StreamingResponse
+    import io as _io
+
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    if format not in ("pdf", "docx"):
+        raise HTTPException(status_code=400, detail="format must be 'pdf' or 'docx'")
+
+    # Check plan entitlement — all paid plans (starter, professional, enterprise) can download reports
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0}) or {}
+    plan = (company.get("subscription_plan") or "free").lower()
+    if plan not in ("starter", "professional", "enterprise"):
+        raise HTTPException(
+            status_code=402,
+            detail="UKVI compliance report downloads require an active subscription (Starter, Professional or Enterprise)."
+        )
+
+    company_name = company.get("name", "Your Company")
+
+    from services.ukvi_compliance_service import ukvi_compliance_service
+
+    try:
+        if format == "pdf":
+            data = await ukvi_compliance_service.generate_pdf_report(scan_id, user.company_id, company_name, db)
+            media_type = "application/pdf"
+            filename = f"ukvi_compliance_{scan_id[:8]}.pdf"
+        else:
+            data = await ukvi_compliance_service.generate_docx_report(scan_id, user.company_id, company_name, db)
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            filename = f"ukvi_compliance_{scan_id[:8]}.docx"
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"UKVI report export error: {exc}")
+        raise HTTPException(status_code=500, detail="Report generation failed.")
+
+    # Record export
+    await db.ukvi_report_exports.insert_one({
+        "export_id": f"exp_{__import__('uuid').uuid4().hex[:12]}",
+        "scan_id": scan_id,
+        "company_id": user.company_id,
+        "format": format,
+        "generated_by": user.user_id,
+        "file_size": len(data),
+        "created_at": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+    })
+
+    await db.audit_log.insert_one({
+        "audit_id": f"aud_{__import__('uuid').uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "user_id": user.user_id,
+        "action": "ukvi_report_exported",
+        "entity_type": "ukvi_scan",
+        "entity_id": scan_id,
+        "details": {"format": format},
+        "timestamp": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+    })
+
+    return StreamingResponse(
+        _io.BytesIO(data),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.patch("/compliance/alerts/{alert_id}")
+async def update_alert_status(
+    alert_id: str,
+    body: AlertStatusUpdate,
+    user: User = Depends(require_hr_admin),
+):
+    """Update an alert's status (in_progress, dismissed, false_positive, open)."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    allowed = {"open", "in_progress", "dismissed", "false_positive"}
+    if body.status not in allowed:
+        raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(allowed)}")
+
+    alert = await db.ukvi_compliance_alerts.find_one(
+        {"alert_id": alert_id, "company_id": user.company_id}, {"_id": 0}
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    updates = {"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.note:
+        updates["note"] = body.note
+    await db.ukvi_compliance_alerts.update_one({"alert_id": alert_id}, {"$set": updates})
+    return {"alert_id": alert_id, "status": body.status}
+
+
+@router.get("/compliance/rules")
+async def list_compliance_rules(user: User = Depends(require_hr_admin)):
+    """Return all compliance rules in the engine."""
+    from services.ukvi_compliance_service import COMPLIANCE_RULES
+    return {"rules": COMPLIANCE_RULES, "total": len(COMPLIANCE_RULES)}
+
+
+@router.get("/compliance/scans")
+async def list_compliance_scans(
+    limit: int = 20,
+    user: User = Depends(require_hr_admin),
+):
+    """List all compliance scans for this company (most recent first)."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    scans = await db.ukvi_compliance_scans.find(
+        {"company_id": user.company_id},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    ).limit(limit).to_list(limit)
+
+    return {"scans": scans, "total": len(scans)}

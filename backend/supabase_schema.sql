@@ -87,38 +87,85 @@ create index if not exists user_sessions_user_id_idx on user_sessions(user_id);
 -- employees
 -- ---------------------------------------------------------------------------
 create table if not exists employees (
-    employee_id         text primary key,
-    company_id          text not null,
-    user_id             text,
-    first_name          text,
-    last_name           text,
-    email               text,
-    phone               text,
-    job_title           text,
-    department          text,
-    start_date          text,
-    end_date            text,
-    employment_type     text default 'full_time',
-    status              text default 'active',
-    salary              numeric,
-    currency            text default 'GBP',
-    payroll_id          text,
-    ni_number           text,
-    tax_code            text,
-    student_loan        text,
-    pension_enrolled    boolean default false,
-    address             text,
-    bank_name           text,
-    bank_sort_code      text,
-    bank_account        text,
-    right_to_work       text,
-    visa_type           text,
-    visa_expiry         text,
-    nationality         text,
-    emergency_contact   jsonb default '{}',
-    custom_fields       jsonb default '{}',
-    created_at          timestamptz default now(),
-    updated_at          timestamptz default now()
+    employee_id             text primary key,
+    company_id              text not null,
+    user_id                 text,
+    first_name              text,
+    last_name               text,
+    preferred_name          text,
+    email                   text,
+    work_email              text,
+    phone                   text,
+    mobile_phone            text,
+    job_title               text,
+    department              text,
+    work_location           text,
+    line_manager_id         text,
+    start_date              text,
+    end_date                text,
+    probation_end_date      text,
+    notice_period           text,
+    reason_for_leaving      text,
+    employment_type         text default 'full_time',
+    contract_type           text,
+    status                  text default 'active',
+    salary                  numeric,
+    pay_frequency           text default 'monthly',
+    salary_type             text default 'annual',
+    currency                text default 'GBP',
+    payroll_id              text,
+    payroll_status          text default 'active',
+    payroll_start_date      text,
+    starter_declaration     text,
+    ni_number               text,
+    ni_category             text default 'A',
+    tax_code                text,
+    student_loan            text,
+    postgraduate_loan       boolean default false,
+    pension_enrolled        boolean default false,
+    auto_enrolment_status   text,
+    director_payroll        boolean default false,
+    date_of_birth           text,
+    gender                  text,
+    nationality             text,
+    address                 jsonb default '{}',
+    bank_name               text,
+    bank_sort_code          text,
+    bank_account            text,
+    bank_account_holder     text,
+    payment_method          text default 'bacs',
+    -- Right to Work
+    right_to_work_status    text,
+    rtw_check_date          text,
+    rtw_expiry_date         text,
+    rtw_followup_date       text,
+    rtw_document_type       text,
+    right_to_work           text,
+    -- UKVI / Sponsorship
+    is_sponsored_worker     boolean default false,
+    cos_number              text,
+    soc_code                text,
+    visa_type               text,
+    visa_expiry_date        text,
+    visa_expiry             text,
+    cos_salary              numeric,
+    cos_job_title           text,
+    cos_work_location       text,
+    sponsorship_start_date  text,
+    sponsorship_end_date    text,
+    -- Readiness flags (denormalized for fast queries)
+    payroll_ready           boolean default false,
+    rti_ready               boolean default false,
+    right_to_work_ready     boolean default false,
+    hr_profile_ready        boolean default false,
+    ukvi_ready              boolean default false,
+    documents_ready         boolean default false,
+    -- Other
+    emergency_contact       jsonb default '{}',
+    custom_fields           jsonb default '{}',
+    picture                 text,
+    created_at              timestamptz default now(),
+    updated_at              timestamptz default now()
 );
 create index if not exists employees_company_id_idx on employees(company_id);
 create index if not exists employees_email_idx on employees(email);
@@ -972,3 +1019,296 @@ create table if not exists organizations (
     details         jsonb default '{}',
     created_at      timestamptz default now()
 );
+
+-- ===========================================================================
+-- UKVI COMPLIANCE SCANNER TABLES
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- ukvi_compliance_rules — static rules engine (seeded once)
+-- ---------------------------------------------------------------------------
+create table if not exists ukvi_compliance_rules (
+    rule_id         text primary key,
+    rule_code       text unique not null,
+    category        text not null,
+    title           text not null,
+    description     text,
+    severity        text default 'medium',
+    check_type      text,
+    enabled         boolean default true,
+    created_at      timestamptz default now()
+);
+create index if not exists ukvi_compliance_rules_category_idx on ukvi_compliance_rules(category);
+
+-- ---------------------------------------------------------------------------
+-- ukvi_compliance_scans — one scan per invocation
+-- ---------------------------------------------------------------------------
+create table if not exists ukvi_compliance_scans (
+    scan_id             text primary key,
+    company_id          text not null,
+    initiated_by        text,
+    status              text default 'running',
+    overall_score       int,
+    risk_level          text,
+    total_employees     int default 0,
+    flagged_employees   int default 0,
+    passed_checks       int default 0,
+    failed_checks       int default 0,
+    warning_checks      int default 0,
+    summary             jsonb default '{}',
+    completed_at        timestamptz,
+    created_at          timestamptz default now()
+);
+create index if not exists ukvi_compliance_scans_company_id_idx on ukvi_compliance_scans(company_id);
+create index if not exists ukvi_compliance_scans_created_at_idx on ukvi_compliance_scans(created_at);
+
+-- ---------------------------------------------------------------------------
+-- ukvi_compliance_scan_results — per-employee per-rule results
+-- ---------------------------------------------------------------------------
+create table if not exists ukvi_compliance_scan_results (
+    result_id       text primary key,
+    scan_id         text not null,
+    company_id      text not null,
+    employee_id     text,
+    employee_name   text,
+    rule_id         text,
+    rule_code       text,
+    category        text,
+    status          text,
+    severity        text,
+    message         text,
+    detail          jsonb default '{}',
+    created_at      timestamptz default now()
+);
+create index if not exists ukvi_scan_results_scan_id_idx on ukvi_compliance_scan_results(scan_id);
+create index if not exists ukvi_scan_results_company_id_idx on ukvi_compliance_scan_results(company_id);
+
+-- ---------------------------------------------------------------------------
+-- ukvi_scan_entitlements — quota: 2 scans per billing month per company
+-- ---------------------------------------------------------------------------
+create table if not exists ukvi_scan_entitlements (
+    record_id               text primary key,
+    company_id              text not null,
+    billing_period_start    date not null,
+    billing_period_end      date not null,
+    scans_used              int default 0,
+    scans_limit             int default 2,
+    created_at              timestamptz default now(),
+    updated_at              timestamptz default now()
+);
+create index if not exists ukvi_scan_entitlements_company_id_idx on ukvi_scan_entitlements(company_id);
+create unique index if not exists ukvi_scan_entitlements_period_idx on ukvi_scan_entitlements(company_id, billing_period_start);
+
+-- ---------------------------------------------------------------------------
+-- ukvi_report_exports — PDF/DOCX report generation records
+-- ---------------------------------------------------------------------------
+create table if not exists ukvi_report_exports (
+    export_id       text primary key,
+    scan_id         text not null,
+    company_id      text not null,
+    format          text not null,
+    file_url        text,
+    generated_by    text,
+    file_size       int,
+    created_at      timestamptz default now()
+);
+create index if not exists ukvi_report_exports_scan_id_idx on ukvi_report_exports(scan_id);
+
+-- ===========================================================================
+-- EMPLOYEE LIFECYCLE & READINESS TABLES
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- employee_status_history — immutable lifecycle status changes
+-- ---------------------------------------------------------------------------
+create table if not exists employee_status_history (
+    record_id       text primary key,
+    company_id      text not null,
+    employee_id     text not null,
+    previous_status text,
+    new_status      text not null,
+    changed_by      text,
+    reason          text,
+    created_at      timestamptz default now()
+);
+create index if not exists emp_status_history_employee_id_idx on employee_status_history(employee_id);
+
+-- ---------------------------------------------------------------------------
+-- employee_readiness_checks — readiness flags per employee
+-- ---------------------------------------------------------------------------
+create table if not exists employee_readiness_checks (
+    record_id               text primary key,
+    company_id              text not null,
+    employee_id             text not null unique,
+    hr_profile_ready        boolean default false,
+    payroll_ready           boolean default false,
+    rti_ready               boolean default false,
+    right_to_work_ready     boolean default false,
+    ukvi_ready              boolean default false,
+    documents_ready         boolean default false,
+    readiness_issues        jsonb default '[]',
+    last_checked_at         timestamptz default now(),
+    updated_at              timestamptz default now()
+);
+create index if not exists emp_readiness_company_id_idx on employee_readiness_checks(company_id);
+
+-- ===========================================================================
+-- PLATFORM OPERATOR / SUPER ADMIN TABLES
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- platform_operators — super admin users with structured roles
+-- ---------------------------------------------------------------------------
+create table if not exists platform_operators (
+    operator_id     text primary key,
+    user_id         text unique not null,
+    email           text not null,
+    name            text,
+    role            text default 'platform_support',
+    is_active       boolean default true,
+    created_by      text,
+    created_at      timestamptz default now(),
+    updated_at      timestamptz default now()
+);
+create index if not exists platform_operators_email_idx on platform_operators(email);
+
+-- ---------------------------------------------------------------------------
+-- platform_audit_logs — immutable platform-wide audit trail
+-- ---------------------------------------------------------------------------
+create table if not exists platform_audit_logs (
+    log_id          text primary key,
+    operator_id     text,
+    operator_email  text,
+    action          text not null,
+    target_type     text,
+    target_id       text,
+    details         jsonb default '{}',
+    ip_address      text,
+    created_at      timestamptz default now()
+);
+create index if not exists platform_audit_logs_created_at_idx on platform_audit_logs(created_at);
+create index if not exists platform_audit_logs_operator_id_idx on platform_audit_logs(operator_id);
+
+-- ---------------------------------------------------------------------------
+-- platform_feature_flags — global feature flags with plan/company overrides
+-- ---------------------------------------------------------------------------
+create table if not exists platform_feature_flags (
+    flag_id             text primary key,
+    flag_key            text unique not null,
+    display_name        text,
+    description         text,
+    global_enabled      boolean default true,
+    plan_rules_json     jsonb default '{}',
+    company_overrides   jsonb default '{}',
+    updated_by          text,
+    updated_at          timestamptz default now(),
+    created_at          timestamptz default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- emergency_actions — audit log for kill switch / emergency controls
+-- ---------------------------------------------------------------------------
+create table if not exists emergency_actions (
+    action_id       text primary key,
+    operator_email  text not null,
+    action_type     text not null,
+    target_id       text,
+    reason          text,
+    reverted_at     timestamptz,
+    reverted_by     text,
+    details         jsonb default '{}',
+    created_at      timestamptz default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- support_access_sessions — impersonation audit trail
+-- ---------------------------------------------------------------------------
+create table if not exists support_access_sessions (
+    session_id      text primary key,
+    operator_email  text not null,
+    target_user_id  text not null,
+    target_email    text,
+    company_id      text,
+    reason          text,
+    token           text,
+    expires_at      timestamptz,
+    ended_at        timestamptz,
+    created_at      timestamptz default now()
+);
+
+-- ===========================================================================
+-- HMRC RTI CONFIGURATION
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- hmrc_rti_config — per-company HMRC RTI credentials and mode
+-- ---------------------------------------------------------------------------
+create table if not exists hmrc_rti_config (
+    config_id               text primary key,
+    company_id              text unique not null,
+    rti_mode                text default 'sandbox',
+    gateway_user_id         text,
+    gateway_password_hash   text,
+    paye_reference          text,
+    accounts_office_ref     text,
+    employer_name           text,
+    employer_address        jsonb default '{}',
+    sender_id               text,
+    software_name           text default 'RealtouchHR',
+    sandbox_endpoint        text,
+    production_endpoint     text,
+    go_live_approved        boolean default false,
+    go_live_approved_by     text,
+    go_live_approved_at     timestamptz,
+    readiness_checklist     jsonb default '{}',
+    last_test_submission_at timestamptz,
+    created_at              timestamptz default now(),
+    updated_at              timestamptz default now()
+);
+
+-- ===========================================================================
+-- FEATURE ENTITLEMENTS (per-company plan-based feature access)
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- feature_entitlements — per-company feature gating
+-- ---------------------------------------------------------------------------
+create table if not exists feature_entitlements (
+    record_id       text primary key,
+    company_id      text not null,
+    feature_key     text not null,
+    enabled         boolean default true,
+    source          text default 'plan',
+    expires_at      timestamptz,
+    created_at      timestamptz default now(),
+    updated_at      timestamptz default now()
+);
+create unique index if not exists feature_entitlements_unique_idx on feature_entitlements(company_id, feature_key);
+
+-- ---------------------------------------------------------------------------
+-- company_module_settings — module enable/disable per company
+-- ---------------------------------------------------------------------------
+create table if not exists company_module_settings (
+    record_id       text primary key,
+    company_id      text not null,
+    module_key      text not null,
+    enabled         boolean default true,
+    config          jsonb default '{}',
+    updated_by      text,
+    updated_at      timestamptz default now()
+);
+create unique index if not exists company_module_settings_unique_idx on company_module_settings(company_id, module_key);
+
+-- ---------------------------------------------------------------------------
+-- user_permissions — fine-grained RBAC overrides per user
+-- ---------------------------------------------------------------------------
+create table if not exists user_permissions (
+    record_id       text primary key,
+    company_id      text not null,
+    user_id         text not null,
+    permission_key  text not null,
+    granted         boolean default true,
+    granted_by      text,
+    created_at      timestamptz default now()
+);
+create unique index if not exists user_permissions_unique_idx on user_permissions(company_id, user_id, permission_key);

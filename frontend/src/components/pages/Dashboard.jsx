@@ -246,6 +246,67 @@ export default function Dashboard() {
                 </Card>
             </div>
 
+            {/* Recent Leave Requests */}
+            {recentLeaves.length > 0 && (
+                <Card data-testid="recent-leave-card">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <CardTitle className="flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-amber-600" />
+                            Recent Leave Requests
+                        </CardTitle>
+                        <Link to="/leave">
+                            <Button variant="ghost" size="sm">View All <ArrowRight className="w-4 h-4 ml-1" /></Button>
+                        </Link>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-2">
+                            {recentLeaves.map(leave => (
+                                <div key={leave.leave_id} className="flex items-center justify-between p-2 rounded-lg border text-sm">
+                                    <div>
+                                        <p className="font-medium capitalize">{leave.leave_type?.replace(/_/g, ' ')}</p>
+                                        <p className="text-xs text-muted-foreground">{leave.start_date} → {leave.end_date}</p>
+                                    </div>
+                                    <Badge className={leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}>
+                                        {leave.status}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* What's New */}
+            <Card data-testid="whats-new-card">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-indigo-600" />
+                        What's New in RealtouchHR
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-3">
+                        {[
+                            { date: 'Jun 2026', title: 'UKVI Compliance Scanner', desc: '2 scans/month on all plans. PDF & DOCX reports available.', tag: 'New' },
+                            { date: 'Jun 2026', title: 'Employee Lifecycle Statuses', desc: 'Track employees from Draft → Onboarding → Active → Archived with immutable history.', tag: 'New' },
+                            { date: 'Jun 2026', title: 'RTI Sandbox Go-Live Checklist', desc: '15-item production readiness gate before enabling live HMRC submissions.', tag: 'Improved' },
+                            { date: 'Jun 2026', title: 'Updated Plan Pricing', desc: 'Starter £29 · Professional £39 · Enterprise £129. Payslip previews now free.', tag: 'Updated' },
+                        ].map((item, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3 rounded-lg border">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="font-medium text-sm">{item.title}</p>
+                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.tag === 'New' ? 'bg-emerald-100 text-emerald-700' : item.tag === 'Improved' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{item.tag}</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                                </div>
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">{item.date}</span>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Quick Actions */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Link to="/employees/new">

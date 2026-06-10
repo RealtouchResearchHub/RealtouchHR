@@ -5,11 +5,12 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Progress } from '../ui/progress';
-import { 
-  Shield, 
-  AlertTriangle, 
-  Clock, 
-  CheckCircle, 
+import { toast } from 'sonner';
+import {
+  Shield,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
   XCircle,
   Users,
   FileText,
@@ -19,7 +20,13 @@ import {
   Search,
   RefreshCw,
   AlertCircle,
-  ClipboardList
+  ClipboardList,
+  Play,
+  Download,
+  Eye,
+  Loader2,
+  CheckCircle2,
+  XCircle as X
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -33,32 +40,109 @@ export default function UKVICompliancePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
+  // Compliance Scanner state
+  const [scannerStatus, setScannerStatus] = useState(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanPreview, setScanPreview] = useState(null);
+  const [exportLoading, setExportLoading] = useState(null);
+  const [selectedScanId, setSelectedScanId] = useState(null);
+
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [dashboardRes, checklistRes, alertsRes] = await Promise.all([
+      const [dashboardRes, checklistRes, alertsRes, scannerRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/ukvi/dashboard`, { headers }),
         fetch(`${BACKEND_URL}/api/ukvi/reporting/checklist`, { headers }),
-        fetch(`${BACKEND_URL}/api/ukvi/alerts?resolved=false`, { headers })
+        fetch(`${BACKEND_URL}/api/ukvi/alerts?resolved=false`, { headers }),
+        fetch(`${BACKEND_URL}/api/ukvi/compliance/status`, { headers }),
       ]);
 
-      if (dashboardRes.ok) {
-        setDashboard(await dashboardRes.json());
-      }
-      if (checklistRes.ok) {
-        setChecklist(await checklistRes.json());
-      }
+      if (dashboardRes.ok) setDashboard(await dashboardRes.json());
+      if (checklistRes.ok) setChecklist(await checklistRes.json());
       if (alertsRes.ok) {
         const alertData = await alertsRes.json();
         setAlerts(alertData.alerts || []);
       }
+      if (scannerRes.ok) setScannerStatus(await scannerRes.json());
     } catch (error) {
       console.error('Error fetching UKVI data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleRunScan = async () => {
+    setScanLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/run`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.detail || 'Scan failed');
+        return;
+      }
+      const data = await res.json();
+      toast.success(`Scan complete — Score: ${data.overall_score}%`);
+      setScannerStatus(null);
+      setSelectedScanId(data.scan_id);
+      setScanPreview(null);
+      fetchData();
+      await handleViewScan(data.scan_id);
+    } catch (e) {
+      toast.error('Scan failed — please try again');
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const handleViewScan = async (scanId) => {
+    setSelectedScanId(scanId);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/preview`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setScanPreview(await res.json());
+      } else {
+        toast.error('Could not load scan preview');
+      }
+    } catch (e) {
+      toast.error('Failed to load scan preview');
+    }
+  };
+
+  const handleExportReport = async (scanId, format) => {
+    setExportLoading(format);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/export?format=${format}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.detail || 'Export failed');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ukvi_compliance_${scanId.slice(0, 8)}.${format}`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} report downloaded`);
+    } catch (e) {
+      toast.error('Export failed');
+    } finally {
+      setExportLoading(null);
     }
   };
 
@@ -69,6 +153,46 @@ export default function UKVICompliancePage() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleResolveAlert = async (alertId, resolution) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BACKEND_URL}/api/ukvi/alerts/${alertId}/resolve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution_note: resolution }),
+      });
+      if (res.ok) {
+        toast.success('Alert resolved');
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast.error(err.detail || 'Failed to resolve alert');
+      }
+    } catch {
+      toast.error('Error resolving alert');
+    }
+  };
+
+  const handleUpdateAlertStatus = async (alertId, status) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/alerts/${alertId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        toast.success(`Alert marked as ${status.replace('_', ' ')}`);
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast.error(err.detail || 'Failed to update alert');
+      }
+    } catch {
+      toast.error('Error updating alert');
+    }
   };
 
   const handleGenerateAlerts = async () => {
@@ -165,17 +289,23 @@ export default function UKVICompliancePage() {
       </Card>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b pb-2">
-        {['overview', 'reporting', 'alerts'].map((tab) => (
+      <div className="flex gap-2 border-b pb-2 flex-wrap">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'scanner', label: 'Compliance Scanner' },
+          { id: 'reporting', label: 'Reporting' },
+          { id: 'alerts', label: 'Alerts' },
+        ].map((tab) => (
           <Button
-            key={tab}
-            variant={activeTab === tab ? 'default' : 'ghost'}
+            key={tab.id}
+            variant={activeTab === tab.id ? 'default' : 'ghost'}
             size="sm"
-            onClick={() => setActiveTab(tab)}
-            className="capitalize"
-            data-testid={`ukvi-tab-${tab}`}
+            onClick={() => setActiveTab(tab.id)}
+            data-testid={`ukvi-tab-${tab.id}`}
+            className={activeTab === tab.id && tab.id === 'scanner' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' : ''}
           >
-            {tab}
+            {tab.id === 'scanner' && <Shield className="w-3 h-3 mr-1.5" />}
+            {tab.label}
           </Button>
         ))}
       </div>
@@ -352,6 +482,211 @@ export default function UKVICompliancePage() {
         </Card>
       )}
 
+      {/* ======================================================= */}
+      {/* COMPLIANCE SCANNER TAB                                  */}
+      {/* ======================================================= */}
+      {activeTab === 'scanner' && (
+        <div className="space-y-6">
+          {/* Scanner Header */}
+          <Card className="border-purple-200 dark:border-purple-800">
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Shield className="w-5 h-5 text-purple-600" />
+                    UKVI Compliance Scanner
+                  </CardTitle>
+                  <CardDescription>
+                    Automated compliance scan across all employees — checks RTW, visa, CoS, salary thresholds, and reporting obligations.
+                  </CardDescription>
+                </div>
+                {scannerStatus?.quota && (
+                  <div className="text-sm text-right">
+                    <p className="font-semibold text-purple-700 dark:text-purple-300">
+                      {scannerStatus.quota.scans_used} / {scannerStatus.quota.scans_limit} scans used
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      Resets {scannerStatus.quota.period_end}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4 flex-wrap">
+                <Button
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                  onClick={handleRunScan}
+                  disabled={scanLoading || (scannerStatus?.quota?.quota_exceeded)}
+                >
+                  {scanLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running scan…</>
+                  ) : (
+                    <><Play className="w-4 h-4 mr-2" /> Run Compliance Scan</>
+                  )}
+                </Button>
+                {scannerStatus?.quota?.quota_exceeded && (
+                  <p className="text-sm text-amber-600">
+                    Monthly quota reached — resets {scannerStatus.quota.period_end}
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Scan preview is free. PDF/DOCX report download requires Professional or Enterprise plan.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Scan Preview */}
+          {scanPreview && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    Scan Results — {scanPreview.scan_id?.slice(0, 12)}
+                  </CardTitle>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={exportLoading === 'pdf'}
+                      onClick={() => handleExportReport(scanPreview.scan_id, 'pdf')}
+                    >
+                      {exportLoading === 'pdf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+                      PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={exportLoading === 'docx'}
+                      onClick={() => handleExportReport(scanPreview.scan_id, 'docx')}
+                    >
+                      {exportLoading === 'docx' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4 mr-1" />}
+                      DOCX
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Score */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Overall Score', value: `${scanPreview.overall_score}%`, color: scanPreview.overall_score >= 90 ? 'text-emerald-600' : scanPreview.overall_score >= 75 ? 'text-amber-600' : 'text-red-600' },
+                    { label: 'Risk Level', value: (scanPreview.risk_level || '').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()), color: '' },
+                    { label: 'Employees Scanned', value: scanPreview.summary?.total_employees ?? '—', color: '' },
+                    { label: 'Issues Found', value: scanPreview.summary?.failed ?? 0, color: 'text-red-600' },
+                  ].map((s, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border text-center">
+                      <p className="text-xs text-muted-foreground">{s.label}</p>
+                      <p className={`font-bold text-lg ${s.color}`}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* By Category */}
+                {scanPreview.by_category && Object.keys(scanPreview.by_category).length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold mb-2">By Category</p>
+                    <div className="space-y-2">
+                      {Object.entries(scanPreview.by_category).map(([cat, counts]) => (
+                        <div key={cat} className="flex items-center gap-3 text-sm">
+                          <span className="w-36 capitalize text-muted-foreground">{cat.replace('_', ' ')}</span>
+                          <span className="text-emerald-600 text-xs">{counts.passed} passed</span>
+                          {counts.failed > 0 && <span className="text-red-600 text-xs">{counts.failed} failed</span>}
+                          {counts.warnings > 0 && <span className="text-amber-600 text-xs">{counts.warnings} warnings</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Flagged Employees */}
+                {scanPreview.employee_details?.filter(e => e.fail_count > 0 || e.warning_count > 0).length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold mb-2">Employees with Issues</p>
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {scanPreview.employee_details
+                        .filter(e => e.fail_count > 0 || e.warning_count > 0)
+                        .map(emp => (
+                          <div key={emp.employee_id} className="p-3 rounded-lg border bg-rose-50 dark:bg-rose-950/20">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-medium text-sm">{emp.employee_name}</p>
+                              <div className="flex gap-1">
+                                {emp.fail_count > 0 && <Badge variant="destructive" className="text-xs">{emp.fail_count} issue{emp.fail_count !== 1 ? 's' : ''}</Badge>}
+                                {emp.warning_count > 0 && <Badge className="bg-amber-500 text-white text-xs">{emp.warning_count} warning{emp.warning_count !== 1 ? 's' : ''}</Badge>}
+                              </div>
+                            </div>
+                            <ul className="space-y-0.5">
+                              {emp.checks.filter(c => c.status !== 'pass').map((chk, i) => (
+                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1">
+                                  {chk.status === 'fail'
+                                    ? <X className="w-3 h-3 text-red-500 flex-shrink-0 mt-0.5" />
+                                    : <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />}
+                                  [{chk.rule_code}] {chk.message}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {scanPreview.employee_details?.every(e => e.fail_count === 0 && e.warning_count === 0) && (
+                  <div className="text-center py-6">
+                    <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
+                    <p className="font-semibold text-emerald-700">All checks passed</p>
+                    <p className="text-sm text-muted-foreground">No compliance issues found for any employee.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent Scans */}
+          {scannerStatus?.recent_scans?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent Scans</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {scannerStatus.recent_scans.map((scan) => (
+                    <div
+                      key={scan.scan_id}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/30 cursor-pointer"
+                      onClick={() => handleViewScan(scan.scan_id)}
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{scan.scan_id?.slice(0, 16)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {scan.created_at ? new Date(scan.created_at).toLocaleString() : '—'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {scan.overall_score !== undefined && (
+                          <Badge
+                            className={
+                              scan.overall_score >= 90 ? 'bg-emerald-600 text-white' :
+                              scan.overall_score >= 75 ? 'bg-amber-500 text-white' :
+                              'bg-red-600 text-white'
+                            }
+                          >
+                            {scan.overall_score}%
+                          </Badge>
+                        )}
+                        <Eye className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {activeTab === 'alerts' && (
         <Card>
           <CardHeader>
@@ -370,23 +705,40 @@ export default function UKVICompliancePage() {
             ) : (
               <div className="space-y-3">
                 {alerts.map((alert) => (
-                  <div 
+                  <div
                     key={alert.alert_id}
-                    className="flex items-center justify-between p-4 rounded-lg border"
+                    className="flex items-start justify-between p-4 rounded-lg border gap-4"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <p className="font-medium">{alert.title}</p>
                         {getSeverityBadge(alert.severity)}
+                        {alert.employee_name && (
+                          <span className="text-xs text-muted-foreground">— {alert.employee_name}</span>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">{alert.description}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {alert.action_required}
-                      </p>
+                      {alert.rule_code && (
+                        <p className="text-xs text-muted-foreground mt-0.5">Rule: {alert.rule_code}</p>
+                      )}
                     </div>
-                    <Button variant="outline" size="sm">
-                      Resolve
-                    </Button>
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleResolveAlert(alert.alert_id, `Resolved via UKVI dashboard by compliance team`)}
+                      >
+                        Resolve
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => handleUpdateAlertStatus(alert.alert_id, 'dismissed')}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

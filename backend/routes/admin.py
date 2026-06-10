@@ -61,17 +61,25 @@ async def get_current_user(request: Request) -> CurrentUser:
     return CurrentUser(**user_doc)
 
 
+async def require_admin_role(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Enforce that the caller has owner or admin role on all Admin Portal routes."""
+    if user.role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin Portal access requires the Owner or Administrator role."
+        )
+    return user
+
+
 @router.get("/retention/policy")
-async def get_retention_policy():
+async def get_retention_policy(user: CurrentUser = Depends(require_admin_role)):
     """Return the retention policy in days"""
     return {"retention_days": RETENTION_POLICY, "description": "UK HMRC standard 6-7 year retention for payroll and tax records."}
 
 
 @router.post("/retention/run")
-async def run_retention(dry_run: bool = True, user: CurrentUser = Depends(get_current_user)):
-    """Archive (or count) records older than retention windows. Owner-only."""
-    if user.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+async def run_retention(dry_run: bool = True, user: CurrentUser = Depends(require_admin_role)):
+    """Archive (or count) records older than retention windows. Owner or admin."""
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
 
@@ -133,7 +141,87 @@ async def run_retention(dry_run: bool = True, user: CurrentUser = Depends(get_cu
 
 
 @router.get("/student-loans/plans")
-async def get_student_loan_plans():
+async def get_student_loan_plans(user: CurrentUser = Depends(require_admin_role)):
     """Return UK student loan plans + 2025-26 thresholds for UI dropdowns."""
     from services.student_loan_service import get_plans
     return {"plans": get_plans(), "tax_year": "2025-26"}
+
+
+# ---------------------------------------------------------------------------
+# Company Module & Feature Flag settings (company admin level)
+# ---------------------------------------------------------------------------
+
+AVAILABLE_MODULES = [
+    {"key": "payroll", "label": "Payroll", "plan_required": "starter"},
+    {"key": "hmrc_rti", "label": "HMRC RTI", "plan_required": "professional"},
+    {"key": "ukvi_compliance", "label": "UKVI Compliance", "plan_required": "starter"},
+    {"key": "leave_management", "label": "Leave Management", "plan_required": "starter"},
+    {"key": "performance", "label": "Performance", "plan_required": "professional"},
+    {"key": "training", "label": "Training", "plan_required": "professional"},
+    {"key": "documents", "label": "Documents", "plan_required": "starter"},
+    {"key": "time_tracking", "label": "Time Tracking", "plan_required": "starter"},
+    {"key": "hr_analytics", "label": "HR Analytics", "plan_required": "professional"},
+    {"key": "gdpr", "label": "GDPR Centre", "plan_required": "professional"},
+    {"key": "scheduling", "label": "Scheduling", "plan_required": "starter"},
+    {"key": "statutory_pay", "label": "Statutory Pay", "plan_required": "professional"},
+    {"key": "year_end", "label": "Year-End", "plan_required": "professional"},
+    {"key": "self_service", "label": "Employee Self-Service", "plan_required": "starter"},
+    {"key": "ai_copilot", "label": "AI Copilot", "plan_required": "starter"},
+]
+
+
+class ModuleToggle(BaseModel):
+    module_key: str
+    enabled: bool
+
+
+@router.get("/modules")
+async def get_company_modules(user: CurrentUser = Depends(require_admin_role)):
+    """Return module enable/disable state for this company."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0, "modules_disabled": 1, "subscription_plan": 1})
+    disabled_set = set(company.get("modules_disabled") or [])
+    plan = (company.get("subscription_plan") or "free").lower()
+    modules_state = [
+        {**m, "enabled": m["key"] not in disabled_set}
+        for m in AVAILABLE_MODULES
+    ]
+    return {"modules": modules_state, "plan": plan}
+
+
+@router.patch("/modules/{module_key}")
+async def toggle_company_module(module_key: str, body: ModuleToggle, user: CurrentUser = Depends(require_admin_role)):
+    """Enable or disable a module for this company."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    valid = {m["key"] for m in AVAILABLE_MODULES}
+    if module_key not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown module: {module_key}")
+
+    company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0, "modules_disabled": 1})
+    disabled = set(company.get("modules_disabled") or [])
+
+    if body.enabled:
+        disabled.discard(module_key)
+    else:
+        disabled.add(module_key)
+
+    await db.companies.update_one(
+        {"company_id": user.company_id},
+        {"$set": {"modules_disabled": list(disabled), "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    await db.audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "company_id": user.company_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "action": "module_toggle",
+        "entity_type": "module",
+        "entity_id": module_key,
+        "details": {"enabled": body.enabled, "module_key": module_key},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"module_key": module_key, "enabled": body.enabled}

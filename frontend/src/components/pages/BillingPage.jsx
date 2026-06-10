@@ -7,7 +7,8 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import {
     CreditCard, CheckCircle2, Sparkles, Zap, Building2,
-    Loader2, AlertCircle, Receipt, Plus, Crown, Download, Infinity as InfinityIcon
+    Loader2, AlertCircle, Receipt, Plus, Crown, Download, Infinity as InfinityIcon,
+    Shield, Eye, FileText
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -40,18 +41,20 @@ export default function BillingPage() {
     const [checkoutLoading, setCheckoutLoading] = useState(null);
     const [pollStatus, setPollStatus] = useState(null);
 
+    const [ukviQuota, setUkviQuota] = useState(null);
+
     const fetchBilling = async () => {
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/api/payments/billing`, {
-                headers: { Authorization: `Bearer ${token}` },
-                withCredentials: true,
-            });
-            setBilling(res.data);
-            const usageRes = await axios.get(`${API_URL}/api/payments/usage/this-month`, {
-                headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
-            }).catch(() => ({ data: null }));
+            const headers = { Authorization: `Bearer ${token}` };
+            const [billingRes, usageRes, ukviRes] = await Promise.all([
+                axios.get(`${API_URL}/api/payments/billing`, { headers, withCredentials: true }),
+                axios.get(`${API_URL}/api/payments/usage/this-month`, { headers, withCredentials: true }).catch(() => ({ data: null })),
+                axios.get(`${API_URL}/api/ukvi/compliance/status`, { headers, withCredentials: true }).catch(() => ({ data: null })),
+            ]);
+            setBilling(billingRes.data);
             setUsage(usageRes.data);
+            setUkviQuota(ukviRes.data?.quota || null);
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Failed to load billing info');
         } finally {
@@ -271,53 +274,87 @@ export default function BillingPage() {
                 </CardContent>
             </Card>
 
-            {/* Download usage / bulk pass status */}
-            {usage && (
-                <Card data-testid="download-usage-card">
+            {/* Payslip Downloads — pay-per-download model */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card data-testid="payslip-download-info-card">
                     <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Download className="w-4 h-4 text-indigo-600" />
-                                Download usage — {usage.month}
-                            </CardTitle>
-                            {usage.bulk_downloads_active && (
-                                <Badge className="bg-indigo-600 text-white">
-                                    <InfinityIcon className="w-3 h-3 mr-1" /> Unlimited until {(usage.bulk_downloads_until || '').slice(0, 10)}
-                                </Badge>
-                            )}
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <FileText className="w-4 h-4 text-indigo-600" />
+                            Payslip Downloads
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-3">
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200">
+                            <Eye className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                            <div>
+                                <p className="font-semibold text-sm text-emerald-800 dark:text-emerald-200">Preview — Free</p>
+                                <p className="text-xs text-muted-foreground">View payslips on-screen at no cost</p>
+                            </div>
                         </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
+                            <Download className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                            <div>
+                                <p className="font-semibold text-sm">PDF Download — £5 per payslip</p>
+                                <p className="text-xs text-muted-foreground">Secure server-side payment verification on every download</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* UKVI Compliance Scanner Quota */}
+                <Card data-testid="ukvi-scan-quota-card">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <Shield className="w-4 h-4 text-purple-600" />
+                            UKVI Compliance Scanner
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground">Included in all paid plans — 2 scans per billing month</p>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
-                                <p className="text-xs text-muted-foreground">Plan quota</p>
-                                <p className="font-bold text-lg">
-                                    {usage.quota === -1 ? '∞' : usage.quota || 0} / month
+                        {ukviQuota ? (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">Scans used</span>
+                                    <span className="font-bold">{ukviQuota.scans_used} / {ukviQuota.scans_limit}</span>
+                                </div>
+                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                                    <div
+                                        className={`h-2 rounded-full transition-all ${ukviQuota.scans_used >= ukviQuota.scans_limit ? 'bg-red-500' : 'bg-purple-600'}`}
+                                        style={{ width: `${Math.min(100, (ukviQuota.scans_used / ukviQuota.scans_limit) * 100)}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {ukviQuota.scans_remaining > 0
+                                        ? `${ukviQuota.scans_remaining} scan${ukviQuota.scans_remaining !== 1 ? 's' : ''} remaining this month`
+                                        : 'Monthly quota reached — resets next billing period'}
                                 </p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
-                                <p className="text-xs text-muted-foreground">Used this month</p>
-                                <p className="font-bold text-lg">{usage.used_this_month}</p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/30 border">
-                                <p className="text-xs text-muted-foreground">Remaining free</p>
-                                <p className="font-bold text-lg">
-                                    {usage.remaining === -1 ? '∞' : usage.remaining}
+                                <p className="text-xs text-muted-foreground">
+                                    Period: {ukviQuota.period_start} → {ukviQuota.period_end}
                                 </p>
+                                {billing?.current_plan?.id === 'starter' && (
+                                    <div className="mt-2 p-2 rounded bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100">
+                                        <p className="text-xs text-indigo-700 font-medium">Upgrade to Professional for enhanced UKVI compliance</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Professional (£39/mo) includes full HR analytics, RTI submissions, and unlimited UKVI support. Starter already includes 2 scans/month + PDF/DOCX reports.</p>
+                                        <button
+                                            className="mt-1.5 text-xs text-indigo-700 underline font-medium"
+                                            onClick={() => document.getElementById('plans-section')?.scrollIntoView({ behavior: 'smooth' })}
+                                        >
+                                            See plans →
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                        {!usage.bulk_downloads_active && usage.quota !== -1 && (
-                            <p className="text-xs text-muted-foreground mt-3">
-                                After your free quota, each payslip download costs £{usage.price_per_download} —
-                                or buy <strong>unlimited 30 days for £{usage.bulk_offer_price}</strong>.
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                Subscribe to a plan to access UKVI compliance scans.
                             </p>
                         )}
                     </CardContent>
                 </Card>
-            )}
+            </div>
 
             {/* Plans */}
-            <div>
+            <div id="plans-section">
                 <h2 className="text-2xl font-bold mb-2">Choose a plan</h2>
                 <p className="text-muted-foreground mb-6 text-sm">
                     All plans are billed in GBP. Test keys are active — use Stripe test cards like

@@ -86,6 +86,69 @@ function ProtectedRoute({ children, showLayout = true }) {
     return <MainLayout>{children}</MainLayout>;
 }
 
+// Admin-only route — requires owner or admin role
+function AdminRoute({ children }) {
+    const { user, loading } = useAuth();
+    const location = useLocation();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (user.role !== 'owner' && user.role !== 'admin') {
+        return (
+            <MainLayout>
+                <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center">
+                    <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                    </div>
+                    <h1 className="text-2xl font-bold text-foreground">Access Denied</h1>
+                    <p className="text-muted-foreground max-w-sm">
+                        The Admin Portal is restricted to users with the <strong>Owner</strong> or <strong>Administrator</strong> role. Contact your account owner to request access.
+                    </p>
+                    <Navigate to="/dashboard" replace />
+                </div>
+            </MainLayout>
+        );
+    }
+
+    return <MainLayout>{children}</MainLayout>;
+}
+
+// Super Admin route — requires platform_admin flag
+function SuperAdminRoute({ children }) {
+    const { user, loading } = useAuth();
+    const location = useLocation();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (!user.is_platform_admin) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return <MainLayout>{children}</MainLayout>;
+}
+
 // Public Route - redirects to dashboard if authenticated
 function PublicRoute({ children }) {
     const { user, loading } = useAuth();
@@ -146,8 +209,8 @@ function AppRouter() {
             <Route path="/time-tracking" element={<ProtectedRoute><TimeSchedulingPage /></ProtectedRoute>} />
             <Route path="/statutory" element={<ProtectedRoute><StatutoryPaymentsPage /></ProtectedRoute>} />
             <Route path="/year-end" element={<ProtectedRoute><YearEndPage /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><AdminPortalPage /></ProtectedRoute>} />
-            <Route path="/super-admin" element={<ProtectedRoute><SuperAdminPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><AdminPortalPage /></AdminRoute>} />
+            <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
             <Route path="/performance" element={<ProtectedRoute><PerformancePage /></ProtectedRoute>} />
             <Route path="/cases" element={<ProtectedRoute><EmployeeRelationsPage /></ProtectedRoute>} />
             <Route path="/gdpr" element={<ProtectedRoute><GDPRCenterPage /></ProtectedRoute>} />

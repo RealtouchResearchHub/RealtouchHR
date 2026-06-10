@@ -122,52 +122,97 @@ class SubscriptionPlan(str, Enum):
 
 
 # Fixed pricing packages (server-side only - never accept amounts from frontend)
+# Pricing per PDF spec: Starter £29, Professional £39, Enterprise £129
 SUBSCRIPTION_PLANS = {
     "starter": {
         "name": "Starter",
-        "price": 39.00,  # Monthly in GBP
+        "price": 29.00,
         "currency": "gbp",
         "features": [
             "Up to 10 employees",
-            "Basic HR features",
+            "Core HR features",
             "Payroll processing",
+            "2 UKVI compliance scans/month",
+            "Payslip preview (free)",
             "Email support"
         ],
-        "employee_limit": 10
+        "employee_limit": 10,
+        "feature_keys": [
+            "payroll_processing",
+            "payslip_preview",
+            "payslip_paid_download",
+            "ukvi_compliance_scanner",
+            "leave_management",
+            "document_management"
+        ]
     },
     "professional": {
         "name": "Professional",
-        "price": 59.00,
+        "price": 39.00,
         "currency": "gbp",
         "features": [
             "Up to 50 employees",
             "Full HR suite",
-            "Payroll + RTI submissions",
-            "UKVI compliance",
+            "Payroll + HMRC RTI submissions",
+            "2 UKVI compliance scans/month",
+            "UKVI compliance report downloads",
+            "Payslip preview (free)",
             "Priority support"
         ],
-        "employee_limit": 50
+        "employee_limit": 50,
+        "feature_keys": [
+            "payroll_processing",
+            "hmrc_rti",
+            "payslip_preview",
+            "payslip_paid_download",
+            "ukvi_compliance_scanner",
+            "ukvi_report_download",
+            "leave_management",
+            "document_management",
+            "hr_analytics",
+            "performance_management"
+        ]
     },
     "enterprise": {
         "name": "Enterprise",
-        "price": 149.00,
+        "price": 129.00,
         "currency": "gbp",
         "features": [
             "Unlimited employees",
             "All features included",
             "Multi-entity support",
             "SCIM/SAML SSO",
-            "Dedicated support",
+            "2 UKVI compliance scans/month",
+            "UKVI compliance report downloads",
+            "Dedicated account manager",
             "Custom integrations"
         ],
-        "employee_limit": -1  # Unlimited
+        "employee_limit": -1,
+        "feature_keys": [
+            "payroll_processing",
+            "hmrc_rti",
+            "payslip_preview",
+            "payslip_paid_download",
+            "ukvi_compliance_scanner",
+            "ukvi_report_download",
+            "enterprise_multi_entity",
+            "enterprise_sso",
+            "leave_management",
+            "document_management",
+            "hr_analytics",
+            "performance_management",
+            "advanced_reporting"
+        ]
     }
 }
+
+# UKVI Compliance Scanner: 2 scans per billing month across all plans
+UKVI_SCAN_QUOTA_PER_MONTH = 2
 
 # One-time add-ons
 ADDONS = {
     "extra_users_10": {
-        "name": "Extra 10 Users",
+        "name": "Extra 10 Employees",
         "price": 25.00,
         "currency": "gbp"
     },
@@ -180,21 +225,15 @@ ADDONS = {
         "name": "Data Migration Service",
         "price": 299.00,
         "currency": "gbp"
-    },
-    "bulk_downloads_monthly": {
-        "name": "Unlimited Downloads (30 days)",
-        "price": 29.00,
-        "currency": "gbp",
-        "type": "bulk_downloads",
-        "duration_days": 30
     }
 }
 
-# Plan-based monthly free download quota (payslip + tax-doc PDFs)
+# Payslip downloads: preview free, PDF download is £5 per payslip (all plans)
+# No free monthly quota — all payslip PDF downloads are pay-per-download
 PLAN_DOWNLOAD_QUOTA = {
-    "starter": 5,
-    "professional": 50,
-    "enterprise": -1,  # unlimited
+    "starter": 0,
+    "professional": 0,
+    "enterprise": 0,
 }
 
 

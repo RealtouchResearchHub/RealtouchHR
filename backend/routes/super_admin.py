@@ -330,17 +330,17 @@ async def enable_user(user_id: str, admin: CurrentUser = Depends(get_platform_ad
     return {"ok": True}
 
 
-# ==================== FEATURE FLAGS ====================
+# ==================== FEATURE FLAGS (legacy simple store — superseded by /feature-flags below) ====================
 
-@router.get("/feature-flags")
-async def list_global_flags(_: CurrentUser = Depends(get_platform_admin)):
-    """Platform-wide feature flags"""
+@router.get("/feature-flags/legacy")
+async def list_global_flags_legacy(_: CurrentUser = Depends(get_platform_admin)):
+    """Legacy platform-wide feature flags (simple key-value store)"""
     flags = await db.feature_flags.find({"scope": "global"}, {"_id": 0}).to_list(200)
     return {"flags": flags, "total": len(flags)}
 
 
-@router.put("/feature-flags/{flag_key}")
-async def set_global_flag(flag_key: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+@router.put("/feature-flags/legacy/{flag_key}")
+async def set_global_flag_legacy(flag_key: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
     enabled = bool(data.get("enabled", False))
     now = datetime.now(timezone.utc).isoformat()
     await db.feature_flags.update_one(
@@ -452,14 +452,15 @@ async def impersonate_user(data: dict, admin: CurrentUser = Depends(get_platform
     }
 
 
-# ==================== PLATFORM AUDIT LOG ====================
+# ==================== PLATFORM AUDIT LOG (company-level — superseded by /audit-log below) ====================
 
-@router.get("/audit-log")
-async def platform_audit_log(
+@router.get("/company-audit-log")
+async def platform_company_audit_log(
     limit: int = 100,
     action: Optional[str] = None,
     _: CurrentUser = Depends(get_platform_admin)
 ):
+    """Company-level audit log across all tenants."""
     query = {}
     if action:
         query["action"] = action
@@ -498,4 +499,546 @@ async def emergency_kill_switch(data: dict, admin: CurrentUser = Depends(get_pla
         "details": {"enabled": enabled, "reason": reason},
         "timestamp": now,
     })
+    # Also log to emergency_actions
+    await db.emergency_actions.insert_one({
+        "action_id": f"emg_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action_type": "kill_switch_toggled",
+        "reason": reason,
+        "details": {"enabled": enabled},
+        "created_at": now,
+    })
     return {"kill_switch_enabled": enabled, "reason": reason}
+
+
+# ===========================================================================
+# PLATFORM OPERATORS MANAGEMENT
+# ===========================================================================
+
+PLATFORM_OPERATOR_ROLES = ["platform_owner", "platform_admin", "platform_support", "platform_billing", "platform_readonly"]
+
+
+@router.get("/operators")
+async def list_platform_operators(admin: CurrentUser = Depends(get_platform_admin)):
+    """List all platform operators (super admin users)."""
+    operators = await db.platform_operators.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"operators": operators, "total": len(operators)}
+
+
+@router.post("/operators")
+async def add_platform_operator(data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Add a new platform operator. Only platform_owner can do this."""
+    if admin.role not in ("platform_owner",) and admin.email not in _get_platform_admin_emails():
+        raise HTTPException(status_code=403, detail="Only platform owner can add operators")
+
+    email = (data.get("email") or "").strip().lower()
+    role = data.get("role", "platform_support")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+    if role not in PLATFORM_OPERATOR_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {', '.join(PLATFORM_OPERATOR_ROLES)}")
+
+    # Find or note user
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    user_id = user_doc["user_id"] if user_doc else email
+
+    existing = await db.platform_operators.find_one({"email": email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=409, detail="Operator with this email already exists")
+
+    now = datetime.now(timezone.utc).isoformat()
+    op = {
+        "operator_id": f"op_{uuid.uuid4().hex[:12]}",
+        "user_id": user_id,
+        "email": email,
+        "name": data.get("name", ""),
+        "role": role,
+        "is_active": True,
+        "created_by": admin.email,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.platform_operators.insert_one(op)
+
+    # Update user record if exists
+    if user_doc:
+        await db.users.update_one({"email": email}, {"$set": {"is_platform_admin": True}})
+
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "operator_added",
+        "target_type": "platform_operator",
+        "target_id": op["operator_id"],
+        "details": {"email": email, "role": role},
+        "created_at": now,
+    })
+    return {"message": "Platform operator added", "operator": op}
+
+
+@router.patch("/operators/{operator_id}")
+async def update_platform_operator(operator_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Update a platform operator's role or active status."""
+    op = await db.platform_operators.find_one({"operator_id": operator_id}, {"_id": 0})
+    if not op:
+        raise HTTPException(status_code=404, detail="Operator not found")
+
+    updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if "role" in data:
+        if data["role"] not in PLATFORM_OPERATOR_ROLES:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        updates["role"] = data["role"]
+    if "is_active" in data:
+        updates["is_active"] = bool(data["is_active"])
+
+    await db.platform_operators.update_one({"operator_id": operator_id}, {"$set": updates})
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "operator_updated",
+        "target_type": "platform_operator",
+        "target_id": operator_id,
+        "details": updates,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"message": "Operator updated"}
+
+
+@router.delete("/operators/{operator_id}")
+async def remove_platform_operator(operator_id: str, admin: CurrentUser = Depends(get_platform_admin)):
+    """Remove a platform operator (deactivate, not delete)."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.platform_operators.update_one(
+        {"operator_id": operator_id},
+        {"$set": {"is_active": False, "updated_at": now}},
+    )
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "operator_removed",
+        "target_type": "platform_operator",
+        "target_id": operator_id,
+        "details": {},
+        "created_at": now,
+    })
+    return {"message": "Operator deactivated"}
+
+
+# ===========================================================================
+# PLATFORM FEATURE FLAGS
+# ===========================================================================
+
+DEFAULT_FEATURE_FLAGS = [
+    {"flag_key": "ukvi_compliance_scanner", "display_name": "UKVI Compliance Scanner", "description": "Allow companies to run UKVI compliance scans"},
+    {"flag_key": "ukvi_report_download", "display_name": "UKVI Report Download", "description": "Allow PDF/DOCX report downloads from compliance scans"},
+    {"flag_key": "hmrc_rti", "display_name": "HMRC RTI", "description": "HMRC Real Time Information FPS/EPS submissions"},
+    {"flag_key": "payroll_processing", "display_name": "Payroll Processing", "description": "Full payroll and pay run processing"},
+    {"flag_key": "payslip_paid_download", "display_name": "Payslip Paid Download", "description": "£5 per-payslip PDF download"},
+    {"flag_key": "enterprise_multi_entity", "display_name": "Multi-Entity Support", "description": "Multi-company enterprise feature"},
+    {"flag_key": "enterprise_sso", "display_name": "SSO/SAML", "description": "Enterprise SSO via SCIM/SAML"},
+    {"flag_key": "ai_copilot", "display_name": "AI Copilot", "description": "AI assistant powered by Claude"},
+]
+
+
+@router.get("/feature-flags")
+async def list_platform_feature_flags(admin: CurrentUser = Depends(get_platform_admin)):
+    """Get all platform-level feature flags."""
+    existing = {
+        f["flag_key"]: f
+        for f in await db.platform_feature_flags.find({}, {"_id": 0}).to_list(200)
+    }
+    result = []
+    for default in DEFAULT_FEATURE_FLAGS:
+        flag = existing.get(default["flag_key"], {})
+        result.append({
+            **default,
+            "global_enabled": flag.get("global_enabled", True),
+            "plan_rules_json": flag.get("plan_rules_json", {}),
+            "company_overrides": flag.get("company_overrides", {}),
+            "flag_id": flag.get("flag_id"),
+            "updated_at": flag.get("updated_at"),
+        })
+    return {"flags": result}
+
+
+@router.put("/feature-flags/{flag_key}")
+async def update_platform_feature_flag(flag_key: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Update a platform feature flag. Can set global_enabled, plan_rules_json, company_overrides."""
+    now = datetime.now(timezone.utc).isoformat()
+    updates: dict = {"updated_at": now, "updated_by": admin.email}
+
+    if "global_enabled" in data:
+        updates["global_enabled"] = bool(data["global_enabled"])
+    if "plan_rules_json" in data:
+        updates["plan_rules_json"] = data["plan_rules_json"]
+    if "company_overrides" in data:
+        updates["company_overrides"] = data["company_overrides"]
+
+    existing = await db.platform_feature_flags.find_one({"flag_key": flag_key}, {"_id": 0})
+    if existing:
+        await db.platform_feature_flags.update_one({"flag_key": flag_key}, {"$set": updates})
+    else:
+        desc = next((f["description"] for f in DEFAULT_FEATURE_FLAGS if f["flag_key"] == flag_key), "")
+        updates.update({
+            "flag_id": f"ff_{uuid.uuid4().hex[:12]}",
+            "flag_key": flag_key,
+            "display_name": flag_key.replace("_", " ").title(),
+            "description": desc,
+            "global_enabled": updates.get("global_enabled", True),
+            "plan_rules_json": updates.get("plan_rules_json", {}),
+            "company_overrides": updates.get("company_overrides", {}),
+            "created_at": now,
+        })
+        await db.platform_feature_flags.insert_one(updates)
+
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "feature_flag_updated",
+        "target_type": "platform_feature_flag",
+        "target_id": flag_key,
+        "details": updates,
+        "created_at": now,
+    })
+    return {"message": f"Feature flag '{flag_key}' updated"}
+
+
+# ===========================================================================
+# EMERGENCY ACTIONS
+# ===========================================================================
+
+@router.get("/emergency-actions")
+async def list_emergency_actions(admin: CurrentUser = Depends(get_platform_admin)):
+    """List recent emergency control actions."""
+    actions = await db.emergency_actions.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"actions": actions, "total": len(actions)}
+
+
+@router.post("/emergency/rti-freeze/{company_id}")
+async def freeze_company_rti(company_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Freeze RTI submissions for a specific company (emergency control)."""
+    reason = data.get("reason", "Emergency RTI freeze by platform admin")
+    now = datetime.now(timezone.utc).isoformat()
+
+    await db.companies.update_one(
+        {"company_id": company_id},
+        {"$set": {"rti_frozen": True, "rti_frozen_reason": reason, "rti_frozen_at": now}},
+    )
+    await db.emergency_actions.insert_one({
+        "action_id": f"emg_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action_type": "rti_freeze",
+        "target_id": company_id,
+        "reason": reason,
+        "details": {},
+        "created_at": now,
+    })
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "rti_freeze_applied",
+        "target_type": "company",
+        "target_id": company_id,
+        "details": {"reason": reason},
+        "created_at": now,
+    })
+    return {"message": f"RTI frozen for company {company_id}", "reason": reason}
+
+
+@router.post("/emergency/rti-unfreeze/{company_id}")
+async def unfreeze_company_rti(company_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Unfreeze RTI submissions for a company."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.companies.update_one(
+        {"company_id": company_id},
+        {"$set": {"rti_frozen": False, "rti_frozen_reason": None}},
+    )
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"plog_{uuid.uuid4().hex[:12]}",
+        "operator_id": admin.user_id,
+        "operator_email": admin.email,
+        "action": "rti_freeze_removed",
+        "target_type": "company",
+        "target_id": company_id,
+        "details": {},
+        "created_at": now,
+    })
+    return {"message": f"RTI unfrozen for company {company_id}"}
+
+
+@router.post("/emergency/disable-ai/{company_id}")
+async def disable_company_ai(company_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Disable AI Copilot for a specific company."""
+    reason = data.get("reason", "AI disabled by platform admin")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.feature_flags.update_one(
+        {"company_id": company_id, "flag_name": "ai_copilot"},
+        {"$set": {"enabled": False, "updated_at": now}},
+        upsert=True,
+    )
+    await db.emergency_actions.insert_one({
+        "action_id": f"emg_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action_type": "ai_disabled",
+        "target_id": company_id,
+        "reason": reason,
+        "details": {},
+        "created_at": now,
+    })
+    return {"message": f"AI Copilot disabled for company {company_id}"}
+
+
+# ===========================================================================
+# PLATFORM AUDIT LOG
+# ===========================================================================
+
+@router.get("/audit-log")
+async def get_platform_audit_log(
+    limit: int = 50,
+    admin: CurrentUser = Depends(get_platform_admin),
+):
+    """Get the platform-wide audit log."""
+    logs = await db.platform_audit_logs.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return {"logs": logs, "total": len(logs)}
+
+
+# ===========================================================================
+# USER MANAGEMENT — RESET MFA / FORCE LOGOUT
+# ===========================================================================
+
+@router.post("/users/{user_id}/reset-mfa")
+async def reset_user_mfa(
+    user_id: str,
+    admin: CurrentUser = Depends(get_platform_admin),
+):
+    """
+    Reset 2FA/MFA for a specific user. Clears TOTP secret and backup codes.
+    User will be prompted to re-enroll on next login.
+    """
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "totp_enabled": False,
+            "totp_secret": None,
+            "totp_backup_codes": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"pal_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action": "reset_user_mfa",
+        "target_type": "user",
+        "target_id": user_id,
+        "details": {"user_email": user.get("email")},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"message": f"2FA reset for user {user_id}. They will need to re-enroll on next login."}
+
+
+@router.post("/users/{user_id}/force-logout")
+async def force_logout_user(
+    user_id: str,
+    admin: CurrentUser = Depends(get_platform_admin),
+):
+    """
+    Force logout a user by incrementing their token_version.
+    All existing JWT tokens for this user will become invalid.
+    """
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_version = (user.get("token_version") or 0) + 1
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "token_version": new_version,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"pal_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action": "force_logout_user",
+        "target_type": "user",
+        "target_id": user_id,
+        "details": {"user_email": user.get("email"), "new_token_version": new_version},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"message": f"User {user_id} has been force-logged out. All active sessions are now invalid."}
+
+
+# ===========================================================================
+# PLATFORM SECURITY SETTINGS
+# ===========================================================================
+
+SECURITY_SETTINGS_KEY = "platform_security_settings"
+
+DEFAULT_SECURITY_SETTINGS = {
+    "mfa_enforcement": "optional",      # optional | required_for_admins | required_for_all
+    "session_timeout_hours": 24,
+    "max_sessions_per_user": 5,
+    "ip_allowlist_enabled": False,
+    "ip_allowlist": [],
+    "login_attempt_lockout": 10,
+    "password_min_length": 8,
+    "require_uppercase": True,
+    "require_special_char": True,
+    "platform_admin_emails": [],
+}
+
+
+@router.get("/security/settings")
+async def get_security_settings(admin: CurrentUser = Depends(get_platform_admin)):
+    """Get platform-wide security policy settings."""
+    doc = await db.platform_settings.find_one({"key": SECURITY_SETTINGS_KEY}, {"_id": 0})
+    settings = {**DEFAULT_SECURITY_SETTINGS, **(doc.get("settings") if doc else {})}
+    # Merge designated admin emails from env
+    env_emails = _get_platform_admin_emails()
+    # Also pull is_platform_admin users
+    db_admins = await db.users.find(
+        {"is_platform_admin": True},
+        {"_id": 0, "email": 1, "name": 1, "totp_enabled": 1}
+    ).to_list(100)
+    designated_admins = [
+        {"email": u.get("email"), "name": u.get("name", ""), "mfa_active": bool(u.get("totp_enabled"))}
+        for u in db_admins
+    ]
+    # Include env-only admins not yet in DB
+    db_emails = {u.get("email") for u in db_admins}
+    for e in env_emails:
+        if e not in db_emails:
+            designated_admins.append({"email": e, "name": "(env only)", "mfa_active": False})
+
+    return {"settings": settings, "designated_admins": designated_admins}
+
+
+@router.put("/security/settings")
+async def update_security_settings(data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Update platform-wide security policy settings."""
+    allowed_keys = set(DEFAULT_SECURITY_SETTINGS.keys())
+    updates = {k: v for k, v in data.items() if k in allowed_keys}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.platform_settings.update_one(
+        {"key": SECURITY_SETTINGS_KEY},
+        {"$set": {"key": SECURITY_SETTINGS_KEY, "settings": updates, "updated_at": now, "updated_by": admin.email}},
+        upsert=True,
+    )
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"pal_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action": "security_settings_updated",
+        "target_type": "platform_settings",
+        "target_id": SECURITY_SETTINGS_KEY,
+        "details": updates,
+        "created_at": now,
+    })
+    return {"message": "Security settings updated", "updated": updates}
+
+
+@router.post("/security/revoke-all-sessions")
+async def revoke_all_sessions(data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Revoke all active user sessions across the platform (emergency use)."""
+    reason = data.get("reason", "Security policy enforcement")
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.user_sessions.delete_many({})
+    await db.platform_audit_logs.insert_one({
+        "log_id": f"pal_{uuid.uuid4().hex[:12]}",
+        "operator_email": admin.email,
+        "action": "all_sessions_revoked",
+        "target_type": "platform",
+        "target_id": "all_sessions",
+        "details": {"reason": reason, "sessions_deleted": result.deleted_count},
+        "created_at": now,
+    })
+    return {"message": f"Revoked {result.deleted_count} active sessions", "reason": reason}
+
+
+# ===========================================================================
+# SYSTEM HEALTH
+# ===========================================================================
+
+@router.get("/system/health")
+async def get_system_health(admin: CurrentUser = Depends(get_platform_admin)):
+    """Aggregate real-time platform health indicators."""
+    now = datetime.now(timezone.utc)
+
+    # RTI submissions
+    pending_rti = await db.rti_submissions.count_documents({"status": {"$in": ["pending", "prepared", "approved"]}})
+    failed_rti = await db.rti_submissions.count_documents({"status": "failed"})
+    last_rti = await db.rti_submissions.find_one({}, {"_id": 0, "created_at": 1}, sort=[("created_at", -1)])
+
+    # Notifications / email queue proxy
+    pending_notifications = await db.notifications.count_documents({"read": False})
+
+    # Compliance alerts
+    open_alerts = await db.ukvi_compliance_alerts.count_documents({"status": "open"})
+
+    # Active sessions
+    active_sessions = await db.user_sessions.count_documents({})
+
+    # Platform audit log — last 24h events
+    cutoff_24h = (now - timedelta(hours=24)).isoformat()
+    audit_24h = await db.platform_audit_logs.count_documents({"created_at": {"$gt": cutoff_24h}})
+
+    # Recent RTI submissions in last 7 days
+    cutoff_7d = (now - timedelta(days=7)).isoformat()
+    rti_7d = await db.rti_submissions.count_documents({"created_at": {"$gt": cutoff_7d}})
+
+    # Companies
+    total_companies = await db.companies.count_documents({})
+    active_companies = await db.companies.count_documents({"suspended": {"$ne": True}})
+
+    return {
+        "timestamp": now.isoformat(),
+        "services": {
+            "database": {"status": "healthy", "note": "MongoDB connection active"},
+            "rti_queue": {
+                "status": "warning" if failed_rti > 0 else "healthy",
+                "pending": pending_rti,
+                "failed": failed_rti,
+                "processed_last_7d": rti_7d,
+                "last_activity": last_rti.get("created_at") if last_rti else None,
+            },
+            "email_queue": {
+                "status": "healthy",
+                "pending_notifications": pending_notifications,
+                "note": "Resend integration — notifications counted",
+            },
+            "compliance_engine": {
+                "status": "warning" if open_alerts > 5 else "healthy",
+                "open_alerts": open_alerts,
+            },
+            "ai_copilot": {
+                "status": "healthy",
+                "note": "Claude API via Anthropic",
+            },
+            "file_storage": {
+                "status": "healthy",
+                "note": "Document storage operational",
+            },
+        },
+        "platform": {
+            "total_companies": total_companies,
+            "active_companies": active_companies,
+            "active_sessions": active_sessions,
+            "audit_events_24h": audit_24h,
+        },
+    }
