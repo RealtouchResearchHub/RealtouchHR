@@ -225,3 +225,24 @@ async def toggle_company_module(module_key: str, body: ModuleToggle, user: Curre
     })
 
     return {"module_key": module_key, "enabled": body.enabled}
+
+
+# ---------------------------------------------------------------------------
+# Danger Zone re-authentication
+# ---------------------------------------------------------------------------
+
+class ReauthRequest(BaseModel):
+    password: str
+
+
+@router.post("/danger-zone/verify")
+async def verify_danger_zone(body: ReauthRequest, user: CurrentUser = Depends(require_admin_role)):
+    """Verify the admin's password before executing Danger Zone operations."""
+    import bcrypt as _bcrypt
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "password_hash": 1})
+    if not user_doc or not user_doc.get("password_hash"):
+        raise HTTPException(status_code=400, detail="Password-based authentication not configured for this account. Use SSO or contact support.")
+    ok = _bcrypt.checkpw(body.password.encode(), user_doc["password_hash"].encode())
+    if not ok:
+        raise HTTPException(status_code=403, detail="Incorrect password.")
+    return {"verified": True}

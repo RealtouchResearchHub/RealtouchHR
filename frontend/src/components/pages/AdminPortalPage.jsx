@@ -24,6 +24,70 @@ import { Switch } from '../ui/switch';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
+// ---------------------------------------------------------------------------
+// Danger Zone re-auth dialog
+// ---------------------------------------------------------------------------
+function DangerReauthDialog({ open, onOpenChange, title, desc, onConfirmed }) {
+    const [password, setPassword] = React.useState('');
+    const [verifying, setVerifying] = React.useState(false);
+    const [err, setErr] = React.useState('');
+
+    const handleClose = () => { setPassword(''); setErr(''); onOpenChange(false); };
+
+    const handleVerify = async (e) => {
+        e.preventDefault();
+        if (!password) { setErr('Password is required'); return; }
+        setVerifying(true); setErr('');
+        try {
+            const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+            await axios.post(`${API_URL}/api/admin/danger-zone/verify`, { password }, { headers, withCredentials: true });
+            handleClose();
+            onConfirmed();
+        } catch (ex) {
+            setErr(ex.response?.data?.detail || 'Verification failed');
+        } finally {
+            setVerifying(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-rose-700">
+                        <AlertTriangle className="w-5 h-5" /> {title}
+                    </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleVerify} className="space-y-4">
+                    <p className="text-sm text-muted-foreground">{desc}</p>
+                    <div className="rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 p-3 text-sm text-rose-700 dark:text-rose-300">
+                        This action is destructive and <strong>cannot be undone</strong>. Re-enter your password to confirm.
+                    </div>
+                    <div>
+                        <Label>Your password</Label>
+                        <Input
+                            type="password"
+                            className="mt-1"
+                            value={password}
+                            onChange={e => { setPassword(e.target.value); setErr(''); }}
+                            placeholder="Enter your password to confirm"
+                            autoFocus
+                            data-testid="danger-zone-password"
+                        />
+                        {err && <p className="text-xs text-rose-600 mt-1">{err}</p>}
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
+                        <Button type="submit" disabled={verifying} className="bg-rose-600 hover:bg-rose-700 text-white" data-testid="danger-zone-confirm">
+                            {verifying ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</> : 'Confirm action'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 const ROLES = [
     { id: 'owner', label: 'Owner', desc: 'Full platform control including billing and danger zone', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-200' },
     { id: 'admin', label: 'Administrator', desc: 'Full system access except billing ownership transfer', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200' },
@@ -72,6 +136,7 @@ export default function AdminPortalPage() {
     const [sending, setSending] = useState(false);
     const [companyModules, setCompanyModules] = useState([]);
     const [moduleTogglingKey, setModuleTogglingKey] = useState(null);
+    const [dangerDialog, setDangerDialog] = useState(null); // { title, desc, action }
 
     const token = () => localStorage.getItem('token');
 
@@ -734,45 +799,63 @@ export default function AdminPortalPage() {
                                     <AlertTriangle className="w-5 h-5 text-rose-600" />
                                     <CardTitle className="text-rose-900 dark:text-rose-100">Danger zone</CardTitle>
                                 </div>
-                                <CardDescription>Operations here are destructive and cannot be undone.</CardDescription>
+                                <CardDescription>Operations here are destructive and cannot be undone. Your password is required before any action proceeds.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <DangerItem
                                     title="Run record retention"
                                     desc="Archive records older than HMRC 6-7 year windows to {collection}_archive, then delete from live collections."
-                                    action={async () => {
-                                        if (!window.confirm('Archive + delete records older than retention windows? This cannot be undone.')) return;
-                                        try {
-                                            await axios.post(`${API_URL}/api/admin/retention/run?dry_run=false`, {}, {
-                                                headers: { Authorization: `Bearer ${token()}` }, withCredentials: true,
-                                            });
-                                            toast.success('Retention run complete');
-                                        } catch (err) {
-                                            toast.error(err.response?.data?.detail || 'Failed');
+                                    action={() => setDangerDialog({
+                                        title: 'Run record retention',
+                                        desc: 'Archive + delete records older than HMRC retention windows. This cannot be undone.',
+                                        action: async () => {
+                                            try {
+                                                await axios.post(`${API_URL}/api/admin/retention/run?dry_run=false`, {}, {
+                                                    headers: { Authorization: `Bearer ${token()}` }, withCredentials: true,
+                                                });
+                                                toast.success('Retention run complete');
+                                            } catch (err) {
+                                                toast.error(err.response?.data?.detail || 'Failed');
+                                            }
                                         }
-                                    }}
+                                    })}
                                     buttonText="Run retention job"
                                 />
                                 <DangerItem
                                     title="Clear demo data"
                                     desc="Remove all seeded demo employees and payslips. Only affects records marked demo_seeded=true."
-                                    action={async () => {
-                                        if (!window.confirm('Clear all demo data for this company?')) return;
-                                        try {
-                                            await axios.post(`${API_URL}/api/demo/reset`, {}, {
-                                                headers: { Authorization: `Bearer ${token()}` }, withCredentials: true,
-                                            });
-                                            toast.success('Demo data cleared');
-                                        } catch (err) {
-                                            toast.error('Failed');
+                                    action={() => setDangerDialog({
+                                        title: 'Clear demo data',
+                                        desc: 'Remove all demo-seeded employees, payslips and payroll records for this company.',
+                                        action: async () => {
+                                            try {
+                                                await axios.post(`${API_URL}/api/demo/reset`, {}, {
+                                                    headers: { Authorization: `Bearer ${token()}` }, withCredentials: true,
+                                                });
+                                                toast.success('Demo data cleared');
+                                            } catch (err) {
+                                                toast.error('Failed');
+                                            }
                                         }
-                                    }}
+                                    })}
                                     buttonText="Clear demo"
                                 />
                             </CardContent>
                         </Card>
                     </TabsContent>
                 </Tabs>
+            )}
+
+            {/* DANGER ZONE RE-AUTH DIALOG */}
+            {dangerDialog && (
+                <DangerReauthDialog
+                    open={!!dangerDialog}
+                    onOpenChange={(open) => { if (!open) setDangerDialog(null); }}
+                    title={dangerDialog.title}
+                    desc={dangerDialog.desc}
+                    onConfirmed={dangerDialog.action}
+                    data-testid="danger-reauth-dialog"
+                />
             )}
 
             {/* INVITE DIALOG */}
