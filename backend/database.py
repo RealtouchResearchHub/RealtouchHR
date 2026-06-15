@@ -152,6 +152,11 @@ class Cursor:
                 if _is_missing_relation_error(exc):
                     logger.debug("Missing table for cursor fetch: %s", table)
                     return []
+                # Supabase HTTP/2 connection drops — return empty rather than 500
+                exc_str = str(exc)
+                if "RemoteProtocolError" in exc_str or "ConnectionTerminated" in exc_str or "h2" in exc_str.lower():
+                    logger.warning("Supabase connection dropped on %s fetch, returning []", table)
+                    return []
                 raise
 
         return await _run(_fetch)

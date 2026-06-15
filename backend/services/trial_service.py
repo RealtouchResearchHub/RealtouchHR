@@ -75,11 +75,11 @@ class TrialService:
         # Check any paid subscription on company
         subscription_active = False
         plan_id = None
-        last_tx = await db.payment_transactions.find_one(
+        txns = await db.payment_transactions.find(
             {"company_id": company_id, "type": "subscription", "payment_status": "paid"},
-            {"_id": 0},
-            sort=[("created_at", -1)]
-        )
+            {"_id": 0}
+        ).to_list(1000)
+        last_tx = sorted(txns, key=lambda x: x.get("created_at", ""), reverse=True)[0] if txns else None
         if last_tx:
             subscription_active = True
             plan_id = last_tx.get("plan_id")

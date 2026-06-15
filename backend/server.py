@@ -530,10 +530,11 @@ async def health_check():
 
 # ==================== AUTH HELPERS ====================
 
-def create_jwt_token(user_id: str, email: str) -> str:
+def create_jwt_token(user_id: str, email: str, role: str = "owner") -> str:
     payload = {
         "user_id": user_id,
         "email": email,
+        "role": role,
         "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRATION_DAYS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -1034,20 +1035,20 @@ async def create_employee(data: EmployeeCreate, user: User = Depends(get_current
     
     await create_audit_entry(user.company_id, user, "create", "employee", employee_id, {"name": f"{data.first_name} {data.last_name}"})
     
-    # Create compliance tasks for missing data
+    # Create compliance tasks for missing data (non-fatal if table schema mismatch)
     for issue in compliance_issues:
-        task_doc = {
-            "task_id": f"task_{uuid.uuid4().hex[:12]}",
-            "company_id": user.company_id,
-            "title": f"Complete employee data: {issue}",
-            "description": f"Employee {data.first_name} {data.last_name} is missing required data",
-            "priority": "high",
-            "status": "pending",
-            "entity_type": "employee",
-            "entity_id": employee_id,
-            "created_at": now.isoformat()
-        }
-        await db.compliance_tasks.insert_one(task_doc)
+        try:
+            task_doc = {
+                "record_id": f"task_{uuid.uuid4().hex[:12]}",
+                "company_id": user.company_id,
+                "title": f"Complete employee data: {issue}",
+                "category": "employee_data",
+                "status": "pending",
+                "created_at": now.isoformat()
+            }
+            await db.compliance_tasks.insert_one(task_doc)
+        except Exception:
+            pass
     
     employee_doc["created_at"] = now
     employee_doc["updated_at"] = now

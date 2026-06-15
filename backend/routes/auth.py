@@ -94,7 +94,7 @@ logger = logging.getLogger(__name__)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get(
-    "GOOGLE_REDIRECT_URI", "http://localhost:8001/api/auth/google/callback"
+    "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
 )
 APP_URL = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
 

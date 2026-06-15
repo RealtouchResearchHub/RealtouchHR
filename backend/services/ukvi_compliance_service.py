@@ -381,12 +381,52 @@ class UKVIComplianceService:
 
             await self._increment_scan_quota(company_id, db)
 
+            # Build inline preview from in-memory results (avoids DB round-trip)
+            by_employee: dict = {}
+            by_category: dict = {}
+            for r in results:
+                eid = r.get("employee_id", "unknown")
+                if eid not in by_employee:
+                    by_employee[eid] = {
+                        "employee_id": eid,
+                        "employee_name": r.get("employee_name", "Unknown"),
+                        "checks": [], "fail_count": 0, "warning_count": 0,
+                    }
+                by_employee[eid]["checks"].append({
+                    "rule_code": r.get("rule_code"),
+                    "category": r.get("category"),
+                    "status": r.get("status"),
+                    "severity": r.get("severity"),
+                    "message": r.get("message"),
+                })
+                if r.get("status") == "fail":
+                    by_employee[eid]["fail_count"] += 1
+                elif r.get("status") == "warning":
+                    by_employee[eid]["warning_count"] += 1
+                cat = r.get("category", "other")
+                if cat not in by_category:
+                    by_category[cat] = {"passed": 0, "failed": 0, "warnings": 0}
+                if r.get("status") == "pass":
+                    by_category[cat]["passed"] += 1
+                elif r.get("status") == "fail":
+                    by_category[cat]["failed"] += 1
+                else:
+                    by_category[cat]["warnings"] += 1
+
             return {
                 "scan_id": scan_id,
                 "status": "completed",
                 "overall_score": score,
                 "risk_level": risk,
                 "summary": summary,
+                "preview": {
+                    "scan_id": scan_id,
+                    "overall_score": score,
+                    "risk_level": risk,
+                    "summary": summary,
+                    "employees": list(by_employee.values()),
+                    "by_category": by_category,
+                },
             }
 
         except Exception as exc:

@@ -966,13 +966,25 @@ class RTISyncEngine:
                 # Submit to HMRC Transaction Engine
                 hmrc_url = HMRC_URLS["live"]
                 
+                import platform as _platform, socket as _socket
+                _device_id = os.environ.get("HMRC_DEVICE_ID", str(uuid.uuid5(uuid.NAMESPACE_DNS, "realtouchhr.com")))
+                _fraud_headers = {
+                    "Gov-Client-Connection-Method": "SERVER_TOKEN",
+                    "Gov-Client-Device-ID": _device_id,
+                    "Gov-Client-Timezone": "Europe/London",
+                    "Gov-Client-User-IDs": f"os={_platform.node()}",
+                    "Gov-Client-Local-IPs": _socket.gethostbyname(_socket.gethostname()),
+                    "Gov-Vendor-Version": "RealtouchHR/1.0",
+                    "Gov-Vendor-License-IDs": "",
+                }
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     response = await client.post(
                         hmrc_url,
                         content=soap_envelope,
                         headers={
                             "Content-Type": "application/xml; charset=utf-8",
-                            "SOAPAction": "Submit"
+                            "SOAPAction": "Submit",
+                            **_fraud_headers,
                         }
                     )
                 

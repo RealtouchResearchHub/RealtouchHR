@@ -484,11 +484,11 @@ async def get_compliance_scanner_status(user: User = Depends(require_hr_admin)):
 
     quota = await ukvi_compliance_service.get_scan_quota(user.company_id, db)
 
-    recent_scans = await db.ukvi_compliance_scans.find(
+    _all_scans = await db.ukvi_compliance_scans.find(
         {"company_id": user.company_id},
         {"_id": 0},
-        sort=[("created_at", -1)],
-    ).limit(10).to_list(10)
+    ).to_list(1000)
+    recent_scans = sorted(_all_scans, key=lambda x: x.get("created_at", ""), reverse=True)[:10]
 
     return {
         "quota": quota,
@@ -510,12 +510,13 @@ async def run_compliance_scan(user: User = Depends(require_hr_admin)):
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
 
-    # Require an active subscription
     company = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=400, detail="Company not found")
+    # Allow owners, trial companies, and any paid plan to run scans
     sub_status = company.get("subscription_status") or company.get("subscription_plan", "free")
-    if sub_status in ("free", "inactive") and not company.get("subscription_active"):
+    is_trial = company.get("trial_active") or company.get("trial_ends_at")
+    if sub_status in ("free", "inactive") and not company.get("subscription_active") and not is_trial and user.role not in ("owner", "admin"):
         raise HTTPException(
             status_code=402,
             detail="A paid subscription is required to run UKVI compliance scans."

@@ -91,9 +91,13 @@ export default function UKVICompliancePage() {
       toast.success(`Scan complete — Score: ${data.overall_score}%`);
       setScannerStatus(null);
       setSelectedScanId(data.scan_id);
-      setScanPreview(null);
+      if (data.preview) {
+        setScanPreview(data.preview);
+      } else {
+        setScanPreview(null);
+        await handleViewScan(data.scan_id);
+      }
       fetchData();
-      await handleViewScan(data.scan_id);
     } catch (e) {
       toast.error('Scan failed — please try again');
     } finally {

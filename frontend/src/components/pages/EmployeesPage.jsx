@@ -345,10 +345,10 @@ function StepPayroll({ form, set }) {
             </div>
             <div className="space-y-1.5">
                 <Label>Student Loan Plan</Label>
-                <Select value={form.student_loan_plan || ''} onValueChange={v => set({ ...form, student_loan_plan: v })}>
+                <Select value={form.student_loan_plan || 'none'} onValueChange={v => set({ ...form, student_loan_plan: v === 'none' ? '' : v })}>
                     <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {['Plan 1', 'Plan 2', 'Plan 4', 'Plan 5'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                     </SelectContent>
                 </Select>

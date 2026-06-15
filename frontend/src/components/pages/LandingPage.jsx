@@ -86,7 +86,7 @@ export default function LandingPage() {
                         </span>
                     </h1>
                     <p className="mt-6 text-lg md:text-xl text-white/70 max-w-2xl leading-relaxed">
-                        RTI submissions, UKVI sponsor licence monitoring, statutory pay calculators
+                        HMRC-ready RTI submissions, UKVI compliance support, statutory pay calculators
                         and payroll all in one place. RealtouchHR replaces spreadsheets and
                         consultants for under £39/month.
                     </p>
@@ -147,7 +147,7 @@ export default function LandingPage() {
                     {[
                         { icon: Users, title: 'HR and Self-Service', desc: 'Employee records, leave, documents and onboarding. Role-based access and a full audit log included.' },
                         { icon: PoundSterling, title: 'Payroll', desc: 'PAYE, NI, pension and student loans (Plans 1/2/4/5 + Postgrad). Payslip PDFs and HMRC RTI/FPS submission.' },
-                        { icon: ShieldCheck, title: 'UKVI Sponsor Licence', desc: 'Right-to-Work checks, CoS register, visa expiry tracking and salary threshold monitoring.' },
+                        { icon: ShieldCheck, title: 'UKVI Compliance Support', desc: 'Right-to-Work evidence capture, visa expiry alerts, CoS tracking and salary threshold compliance reminders.' },
                         { icon: HeartPulse, title: 'Statutory Payments', desc: 'SSP, SMP, SPP, ShPP and SAP calculators with 92% and 103% recovery rates.' },
                         { icon: FileCheck2, title: 'P45, P60 and P11D', desc: 'Tax documents generated automatically at offboarding, on demand or at year end.' },
                         { icon: Cpu, title: 'HR Assistant', desc: 'Ask payroll, compliance or HR questions in plain English and get accurate answers.' },
@@ -239,8 +239,8 @@ export default function LandingPage() {
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                             {[
-                                'Live HMRC sandbox + production SOAP', 'UKVI sponsor licence monitoring',
-                                'Right-to-Work share-code lookup', 'GDPR-grade audit log',
+                                'HMRC-ready RTI/FPS/EPS submissions', 'UKVI compliance support & alerts',
+                                'Right-to-Work evidence capture', 'GDPR-grade audit log',
                                 'P45/P60/P11D auto-generation', '7-year HMRC record retention',
                             ].map((c) => (
                                 <div key={c} className="flex items-start gap-2">
