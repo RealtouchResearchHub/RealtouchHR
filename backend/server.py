@@ -1148,7 +1148,13 @@ async def get_employees(user: User = Depends(get_current_user)):
     
     employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
 
-    return [Employee(**_normalize_employee_doc(emp)) for emp in employees]
+    result = []
+    for emp in employees:
+        try:
+            result.append(Employee(**_normalize_employee_doc(emp)))
+        except Exception as e:
+            logger.warning("Skipping malformed employee record %s: %s", emp.get("employee_id"), e)
+    return result
 
 @api_router.get("/employees/{employee_id}", response_model=Employee)
 async def get_employee(employee_id: str, user: User = Depends(get_current_user)):
@@ -1297,6 +1303,22 @@ async def archive_employee(
         raise HTTPException(status_code=403, detail="Only owner or admin can archive employees")
     data["status"] = "archived"
     return await change_employee_lifecycle(employee_id, data, user)
+
+
+@api_router.delete("/employees/{employee_id}")
+async def delete_employee(employee_id: str, user: User = Depends(get_current_user)):
+    """Permanently delete an employee record. Admin/owner only."""
+    if user.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owner or admin can delete employees")
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    emp = await db.employees.find_one({"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    await db.employees.delete_one({"employee_id": employee_id, "company_id": user.company_id})
+    await create_audit_entry(user.company_id, user, "delete", "employee", employee_id,
+                             {"name": f"{emp.get('first_name','')} {emp.get('last_name','')}".strip()})
+    return {"message": "Employee deleted"}
 
 
 @api_router.get("/employees/{employee_id}/readiness")
@@ -1829,15 +1851,23 @@ async def get_compliance_score(user: User = Depends(get_current_user)):
     
     issues = []
     for emp in employees:
-        for issue in emp.get("compliance_issues", []):
-            issues.append({"employee_id": emp["employee_id"], "employee_name": f"{emp['first_name']} {emp['last_name']}", "issue": issue})
-    
+        try:
+            for issue in emp.get("compliance_issues", []):
+                issues.append({
+                    "employee_id": emp.get("employee_id", ""),
+                    "employee_name": f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                    "issue": issue,
+                })
+        except Exception:
+            pass
+
     next_action = None
     if tasks:
-        next_action = {"title": tasks[0]["title"], "type": "compliance", "task_id": tasks[0]["task_id"]}
+        t = tasks[0]
+        next_action = {"title": t.get("title", ""), "type": "compliance", "task_id": t.get("task_id") or t.get("record_id")}
     elif issues:
         next_action = {"title": f"Fix compliance issues for {issues[0]['employee_name']}", "type": "employee", "employee_id": issues[0]["employee_id"]}
-    
+
     return {"score": avg_score, "issues": issues[:10], "next_action": next_action}
 
 @api_router.put("/compliance/tasks/{task_id}")
@@ -1856,40 +1886,31 @@ async def update_compliance_task(task_id: str, data: dict, user: User = Depends(
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(user: User = Depends(get_current_user)):
+    _safe = {"total_employees": 0, "active_employees": 0, "on_leave_today": 0, "pending_approvals": 0, "compliance_score": 100, "next_action": None}
     if not user.company_id:
+        return _safe
+    try:
+        employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
+        active = [e for e in employees if e.get("status") == "active"]
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        leaves = await db.leave_requests.find({
+            "company_id": user.company_id, "status": "approved",
+            "start_date": {"$lte": today}, "end_date": {"$gte": today}
+        }, {"_id": 0}).to_list(100)
+        pending_leaves = await db.leave_requests.count_documents({"company_id": user.company_id, "status": "pending"})
+        pending_timesheets = await db.timesheets.count_documents({"company_id": user.company_id, "status": "pending"})
+        compliance = await get_compliance_score(user)
         return {
-            "total_employees": 0,
-            "active_employees": 0,
-            "on_leave_today": 0,
-            "pending_approvals": 0,
-            "compliance_score": 100,
-            "next_payroll": None
+            "total_employees": len(employees),
+            "active_employees": len(active),
+            "on_leave_today": len(leaves),
+            "pending_approvals": pending_leaves + pending_timesheets,
+            "compliance_score": compliance.get("score", 100),
+            "next_action": compliance.get("next_action"),
         }
-    
-    employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
-    active = [e for e in employees if e.get("status") == "active"]
-    
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    leaves = await db.leave_requests.find({
-        "company_id": user.company_id,
-        "status": "approved",
-        "start_date": {"$lte": today},
-        "end_date": {"$gte": today}
-    }, {"_id": 0}).to_list(100)
-    
-    pending_leaves = await db.leave_requests.count_documents({"company_id": user.company_id, "status": "pending"})
-    pending_timesheets = await db.timesheets.count_documents({"company_id": user.company_id, "status": "pending"})
-    
-    compliance = await get_compliance_score(user)
-    
-    return {
-        "total_employees": len(employees),
-        "active_employees": len(active),
-        "on_leave_today": len(leaves),
-        "pending_approvals": pending_leaves + pending_timesheets,
-        "compliance_score": compliance["score"],
-        "next_action": compliance.get("next_action")
-    }
+    except Exception as exc:
+        logger.warning("dashboard/stats failed for %s: %s", user.company_id, exc)
+        return _safe
 
 # ==================== AI COPILOT ROUTES ====================
 

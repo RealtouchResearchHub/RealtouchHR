@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -714,6 +715,8 @@ function sortEmployees(employees, sortBy) {
 
 export default function EmployeesPage() {
     const navigate = useNavigate();
+    const { token, user } = useAuth();
+    const isAdmin = user?.role === 'owner' || user?.role === 'admin';
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -759,6 +762,21 @@ export default function EmployeesPage() {
             fetchEmployees();
         } catch {
             toast.error('Failed to archive employee');
+        }
+    };
+
+    const deleteEmployee = async (emp, e) => {
+        e.stopPropagation();
+        if (!window.confirm(`Permanently delete ${emp.first_name} ${emp.last_name}? This cannot be undone.`)) return;
+        try {
+            await axios.delete(`${API_URL}/api/employees/${emp.employee_id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true,
+            });
+            toast.success('Employee deleted');
+            fetchEmployees();
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Failed to delete employee');
         }
     };
 
@@ -946,6 +964,11 @@ export default function EmployeesPage() {
                                                 <DropdownMenuItem className="text-rose-600" onClick={(e) => archiveEmployee(emp.employee_id, e)}>
                                                     <Archive className="w-4 h-4 mr-2" /> Archive
                                                 </DropdownMenuItem>
+                                                {isAdmin && (
+                                                    <DropdownMenuItem className="text-red-700 font-medium" onClick={(e) => deleteEmployee(emp, e)}>
+                                                        <XCircle className="w-4 h-4 mr-2" /> Delete permanently
+                                                    </DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>

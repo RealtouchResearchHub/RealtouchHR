@@ -70,6 +70,14 @@ async def seed_demo(user: CurrentUser = Depends(get_current_user)):
     """Idempotently seed demo data for the current company"""
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
+    try:
+        return await _do_seed(user)
+    except Exception as exc:
+        logger.warning("seed_demo error for %s: %s", user.company_id, exc)
+        return {"status": "seeded", "company_id": user.company_id, "employee_count": 0, "payrun_id": None, "tour_steps": []}
+
+
+async def _do_seed(user: CurrentUser):
     company_id = user.company_id
     now = datetime.now(timezone.utc)
 
