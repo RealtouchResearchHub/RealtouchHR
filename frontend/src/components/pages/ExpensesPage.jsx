@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const CATEGORIES = ["Travel", "Accommodation", "Meals & Entertainment", "Mileage", "Equipment & Supplies", "Training & Development", "Subscriptions", "Client Entertainment", "Postage & Courier", "Other"];
 
@@ -34,7 +33,8 @@ const BLANK_CLAIM = { title: '', category: 'Travel', amount: '', currency: 'GBP'
 const BLANK_MILEAGE = { journey_date: new Date().toISOString().slice(0, 10), from_location: '', to_location: '', miles: '', vehicle_type: 'car', purpose: '', total_miles_ytd: '0' };
 
 export default function ExpensesPage() {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const isManager = ['owner', 'admin', 'manager'].includes(user?.role);
 
     const [claims, setClaims] = useState([]);

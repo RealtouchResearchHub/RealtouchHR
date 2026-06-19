@@ -75,6 +75,7 @@ async def create_appraisal(data: AppraisalCreate, user: CurrentUser = Depends(ge
     now = datetime.now(timezone.utc)
     aid = f"appr_{uuid.uuid4().hex[:12]}"
     doc = {
+        "review_id": aid,       # Supabase PK for appraisals table
         "appraisal_id": aid,
         "company_id": user.company_id,
         "employee_id": data.employee_id,
@@ -127,12 +128,17 @@ async def update_appraisal(appraisal_id: str, data: dict, user: CurrentUser = De
                "employee_acknowledged_at", "manager_signed_at"]
     update = {k: v for k, v in data.items() if k in allowed}
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.appraisals.update_one(
-        {"appraisal_id": appraisal_id, "company_id": user.company_id},
-        {"$set": update}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Appraisal not found")
+    # appraisals table PK is review_id; try both for compatibility
+    filt = {"company_id": user.company_id}
+    existing = await db.appraisals.find_one({"review_id": appraisal_id, "company_id": user.company_id}, {"_id": 0})
+    if existing:
+        filt["review_id"] = appraisal_id
+    else:
+        existing = await db.appraisals.find_one({"appraisal_id": appraisal_id, "company_id": user.company_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Appraisal not found")
+        filt["appraisal_id"] = appraisal_id
+    result = await db.appraisals.update_one(filt, {"$set": update})
     from services.audit_service import create_audit_entry
     await create_audit_entry(user.company_id, user.user_id, user.name, "appraisal_updated",
                              "appraisal", appraisal_id, update)
@@ -157,16 +163,18 @@ async def create_objective(data: ObjectiveCreate, user: CurrentUser = Depends(ge
     now = datetime.now(timezone.utc)
     oid = f"obj_{uuid.uuid4().hex[:12]}"
     doc = {
+        "record_id": oid,       # Supabase PK for objectives table
         "objective_id": oid,
         "company_id": user.company_id,
         "employee_id": data.employee_id,
         "title": data.title,
         "description": data.description,
         "target_date": data.target_date,
+        "due_date": data.target_date,   # schema column alias
         "measure": data.measure,
         "weight": data.weight,
         "progress": 0,
-        "status": "active",  # active | completed | cancelled
+        "status": "active",
         "created_by": user.user_id,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -197,12 +205,10 @@ async def update_objective(objective_id: str, data: dict, user: CurrentUser = De
     allowed = ["title", "description", "target_date", "measure", "weight", "progress", "status"]
     update = {k: v for k, v in data.items() if k in allowed}
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.objectives.update_one(
-        {"objective_id": objective_id, "company_id": user.company_id},
-        {"$set": update}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Objective not found")
+    filt = {"company_id": user.company_id}
+    ex = await db.objectives.find_one({"record_id": objective_id, "company_id": user.company_id}, {"_id": 0})
+    filt["record_id" if ex else "objective_id"] = objective_id
+    result = await db.objectives.update_one(filt, {"$set": update})
     return {"message": "Objective updated"}
 
 
@@ -210,11 +216,10 @@ async def update_objective(objective_id: str, data: dict, user: CurrentUser = De
 async def delete_objective(objective_id: str, user: CurrentUser = Depends(get_current_user)):
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company")
-    result = await db.objectives.delete_one(
-        {"objective_id": objective_id, "company_id": user.company_id}
-    )
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Objective not found")
+    filt = {"company_id": user.company_id}
+    ex = await db.objectives.find_one({"record_id": objective_id, "company_id": user.company_id}, {"_id": 0})
+    filt["record_id" if ex else "objective_id"] = objective_id
+    result = await db.objectives.delete_one(filt)
     return {"message": "Deleted"}
 
 
@@ -235,14 +240,17 @@ async def create_review_note(data: ReviewNoteCreate, user: CurrentUser = Depends
     now = datetime.now(timezone.utc)
     nid = f"note_{uuid.uuid4().hex[:12]}"
     doc = {
+        "record_id": nid,       # Supabase PK for review_notes table
         "note_id": nid,
         "company_id": user.company_id,
         "employee_id": data.employee_id,
         "author_id": user.user_id,
         "author_name": user.name,
         "note_type": data.note_type,
+        "type": data.note_type,         # schema column alias
         "title": data.title,
         "content": data.content,
+        "note": data.content,           # schema column alias
         "private": data.private,
         "created_at": now.isoformat(),
     }

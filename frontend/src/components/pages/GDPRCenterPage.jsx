@@ -10,10 +10,13 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { toast } from 'sonner';
 import { Download, Shield, AlertTriangle, FileLock2, Trash2, CheckCircle2, XCircle, ScanLine, Loader2 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function GDPRCenterPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [tab, setTab] = useState('mydata');
     const [overview, setOverview] = useState(null);
     const [erasures, setErasures] = useState([]);

@@ -12,8 +12,9 @@ import {
     Activity, Receipt, GraduationCap, MapPin, Briefcase,
 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const REPORTS = [
     { key: 'absence',              label: 'Absence Report',              icon: Calendar,       desc: 'All absences by type, employee and date range',       dateFilter: true },
@@ -106,6 +107,8 @@ function ReportCard({ report, onRun, onDownload, running }) {
 }
 
 export default function ReportsPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [running, setRunning] = useState(null);
     const [search, setSearch] = useState('');
 

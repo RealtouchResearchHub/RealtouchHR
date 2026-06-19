@@ -8,10 +8,13 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { toast } from 'sonner';
 import { ShieldCheck, Copy, ExternalLink, Loader2, Award, Code2 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function TrustBadgePage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 

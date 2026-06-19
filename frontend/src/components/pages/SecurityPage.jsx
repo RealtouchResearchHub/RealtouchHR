@@ -9,10 +9,13 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { ShieldCheck, Smartphone, Copy, Loader2, AlertCircle, Lock, Unlock } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function SecurityPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [status, setStatus] = useState({ enabled: false });
     const [loading, setLoading] = useState(true);
     const [setup, setSetup] = useState(null); // { qr_png_base64, secret, otp_uri }

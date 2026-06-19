@@ -43,7 +43,7 @@ function maskAccount(ac) {
 export default function EmployeeDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const [employee, setEmployee] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -111,7 +111,6 @@ export default function EmployeeDetail() {
 
     const downloadTaxDoc = async (docType, extraPath = '') => {
         try {
-            const token = localStorage.getItem('token');
             const url = `${API_URL}/api/tax-docs/${docType}/${id}${extraPath}`;
             const res = await axios.get(url, {
                 headers: { Authorization: `Bearer ${token}` },

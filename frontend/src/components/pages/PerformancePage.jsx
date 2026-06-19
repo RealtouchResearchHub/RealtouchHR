@@ -16,9 +16,9 @@ import {
 import { toast } from 'sonner';
 import { Target, ClipboardCheck, MessageSquare, Plus, Loader2, Scale } from 'lucide-react';
 import { requestOrDefault } from '../../lib/loaders';
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const RATINGS = [
     { id: 'exceeds', label: 'Exceeds expectations' },
@@ -28,6 +28,8 @@ const RATINGS = [
 ];
 
 export default function PerformancePage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [employees, setEmployees] = useState([]);
     const [appraisals, setAppraisals] = useState([]);
     const [objectives, setObjectives] = useState([]);

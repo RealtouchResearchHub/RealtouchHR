@@ -22,9 +22,12 @@ import {
   FileKey
 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function EnterprisePage() {
+  const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('roles');
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState({});
@@ -38,7 +41,7 @@ export default function EnterprisePage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      // token from useAuth
       const headers = { 'Authorization': `Bearer ${token}` };
 
       const [rolesRes, permsRes, ssoRes] = await Promise.all([
@@ -73,7 +76,7 @@ export default function EnterprisePage() {
     if (!newEntityName.trim()) return;
     setEntitySaving(true);
     try {
-      const token = localStorage.getItem('token');
+      // token from useAuth
       const res = await fetch(`${BACKEND_URL}/api/enterprise/entities`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -100,7 +103,7 @@ export default function EnterprisePage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      // token from useAuth
       const response = await fetch(`${BACKEND_URL}/api/enterprise/roles`, {
         method: 'POST',
         headers: {

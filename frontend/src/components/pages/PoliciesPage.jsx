@@ -12,8 +12,9 @@ import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { FileText, Plus, ScrollText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const CATEGORIES = [
     ['general', 'General'],
@@ -30,6 +31,8 @@ const CATEGORIES = [
 ];
 
 export default function PoliciesPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [policies, setPolicies] = useState([]);
     const [pending, setPending] = useState([]);
     const [loading, setLoading] = useState(true);

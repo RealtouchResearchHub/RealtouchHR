@@ -25,7 +25,7 @@ import { requestOrDefault } from '../../lib/loaders';
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function Dashboard() {
-    const { user, company } = useAuth();
+    const { user, company, token } = useAuth();
     const [stats, setStats] = useState(null);
     const [employees, setEmployees] = useState([]);
     const [recentLeaves, setRecentLeaves] = useState([]);
@@ -34,7 +34,6 @@ export default function Dashboard() {
 
     const fetchData = async () => {
         try {
-            const token = localStorage.getItem('token');
             const headers = { Authorization: `Bearer ${token}` };
             const [statsData, employeesData, leaveData, demoData] = await Promise.all([
                 requestOrDefault(

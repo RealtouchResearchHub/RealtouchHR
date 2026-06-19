@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 const STAGES = ["applied", "screening", "interview", "assessment", "offer", "hired", "rejected", "withdrawn"];
 const CONTRACT_TYPES = ["full_time", "part_time", "fixed_term", "zero_hours", "casual", "freelance", "apprenticeship"];
@@ -38,7 +37,8 @@ const BLANK_JOB = { title: '', department: '', location: '', contract_type: 'ful
 const BLANK_APPLICANT = { job_id: '', first_name: '', last_name: '', email: '', phone: '', cover_letter: '', source: 'direct' };
 
 export default function RecruitmentPage() {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const isManager = ['owner', 'admin', 'manager'].includes(user?.role);
 
     const [jobs, setJobs] = useState([]);

@@ -13,10 +13,13 @@ import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { GraduationCap, Plus, Award, Loader2, ArrowUpRight } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function TrainingPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [tab, setTab] = useState('courses');
     const [courses, setCourses] = useState([]);
     const [records, setRecords] = useState([]);

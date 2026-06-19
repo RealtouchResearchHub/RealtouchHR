@@ -11,6 +11,8 @@ import {
     Shield, Eye, FileText
 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const PLAN_STYLES = {
@@ -34,6 +36,7 @@ const PLAN_STYLES = {
 
 export default function BillingPage() {
     const navigate = useNavigate();
+    const { token: authToken } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const [billing, setBilling] = useState(null);
     const [usage, setUsage] = useState(null);
@@ -45,7 +48,7 @@ export default function BillingPage() {
 
     const fetchBilling = async () => {
         try {
-            const token = localStorage.getItem('token');
+            const token = authToken;
             const headers = { Authorization: `Bearer ${token}` };
             const [billingRes, usageRes, ukviRes] = await Promise.all([
                 axios.get(`${API_URL}/api/payments/billing`, { headers, withCredentials: true }),
@@ -64,7 +67,7 @@ export default function BillingPage() {
 
     const fetchReceipt = async (transactionId) => {
         try {
-            const token = localStorage.getItem('token');
+            const token = authToken;
             const res = await axios.get(`${API_URL}/api/payments/transactions/${transactionId}/receipt`, {
                 headers: { Authorization: `Bearer ${token}` }, withCredentials: true,
             });
@@ -101,7 +104,7 @@ export default function BillingPage() {
                 return;
             }
             try {
-                const token = localStorage.getItem('token');
+                const token = authToken;
                 const res = await axios.post(
                     `${API_URL}/api/payments/checkout/status`,
                     { session_id: sessionId, origin_url: window.location.origin },
@@ -134,7 +137,7 @@ export default function BillingPage() {
     const handleSubscribe = async (planId) => {
         setCheckoutLoading(planId);
         try {
-            const token = localStorage.getItem('token');
+            const token = authToken;
             const res = await axios.post(
                 `${API_URL}/api/payments/checkout/subscription`,
                 { plan_id: planId, origin_url: window.location.origin },
@@ -155,7 +158,7 @@ export default function BillingPage() {
     const handleAddon = async (addonId) => {
         setCheckoutLoading(addonId);
         try {
-            const token = localStorage.getItem('token');
+            const token = authToken;
             const res = await axios.post(
                 `${API_URL}/api/payments/checkout/addon`,
                 { addon_id: addonId, origin_url: window.location.origin, quantity: 1 },
@@ -174,7 +177,7 @@ export default function BillingPage() {
     const handleManageSubscription = async () => {
         setCheckoutLoading('portal');
         try {
-            const token = localStorage.getItem('token');
+            const token = authToken;
             const res = await axios.post(
                 `${API_URL}/api/payments/portal`,
                 { return_url: `${window.location.origin}/billing` },

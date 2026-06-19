@@ -28,6 +28,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 // Danger Zone re-auth dialog
 // ---------------------------------------------------------------------------
 function DangerReauthDialog({ open, onOpenChange, title, desc, onConfirmed }) {
+    const { token: dialogToken } = useAuth();
     const [password, setPassword] = React.useState('');
     const [verifying, setVerifying] = React.useState(false);
     const [err, setErr] = React.useState('');
@@ -39,7 +40,7 @@ function DangerReauthDialog({ open, onOpenChange, title, desc, onConfirmed }) {
         if (!password) { setErr('Password is required'); return; }
         setVerifying(true); setErr('');
         try {
-            const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+            const headers = { Authorization: `Bearer ${dialogToken}` };
             await axios.post(`${API_URL}/api/admin/danger-zone/verify`, { password }, { headers, withCredentials: true });
             handleClose();
             onConfirmed();
@@ -124,7 +125,7 @@ const PREMIUM_FEATURES = [
 ];
 
 export default function AdminPortalPage() {
-    const { user } = useAuth();
+    const { user, token: authToken } = useAuth();
     const [users, setUsers] = useState([]);
     const [invites, setInvites] = useState([]);
     const [auditLog, setAuditLog] = useState([]);
@@ -138,7 +139,7 @@ export default function AdminPortalPage() {
     const [moduleTogglingKey, setModuleTogglingKey] = useState(null);
     const [dangerDialog, setDangerDialog] = useState(null); // { title, desc, action }
 
-    const token = () => localStorage.getItem('token');
+    const token = () => authToken;
 
     const fetchAll = async () => {
         setLoading(true);

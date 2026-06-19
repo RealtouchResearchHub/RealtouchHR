@@ -29,10 +29,13 @@ import {
   XCircle as X
 } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function UKVICompliancePage() {
   const navigate = useNavigate();
+  const { token } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [checklist, setChecklist] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -49,7 +52,7 @@ export default function UKVICompliancePage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const headers = { 'Authorization': `Bearer ${token}` };
 
       const [dashboardRes, checklistRes, alertsRes, scannerRes] = await Promise.all([
@@ -77,7 +80,7 @@ export default function UKVICompliancePage() {
   const handleRunScan = async () => {
     setScanLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/run`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -108,7 +111,7 @@ export default function UKVICompliancePage() {
   const handleViewScan = async (scanId) => {
     setSelectedScanId(scanId);
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/preview`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -125,7 +128,7 @@ export default function UKVICompliancePage() {
   const handleExportReport = async (scanId, format) => {
     setExportLoading(format);
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/export?format=${format}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -161,7 +164,7 @@ export default function UKVICompliancePage() {
 
   const handleResolveAlert = async (alertId, resolution) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/alerts/${alertId}/resolve`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -181,7 +184,7 @@ export default function UKVICompliancePage() {
 
   const handleUpdateAlertStatus = async (alertId, status) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/alerts/${alertId}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -201,7 +204,7 @@ export default function UKVICompliancePage() {
 
   const handleGenerateAlerts = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = token;
       const response = await fetch(`${BACKEND_URL}/api/ukvi/alerts/generate`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }

@@ -12,10 +12,13 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '.
 import { toast } from 'sonner';
 import { FileSearch, AlertOctagon, Building2, ClipboardList, Plus, Loader2, Clock, ShieldAlert } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, withCredentials: true });
 
 export default function DPOCenterPage() {
+    const { token } = useAuth();
+    const auth = () => ({ headers: { Authorization: `Bearer ${token}` }, withCredentials: true });
     const [tab, setTab] = useState('dpa');
     const [dpas, setDpas] = useState([]);
     const [dsars, setDsars] = useState([]);
