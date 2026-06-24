@@ -89,8 +89,10 @@ def _apply_filter(q, filt: dict):
                 q = _apply_filter(q, cond)
         elif isinstance(value, dict):
             for op, val in value.items():
-                if op == "$eq":    q = q.eq(key, val)
-                elif op == "$ne":  q = q.neq(key, val)
+                if op == "$eq":
+                    q = q.is_(key, "null") if val is None else q.eq(key, val)
+                elif op == "$ne":
+                    q = q.not_.is_(key, "null") if val is None else q.neq(key, val)
                 elif op == "$gt":  q = q.gt(key, val)
                 elif op == "$gte": q = q.gte(key, val)
                 elif op == "$lt":  q = q.lt(key, val)
@@ -280,13 +282,16 @@ class Collection:
 
     # ---- find ----------------------------------------------------------------
 
-    async def find_one(self, filt: dict = None, projection: dict = None) -> Optional[dict]:
+    async def find_one(self, filt: dict = None, projection: dict = None, sort: list = None) -> Optional[dict]:
         table = self._table
 
         def _fetch():
             client = _get_client()
             q = client.table(table).select("*")
             q = _apply_filter(q, filt or {})
+            if sort:
+                for field, direction in sort:
+                    q = q.order(field, desc=(direction == -1))
             try:
                 result = q.limit(1).execute()
                 return result.data[0] if result.data else None
@@ -429,6 +434,15 @@ class Collection:
 
         if not set_data:
             return
+
+        # For upsert: check existence first so we can insert if missing
+        if upsert:
+            existing = await self.find_one(filt)
+            if not existing:
+                merged = {k: v for k, v in filt.items()}
+                merged.update(set_data)
+                await self.insert_one(merged)
+                return
 
         table = self._table
 

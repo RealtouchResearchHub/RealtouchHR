@@ -409,14 +409,14 @@ class PayslipPreview(BaseModel):
     model_config = ConfigDict(extra="allow")
     employee_id: str
     employee_name: str
-    gross_pay: float
-    tax_deduction: float
-    ni_deduction: float
-    pension_deduction: float
+    gross_pay: float = 0
+    tax_deduction: float = 0
+    ni_deduction: float = 0
+    pension_deduction: float = 0
     student_loan_deduction: float = 0
     student_loan_plan: Optional[str] = None
-    other_deductions: float
-    net_pay: float
+    other_deductions: float = 0
+    net_pay: float = 0
     overtime_pay: float = 0
 
 # Audit Models
@@ -424,12 +424,12 @@ class AuditEntry(BaseModel):
     model_config = ConfigDict(extra="ignore")
     audit_id: str
     company_id: str
-    user_id: str
-    user_name: str
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
     action: str
     entity_type: str
     entity_id: str
-    details: Dict[str, Any]
+    details: Dict[str, Any] = {}
     reason: Optional[str] = None
     timestamp: datetime
 
@@ -567,7 +567,7 @@ async def health_check():
     """Returns DB connectivity status — useful for diagnosing deployment issues."""
     checks: dict = {"api": "ok", "db": "unknown", "supabase_url_set": bool(os.environ.get("SUPABASE_URL"))}
     try:
-        await db.users.find_one({"_probe": True}, {"_id": 1})
+        await db.users.find_one({}, {"_id": 1})
         checks["db"] = "ok"
     except Exception as e:
         checks["db"] = f"error: {str(e)[:200]}"
@@ -1605,7 +1605,7 @@ async def get_shifts(date: Optional[str] = None, user: User = Depends(get_curren
 async def clock_in(shift_id: str, user: User = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     await db.shifts.update_one(
-        {"$or": [{"shift_id": shift_id}, {"entry_id": shift_id}], "company_id": user.company_id},
+        {"shift_id": shift_id, "company_id": user.company_id},
         {"$set": {"clock_in": now.isoformat(), "status": "in-progress"}}
     )
     await create_audit_entry(user.company_id, user, "clock_in", "shift", shift_id, {"time": now.isoformat()})
@@ -1615,7 +1615,7 @@ async def clock_in(shift_id: str, user: User = Depends(get_current_user)):
 async def clock_out(shift_id: str, user: User = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     await db.shifts.update_one(
-        {"$or": [{"shift_id": shift_id}, {"entry_id": shift_id}], "company_id": user.company_id},
+        {"shift_id": shift_id, "company_id": user.company_id},
         {"$set": {"clock_out": now.isoformat(), "status": "completed"}}
     )
     await create_audit_entry(user.company_id, user, "clock_out", "shift", shift_id, {"time": now.isoformat()})
@@ -1704,7 +1704,9 @@ async def create_pay_run(data: PayRunCreate, user: User = Depends(get_current_us
             compliance_issues += 1
         
         payslip = {
+            "payslip_id": f"slip_{uuid.uuid4().hex[:12]}",
             "payrun_id": payrun_id,
+            "company_id": user.company_id,
             "employee_id": emp["employee_id"],
             "employee_name": f"{emp['first_name']} {emp['last_name']}",
             "gross_pay": round(monthly_gross, 2),
