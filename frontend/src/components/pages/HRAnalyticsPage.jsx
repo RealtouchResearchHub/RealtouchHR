@@ -168,14 +168,22 @@ export default function HRAnalyticsPage() {
                                     <p className="text-xs text-muted-foreground mb-4">
                                         {tree.stats.total_employees} employees · {tree.stats.total_managers} managers · {tree.stats.max_depth} levels
                                     </p>
+                                    {tree.stats.total_managers === 0 && (
+                                        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                                            <span className="mt-0.5 shrink-0">⚠</span>
+                                            <span>No line managers assigned yet — the chart shows all employees at the same level. Go to each employee's <strong>Employment</strong> tab and set their <strong>Line Manager</strong> to build the hierarchy.</span>
+                                        </div>
+                                    )}
                                     {orgView === 'list' ? (
                                         <div className="space-y-1" data-testid="org-list">
                                             {tree.tree.map((n) => <OrgNode key={n.employee_id} node={n} depth={0} />)}
                                         </div>
                                     ) : (
-                                        <div className="overflow-x-auto" data-testid="org-tree-visual">
-                                            <div className="flex gap-8 min-w-max py-4">
-                                                {tree.tree.map((n) => <OrgTreeNode key={n.employee_id} node={n} />)}
+                                        <div className="overflow-x-auto pb-4" data-testid="org-tree-visual">
+                                            <div className="flex gap-10 min-w-max py-6 px-4 justify-center">
+                                                {tree.tree.map((n) => (
+                                                    <OrgTreeNode key={n.employee_id} node={n} isRoot={true} />
+                                                ))}
                                             </div>
                                         </div>
                                     )}
@@ -245,44 +253,109 @@ function OrgNode({ node, depth }) {
     );
 }
 
-function OrgTreeCard({ node }) {
+const DEPT_RING = {
+    'Engineering':  'ring-indigo-400',
+    'Product':      'ring-purple-400',
+    'Design':       'ring-pink-400',
+    'Sales':        'ring-emerald-400',
+    'HR':           'ring-teal-400',
+    'Finance':      'ring-amber-400',
+    'Management':   'ring-violet-500',
+    'Operations':   'ring-cyan-400',
+    'Marketing':    'ring-rose-400',
+};
+const DEPT_BG = {
+    'Engineering':  'bg-indigo-100 dark:bg-indigo-900',
+    'Product':      'bg-purple-100 dark:bg-purple-900',
+    'Design':       'bg-pink-100 dark:bg-pink-900',
+    'Sales':        'bg-emerald-100 dark:bg-emerald-900',
+    'HR':           'bg-teal-100 dark:bg-teal-900',
+    'Finance':      'bg-amber-100 dark:bg-amber-900',
+    'Management':   'bg-violet-100 dark:bg-violet-900',
+    'Operations':   'bg-cyan-100 dark:bg-cyan-900',
+    'Marketing':    'bg-rose-100 dark:bg-rose-900',
+};
+const DEPT_TEXT = {
+    'Engineering':  'text-indigo-700 dark:text-indigo-300',
+    'Product':      'text-purple-700 dark:text-purple-300',
+    'Design':       'text-pink-700 dark:text-pink-300',
+    'Sales':        'text-emerald-700 dark:text-emerald-300',
+    'HR':           'text-teal-700 dark:text-teal-300',
+    'Finance':      'text-amber-700 dark:text-amber-300',
+    'Management':   'text-violet-700 dark:text-violet-300',
+    'Operations':   'text-cyan-700 dark:text-cyan-300',
+    'Marketing':    'text-rose-700 dark:text-rose-300',
+};
+
+function OrgTreeCard({ node, isRoot = false }) {
     const initials = (node.name || '').split(' ').map(s => s[0]).slice(0, 2).join('');
+    const dept = node.department || '';
+    const ring = DEPT_RING[dept] || 'ring-slate-400';
+    const bg   = DEPT_BG[dept]   || 'bg-slate-100 dark:bg-slate-800';
+    const txt  = DEPT_TEXT[dept]  || 'text-slate-700 dark:text-slate-300';
+    const avatarSize = isRoot ? 'w-20 h-20' : 'w-16 h-16';
+    const initialsSize = isRoot ? 'text-2xl' : 'text-lg';
+
     return (
-        <div className="flex flex-col items-center">
-            <div className="rounded-xl border bg-card shadow-sm p-3 w-36 text-center hover:shadow-md transition-shadow">
+        <div className="flex flex-col items-center select-none">
+            {/* Circular avatar with ring */}
+            <div className={cn(
+                avatarSize,
+                'rounded-full ring-4 ring-offset-2 ring-offset-background overflow-hidden shadow-md flex-shrink-0',
+                ring
+            )}>
                 {node.avatar_url ? (
-                    <img src={node.avatar_url} alt={node.name} className="w-10 h-10 rounded-full object-cover mx-auto mb-1.5" />
+                    <img src={node.avatar_url} alt={node.name} className="w-full h-full object-cover" />
                 ) : (
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-bold text-indigo-700 dark:text-indigo-200 mx-auto mb-1.5">
+                    <div className={cn('w-full h-full flex items-center justify-center font-bold', bg, initialsSize, txt)}>
                         {initials}
                     </div>
                 )}
-                <p className="text-xs font-semibold truncate">{node.name || 'Unnamed'}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{node.title || '—'}</p>
-                {node.department && <p className="text-[10px] text-indigo-600 dark:text-indigo-400 truncate">{node.department}</p>}
+            </div>
+            {/* Name card */}
+            <div className="mt-3 bg-card border border-border rounded-xl shadow-sm px-3 py-2.5 text-center w-36 hover:shadow-md transition-shadow">
+                <p className="text-xs font-bold text-foreground leading-tight">{node.name || 'Unnamed'}</p>
+                {node.title && <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{node.title}</p>}
+                {node.department && <p className={cn('text-[10px] font-semibold mt-1', txt)}>{node.department}</p>}
             </div>
         </div>
     );
 }
 
-function OrgTreeNode({ node }) {
+function OrgTreeNode({ node, isRoot = false }) {
     const reports = node.reports || [];
+
     return (
-        <div className="flex flex-col items-center gap-0">
-            <OrgTreeCard node={node} />
+        <div className="flex flex-col items-center">
+            <OrgTreeCard node={node} isRoot={isRoot} />
+
             {reports.length > 0 && (
                 <>
-                    <div className="w-px h-6 bg-border" />
-                    <div className="relative flex gap-8">
-                        {reports.length > 1 && (
-                            <div className="absolute top-0 left-[18px] right-[18px] h-px bg-border" />
-                        )}
-                        {reports.map((child) => (
-                            <div key={child.employee_id} className="flex flex-col items-center gap-0">
-                                <div className="w-px h-6 bg-border" />
-                                <OrgTreeNode node={child} />
-                            </div>
-                        ))}
+                    {/* Vertical stem from parent down */}
+                    <div className="w-0.5 h-8 bg-border" />
+                    {/* Children row with connecting bar */}
+                    <div className="flex items-start">
+                        {reports.map((child, i) => {
+                            const isFirst = i === 0;
+                            const isLast  = i === reports.length - 1;
+                            const isOnly  = reports.length === 1;
+                            return (
+                                <div key={child.employee_id} className="flex flex-col items-center relative px-5">
+                                    {/* Horizontal bar segments form a continuous bar across siblings */}
+                                    {!isOnly && (
+                                        <div className={cn(
+                                            'absolute top-0 h-0.5 bg-border',
+                                            isFirst ? 'left-1/2 right-0' :
+                                            isLast  ? 'left-0 right-1/2' :
+                                                      'left-0 right-0'
+                                        )} />
+                                    )}
+                                    {/* Vertical stem down from bar to child */}
+                                    <div className="w-0.5 h-8 bg-border" />
+                                    <OrgTreeNode node={child} />
+                                </div>
+                            );
+                        })}
                     </div>
                 </>
             )}

@@ -23,7 +23,7 @@ import {
     Plus, Search, Users, AlertTriangle, ArrowRight, Mail, Briefcase,
     Filter, CheckCircle2, XCircle, MoreVertical, Download,
     RefreshCw, Eye, Archive, ArrowUpDown, ChevronLeft, ChevronRight as ChevronRightIcon,
-    UserCheck, Save, LayoutList, LayoutGrid
+    UserCheck, Save, LayoutList, LayoutGrid, Camera
 } from 'lucide-react';
 import { cn, getStatusColor, getComplianceColor } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -125,7 +125,41 @@ function WizardStepIndicator({ current, total, steps }) {
 }
 
 function StepPersonal({ form, set }) {
+    const handleAvatarFile = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { alert('Photo must be under 2MB'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => set({ ...form, avatar_url: ev.target.result });
+        reader.readAsDataURL(file);
+    };
+    const initials = ((form.first_name?.[0] || '') + (form.last_name?.[0] || '')).toUpperCase();
+
     return (
+        <div className="space-y-4">
+        {/* Photo upload */}
+        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
+            <div className="relative flex-shrink-0">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900 ring-2 ring-indigo-300 flex items-center justify-center">
+                    {form.avatar_url ? (
+                        <img src={form.avatar_url} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="text-indigo-700 dark:text-indigo-200 text-lg font-bold">{initials || '?'}</span>
+                    )}
+                </div>
+                <label className="absolute bottom-0 right-0 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center cursor-pointer shadow">
+                    <Camera className="w-2.5 h-2.5 text-white" />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} />
+                </label>
+            </div>
+            <div>
+                <p className="text-sm font-medium">Profile photo</p>
+                <p className="text-xs text-muted-foreground">Click camera to upload (max 2MB)</p>
+                {form.avatar_url && (
+                    <button type="button" className="text-xs text-rose-500 hover:underline mt-0.5" onClick={() => set({ ...form, avatar_url: '' })}>Remove</button>
+                )}
+            </div>
+        </div>
         <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
                 <Label>Title</Label>
@@ -173,6 +207,7 @@ function StepPersonal({ form, set }) {
                 <Label>Nationality</Label>
                 <Input value={form.nationality} onChange={e => set({ ...form, nationality: e.target.value })} placeholder="e.g. British" />
             </div>
+        </div>
         </div>
     );
 }
@@ -224,7 +259,7 @@ function StepContact({ form, set }) {
     );
 }
 
-function StepEmployment({ form, set }) {
+function StepEmployment({ form, set, employees = [] }) {
     return (
         <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -238,6 +273,20 @@ function StepEmployment({ form, set }) {
             <div className="space-y-1.5">
                 <Label>Work Location</Label>
                 <Input value={form.work_location} onChange={e => set({ ...form, work_location: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+                <Label>Line Manager</Label>
+                <Select value={form.line_manager_id || '__none__'} onValueChange={v => set({ ...form, line_manager_id: v === '__none__' ? '' : v })}>
+                    <SelectTrigger><SelectValue placeholder="No line manager" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="__none__">— No line manager —</SelectItem>
+                        {employees.map(e => (
+                            <SelectItem key={e.employee_id} value={e.employee_id}>
+                                {e.first_name} {e.last_name}{e.job_title ? ` (${e.job_title})` : ''}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="space-y-1.5">
                 <Label>Employment Type</Label>
@@ -610,6 +659,15 @@ function AddEmployeeWizard({ open, onOpenChange, onSaved }) {
     const [step, setStep] = useState(0);
     const [form, setForm] = useState({ ...EMPTY_FORM });
     const [saving, setSaving] = useState(false);
+    const [colleagues, setColleagues] = useState([]);
+
+    useEffect(() => {
+        if (open) {
+            axios.get(`${API_URL}/api/employees`, { withCredentials: true })
+                .then(r => setColleagues(r.data || []))
+                .catch(() => {});
+        }
+    }, [open]);
 
     const reset = () => { setStep(0); setForm({ ...EMPTY_FORM }); };
 
@@ -648,7 +706,7 @@ function AddEmployeeWizard({ open, onOpenChange, onSaved }) {
     const stepComponents = [
         <StepPersonal form={form} set={setForm} />,
         <StepContact form={form} set={setForm} />,
-        <StepEmployment form={form} set={setForm} />,
+        <StepEmployment form={form} set={setForm} employees={colleagues} />,
         <StepPayroll form={form} set={setForm} />,
         <StepBank form={form} set={setForm} />,
         <StepRTW form={form} set={setForm} />,
@@ -1046,18 +1104,18 @@ export default function EmployeesPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => navigate(`/employees/${emp.employee_id}`)}>
+                                                    <DropdownMenuItem onSelect={() => navigate(`/employees/${emp.employee_id}`)}>
                                                         <Eye className="w-4 h-4 mr-2" /> View profile
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={(e) => runReadinessCheck(emp.employee_id, e)}>
+                                                    <DropdownMenuItem onSelect={() => runReadinessCheck(emp.employee_id, { stopPropagation: () => {} })}>
                                                         <RefreshCw className="w-4 h-4 mr-2" /> Run readiness check
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
-                                                    <DropdownMenuItem className="text-rose-600" onClick={(e) => archiveEmployee(emp.employee_id, e)}>
+                                                    <DropdownMenuItem className="text-rose-600" onSelect={() => archiveEmployee(emp.employee_id, { stopPropagation: () => {} })}>
                                                         <Archive className="w-4 h-4 mr-2" /> Archive
                                                     </DropdownMenuItem>
                                                     {isAdmin && (
-                                                        <DropdownMenuItem className="text-red-700 font-medium" onClick={(e) => deleteEmployee(emp, e)}>
+                                                        <DropdownMenuItem className="text-red-700 font-medium" onSelect={() => deleteEmployee(emp, { stopPropagation: () => {} })}>
                                                             <XCircle className="w-4 h-4 mr-2" /> Delete permanently
                                                         </DropdownMenuItem>
                                                     )}
@@ -1083,10 +1141,14 @@ export default function EmployeesPage() {
                             <CardContent className="p-6">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                                            <span className="text-lg font-medium text-indigo-700 dark:text-indigo-300">
-                                                {emp.first_name?.[0]}{emp.last_name?.[0]}
-                                            </span>
+                                        <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                            {emp.avatar_url ? (
+                                                <img src={emp.avatar_url} alt={`${emp.first_name} ${emp.last_name}`} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <span className="text-lg font-medium text-indigo-700 dark:text-indigo-300">
+                                                    {emp.first_name?.[0]}{emp.last_name?.[0]}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="min-w-0">
                                             <h3 className="font-semibold truncate">{emp.first_name} {emp.last_name}</h3>
@@ -1102,18 +1164,18 @@ export default function EmployeesPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/employees/${emp.employee_id}`); }}>
+                                                <DropdownMenuItem onSelect={() => navigate(`/employees/${emp.employee_id}`)}>
                                                     <Eye className="w-4 h-4 mr-2" /> View profile
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={(e) => runReadinessCheck(emp.employee_id, e)}>
+                                                <DropdownMenuItem onSelect={() => runReadinessCheck(emp.employee_id, { stopPropagation: () => {} })}>
                                                     <RefreshCw className="w-4 h-4 mr-2" /> Run readiness check
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-rose-600" onClick={(e) => archiveEmployee(emp.employee_id, e)}>
+                                                <DropdownMenuItem className="text-rose-600" onSelect={() => archiveEmployee(emp.employee_id, { stopPropagation: () => {} })}>
                                                     <Archive className="w-4 h-4 mr-2" /> Archive
                                                 </DropdownMenuItem>
                                                 {isAdmin && (
-                                                    <DropdownMenuItem className="text-red-700 font-medium" onClick={(e) => deleteEmployee(emp, e)}>
+                                                    <DropdownMenuItem className="text-red-700 font-medium" onSelect={() => deleteEmployee(emp, { stopPropagation: () => {} })}>
                                                         <XCircle className="w-4 h-4 mr-2" /> Delete permanently
                                                     </DropdownMenuItem>
                                                 )}

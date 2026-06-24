@@ -62,6 +62,7 @@ export default function EmployeeDetail() {
     const [documents, setDocuments] = useState([]);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const avatarInputRef = useRef(null);
+    const [allEmployees, setAllEmployees] = useState([]);
 
     // Roles that can see bank details
     const canSeeBankDetails = user && ['owner', 'admin', 'payroll_admin'].includes(user.role);
@@ -97,18 +98,20 @@ export default function EmployeeDetail() {
 
         // Best-effort supplementary data
         const safe = async (fn) => { try { return await fn(); } catch { return null; } };
-        const [readinessRes, historyRes, auditRes, docsRes, emgRes] = await Promise.all([
+        const [readinessRes, historyRes, auditRes, docsRes, emgRes, empsRes] = await Promise.all([
             safe(() => axios.get(`${API_URL}/api/employees/${id}/readiness`, { withCredentials: true })),
             safe(() => axios.get(`${API_URL}/api/employees/${id}/status-history`, { withCredentials: true })),
             safe(() => axios.get(`${API_URL}/api/employees/${id}/audit-log`, { withCredentials: true })),
             safe(() => axios.get(`${API_URL}/api/employees/${id}/documents`, { withCredentials: true })),
             safe(() => axios.get(`${API_URL}/api/employees/${id}/emergency-contacts`, { withCredentials: true })),
+            safe(() => axios.get(`${API_URL}/api/employees`, { withCredentials: true })),
         ]);
         if (readinessRes) setReadiness(readinessRes.data);
         if (historyRes) setStatusHistory(historyRes.data || []);
         if (auditRes) setAuditLog(auditRes.data || []);
         if (docsRes) setDocuments(docsRes.data || []);
         if (emgRes) setEmergencyContacts(emgRes.data || []);
+        if (empsRes) setAllEmployees((empsRes.data || []).filter(e => e.employee_id !== id));
     };
 
     const downloadTaxDoc = async (docType, extraPath = '') => {
@@ -542,6 +545,23 @@ export default function EmployeeDetail() {
                                 <div className="space-y-2">
                                     <Label>Work Location</Label>
                                     <Input value={formData.work_location || ''} onChange={e => setFormData({ ...formData, work_location: e.target.value })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Line Manager</Label>
+                                    <Select
+                                        value={formData.line_manager_id || '__none__'}
+                                        onValueChange={v => setFormData({ ...formData, line_manager_id: v === '__none__' ? '' : v })}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="No line manager" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__none__">— No line manager —</SelectItem>
+                                            {allEmployees.map(e => (
+                                                <SelectItem key={e.employee_id} value={e.employee_id}>
+                                                    {e.first_name} {e.last_name}{e.job_title ? ` (${e.job_title})` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Employment Type</Label>

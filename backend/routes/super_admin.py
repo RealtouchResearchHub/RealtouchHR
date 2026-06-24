@@ -1042,3 +1042,93 @@ async def get_system_health(admin: CurrentUser = Depends(get_platform_admin)):
             "audit_events_24h": audit_24h,
         },
     }
+
+
+# ===========================================================================
+# DISCOUNT / PROMO CODES
+# ===========================================================================
+
+# ===========================================================================
+# EMAIL TEMPLATES — platform owner can edit and preview welcome email
+# ===========================================================================
+
+@router.get("/email-templates/{template_id}")
+async def get_email_template(template_id: str, _: CurrentUser = Depends(get_platform_admin)):
+    """Return the stored email template, or the built-in default if never saved."""
+    doc = await db.email_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if doc:
+        doc["is_default"] = False
+        return doc
+    from services.email_service import get_default_welcome_template
+    return get_default_welcome_template()
+
+
+@router.put("/email-templates/{template_id}")
+async def update_email_template(template_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Save edited email template to DB."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.email_templates.update_one(
+        {"template_id": template_id},
+        {"$set": {
+            "template_id": template_id,
+            "subject": data.get("subject", ""),
+            "html_body": data.get("html_body", ""),
+            "from_name": data.get("from_name", "RealtouchHR"),
+            "from_email": data.get("from_email", ""),
+            "updated_at": now,
+            "updated_by": admin.email,
+        }},
+        upsert=True,
+    )
+    return {"status": "saved", "updated_at": now}
+
+
+@router.post("/email-templates/{template_id}/reset")
+async def reset_email_template(template_id: str, _: CurrentUser = Depends(get_platform_admin)):
+    """Delete the stored template so the built-in default is used again."""
+    await db.email_templates.delete_one({"template_id": template_id})
+    return {"status": "reset"}
+
+
+@router.post("/email-templates/{template_id}/send-test")
+async def send_test_welcome_email(template_id: str, admin: CurrentUser = Depends(get_platform_admin)):
+    """Send the current template (saved or default) to the admin's own email address."""
+    from services.email_service import (
+        email_service, get_default_welcome_template, render_welcome_email,
+    )
+    doc = await db.email_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if doc:
+        subject = doc["subject"]
+        html = render_welcome_email(doc["html_body"], admin.name or "Admin", "RealtouchHR (Test)")
+    else:
+        tpl = get_default_welcome_template()
+        subject = tpl["subject"]
+        html = render_welcome_email(tpl["html_body"], admin.name or "Admin", "RealtouchHR (Test)")
+
+    result = await email_service.send_email(admin.email, f"[TEST] {subject}", html)
+    if result.get("mock"):
+        return {"status": "mock", "message": "Email service in mock mode — set RESEND_API_KEY to send real emails", "to": admin.email}
+    if result.get("success"):
+        return {"status": "sent", "to": admin.email, "message_id": result.get("message_id")}
+    return {"status": "failed", "error": result.get("error", "Unknown error")}
+
+
+@router.get("/discount-codes")
+async def get_discount_code_usage(_: CurrentUser = Depends(get_platform_admin)):
+    """Return all promotional discount code usage records."""
+    try:
+        usages = await db.promo_code_usage.find({}, {"_id": 0}).to_list(2000)
+        usages_sorted = sorted(usages, key=lambda x: x.get("applied_at", ""), reverse=True)
+    except Exception:
+        usages_sorted = []
+    # Summary per code
+    summary: dict = {}
+    for u in usages_sorted:
+        code = u.get("code", "")
+        if code not in summary:
+            summary[code] = {"code": code, "total_uses": 0, "discount_percent": u.get("discount_percent"), "months": u.get("months")}
+        summary[code]["total_uses"] += 1
+    return {
+        "usages": usages_sorted,
+        "summary": list(summary.values()),
+    }

@@ -42,6 +42,17 @@ services:
       # Email
       - key: RESEND_API_KEY
         sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      # Companies House
+      - key: COMPANIES_HOUSE_API_KEY
+        sync: false
+      # Stripe (both secret and publishable keys needed)
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      # Google OAuth redirect must match your production domain exactly
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
       # 2FA / Admin
       - key: TOTP_ISSUER
         value: RealtouchHR

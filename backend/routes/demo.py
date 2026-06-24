@@ -118,6 +118,17 @@ async def _do_seed(user: CurrentUser):
         await db.employees.insert_one(doc)
         created_employees.append(emp_id)
 
+    # Wire up demo org hierarchy (idempotent):
+    # Order: [0] Aarav, [1] Olivia, [2] James, [3] Sofia, [4] Noah, [5] Maya
+    # Olivia is the top. Aarav/Sofia/Noah/Maya report to Olivia. James reports to Aarav.
+    if len(created_employees) == 6:
+        aarav, olivia, james, sofia, noah, maya = created_employees
+        for emp_id, mgr_id in [(aarav, olivia), (james, aarav), (sofia, olivia), (noah, olivia), (maya, olivia)]:
+            await db.employees.update_one(
+                {"employee_id": emp_id, "company_id": company_id},
+                {"$set": {"line_manager_id": mgr_id}}
+            )
+
     # Create a sample pay run
     payrun_id = f"payrun_{uuid.uuid4().hex[:12]}"
     today = now.date()
@@ -240,7 +251,7 @@ async def create_sandbox_account():
         "demo_seeded_at": now.isoformat(),
         "is_sandbox": True,
         "sandbox_expires_at": (now + timedelta(hours=24)).isoformat(),
-        "created_at": now,
+        "created_at": now.isoformat(),
         "paye_reference": "120/AB1234",
         "accounts_office_reference": "120PA00012345",
         "small_employer_relief": True,

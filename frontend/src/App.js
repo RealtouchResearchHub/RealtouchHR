@@ -60,6 +60,7 @@ import DPOCenterPage from './components/pages/DPOCenterPage';
 import ExpensesPage from './components/pages/ExpensesPage';
 import RecruitmentPage from './components/pages/RecruitmentPage';
 import ReportsPage from './components/pages/ReportsPage';
+import PrivacyPolicyPage from './components/pages/PrivacyPolicyPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -187,6 +188,7 @@ function AppRouter() {
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
             <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
             
             {/* Onboarding Wizard - accessible after login */}

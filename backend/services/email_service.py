@@ -590,5 +590,233 @@ def employee_invite_email(
     return get_base_template(content)
 
 
+# ===========================================================================
+# WELCOME EMAIL — editable default template
+# Placeholders: {{name}}, {{company_name}}
+# ===========================================================================
+
+DEFAULT_WELCOME_SUBJECT = "Welcome to RealtouchHR – Your Compliance-Ready HR Platform 🎉"
+
+DEFAULT_WELCOME_HTML_BODY = """\
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to RealtouchHR</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:30px 0;">
+    <tr><td align="center">
+      <table width="620" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);padding:36px 40px;text-align:center;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="text-align:center;">
+                  <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 24px;">
+                    <span style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;">Realtouch<span style="color:#c4b5fd;">HR</span></span>
+                  </div>
+                  <p style="color:#e0e7ff;margin:12px 0 0 0;font-size:14px;font-weight:500;">Compliance Confidence for UK Businesses</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- WELCOME HEADLINE -->
+        <tr>
+          <td style="padding:40px 40px 24px 40px;text-align:center;background-color:#fafbff;">
+            <p style="font-size:28px;font-weight:700;color:#111827;margin:0 0 10px 0;line-height:1.3;">Welcome aboard, {{name}}! 🎉</p>
+            <p style="font-size:16px;color:#6b7280;margin:0;">Your <strong style="color:#4f46e5;">{{company_name}}</strong> account is ready.</p>
+          </td>
+        </tr>
+
+        <!-- INTRO -->
+        <tr>
+          <td style="padding:0 40px 32px 40px;">
+            <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+              RealtouchHR puts <strong>payroll, HR and compliance</strong> in one place — built specifically for UK businesses that need to stay ahead of HMRC, UKVI and GDPR obligations. Here's how to make the most of your platform from day one.
+            </p>
+          </td>
+        </tr>
+
+        <!-- BENEFITS -->
+        <tr>
+          <td style="padding:0 40px 32px 40px;">
+            <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:0 0 18px 0;">WHY BUSINESSES CHOOSE REALTOUCHHR</p>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="48%" valign="top" style="padding:0 8px 16px 0;">
+                  <div style="background:#f0f0ff;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">✅</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">Stay Compliant Automatically</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Real-time compliance score, expiry alerts and a 180-day calendar keep you ahead of every deadline.</p>
+                  </div>
+                </td>
+                <td width="48%" valign="top" style="padding:0 0 16px 8px;">
+                  <div style="background:#f0fdf4;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">💰</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">HMRC-Ready Payroll</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Run payroll, generate payslips and submit RTI directly to HMRC — all from one screen.</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td width="48%" valign="top" style="padding:0 8px 16px 0;">
+                  <div style="background:#fff7ed;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">🌍</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">UKVI & Immigration</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Track visa expiries, right-to-work documents and sponsor licence obligations automatically.</p>
+                  </div>
+                </td>
+                <td width="48%" valign="top" style="padding:0 0 16px 8px;">
+                  <div style="background:#fdf2f8;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">🔒</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">GDPR Built-In</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Data subject request handling, retention policies and an ICO-ready audit trail — all included.</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td width="48%" valign="top" style="padding:0 8px 0 0;">
+                  <div style="background:#f0f9ff;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">🤖</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">AI HR Copilot</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Ask anything — from redundancy procedures to statutory leave calculations. Available 24/7.</p>
+                  </div>
+                </td>
+                <td width="48%" valign="top" style="padding:0 0 0 8px;">
+                  <div style="background:#fefce8;border-radius:10px;padding:18px;">
+                    <p style="font-size:22px;margin:0 0 8px 0;">📊</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">Real-Time Analytics</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Headcount reports, turnover, absence trends and training compliance — all in your HR Analytics hub.</p>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- QUICK START GUIDE -->
+        <tr>
+          <td style="padding:0 40px 32px 40px;background-color:#fafbff;border-top:1px solid #e5e7eb;">
+            <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:24px 0 18px 0;">YOUR 5-STEP QUICK START</p>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="width:32px;height:32px;background:#4f46e5;border-radius:50%;text-align:center;vertical-align:middle;">
+                      <span style="color:#fff;font-weight:700;font-size:14px;">1</span>
+                    </td>
+                    <td style="padding-left:14px;vertical-align:middle;">
+                      <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Complete your company profile</p>
+                      <p style="margin:2px 0 0 0;font-size:13px;color:#6b7280;">Settings → Company — add your PAYE reference and payroll details</p>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="width:32px;height:32px;background:#7c3aed;border-radius:50%;text-align:center;vertical-align:middle;">
+                      <span style="color:#fff;font-weight:700;font-size:14px;">2</span>
+                    </td>
+                    <td style="padding-left:14px;vertical-align:middle;">
+                      <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Add your first employee</p>
+                      <p style="margin:2px 0 0 0;font-size:13px;color:#6b7280;">Employees → + Add Employee — the wizard covers payroll, RTW and bank details</p>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="width:32px;height:32px;background:#2563eb;border-radius:50%;text-align:center;vertical-align:middle;">
+                      <span style="color:#fff;font-weight:700;font-size:14px;">3</span>
+                    </td>
+                    <td style="padding-left:14px;vertical-align:middle;">
+                      <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Run a payroll preview</p>
+                      <p style="margin:2px 0 0 0;font-size:13px;color:#6b7280;">Payroll → New Pay Run — review deductions before submitting to HMRC</p>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="width:32px;height:32px;background:#059669;border-radius:50%;text-align:center;vertical-align:middle;">
+                      <span style="color:#fff;font-weight:700;font-size:14px;">4</span>
+                    </td>
+                    <td style="padding-left:14px;vertical-align:middle;">
+                      <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Check your compliance score</p>
+                      <p style="margin:2px 0 0 0;font-size:13px;color:#6b7280;">Dashboard — see your live score and resolve any outstanding compliance actions</p>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="width:32px;height:32px;background:#d97706;border-radius:50%;text-align:center;vertical-align:middle;">
+                      <span style="color:#fff;font-weight:700;font-size:14px;">5</span>
+                    </td>
+                    <td style="padding-left:14px;vertical-align:middle;">
+                      <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Ask the AI Copilot</p>
+                      <p style="margin:2px 0 0 0;font-size:13px;color:#6b7280;">AI Copilot button (bottom left) — get instant guidance on any HR or payroll question</p>
+                    </td>
+                  </tr></table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- CTA -->
+        <tr>
+          <td style="padding:32px 40px;text-align:center;">
+            <a href="APP_URL_PLACEHOLDER/dashboard"
+               style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;padding:14px 44px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;letter-spacing:0.01em;">
+              Go to Your Dashboard →
+            </a>
+            <p style="margin:20px 0 0 0;font-size:13px;color:#9ca3af;">
+              Have a question? Use the <strong style="color:#4f46e5;">AI Copilot</strong> — it's available 24/7 inside the platform.
+            </p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background-color:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;text-align:center;">
+            <p style="color:#6b7280;font-size:12px;margin:0;">© 2026 RealtouchHR Ltd. All rights reserved.</p>
+            <p style="color:#9ca3af;font-size:11px;margin:6px 0 0 0;">This email was sent because you created a RealtouchHR account. Please do not reply to this email.</p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
+def get_default_welcome_template() -> dict:
+    return {
+        "template_id": "welcome",
+        "subject": DEFAULT_WELCOME_SUBJECT,
+        "html_body": DEFAULT_WELCOME_HTML_BODY.replace("APP_URL_PLACEHOLDER", APP_URL),
+        "from_name": "RealtouchHR",
+        "from_email": os.environ.get("SENDER_EMAIL", "info@realtouchhr.com"),
+        "is_default": True,
+    }
+
+
+def render_welcome_email(html_body: str, name: str, company_name: str) -> str:
+    """Substitute {{name}} and {{company_name}} placeholders in a stored template."""
+    return html_body.replace("{{name}}", name).replace("{{company_name}}", company_name)
+
+
 # Singleton instance
 email_service = EmailService()

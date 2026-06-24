@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Separator } from '../ui/separator';
-import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Building2, ArrowRight, CheckCircle2, AlertTriangle, Loader2, Search, Tag } from 'lucide-react';
 import { toast } from 'sonner';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function RegisterPage() {
     const navigate = useNavigate();
@@ -16,15 +19,116 @@ export default function RegisterPage() {
         name: '',
         email: '',
         password: '',
-        company_name: ''
+        company_name: '',
+        company_number: '',
     });
     const [loading, setLoading] = useState(false);
+
+    // Promo code state
+    const [promoCode, setPromoCode] = useState('');
+    const [promoStatus, setPromoStatus] = useState(null); // null | { valid, description, discount_percent, months }
+    const [promoChecking, setPromoChecking] = useState(false);
+
+    // Companies House lookup state
+    const [chResults, setChResults] = useState([]);
+    const [chDropdownOpen, setChDropdownOpen] = useState(false);
+    const [chLoading, setChLoading] = useState(false);
+    const [chSelected, setChSelected] = useState(null);   // confirmed CH company snapshot
+    const [chWarning, setChWarning] = useState('');
+    const debounceRef = useRef(null);
+    const dropdownRef = useRef(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handler = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setChDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const searchCH = async (query) => {
+        if (!query || query.trim().length < 2) {
+            setChResults([]);
+            setChDropdownOpen(false);
+            return;
+        }
+        setChLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/api/company-lookup/search`, {
+                params: { query: query.trim() }
+            });
+            const items = res.data.items || [];
+            setChResults(items);
+            setChDropdownOpen(items.length > 0);
+        } catch {
+            setChResults([]);
+            setChDropdownOpen(false);
+        } finally {
+            setChLoading(false);
+        }
+    };
+
+    const triggerSearch = (value) => {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => searchCH(value), 450);
+    };
+
+    const handleCompanyNameChange = (e) => {
+        const val = e.target.value;
+        setFormData(prev => ({ ...prev, company_name: val }));
+        if (chSelected) { setChSelected(null); setChWarning(''); }
+        triggerSearch(val);
+    };
+
+    const handleCompanyNumberChange = (e) => {
+        const val = e.target.value.toUpperCase();
+        setFormData(prev => ({ ...prev, company_number: val }));
+        if (chSelected) { setChSelected(null); setChWarning(''); }
+        triggerSearch(val);
+    };
+
+    const handleChSelect = (item) => {
+        setFormData(prev => ({
+            ...prev,
+            company_name: item.company_name,
+            company_number: item.company_number,
+        }));
+        setChSelected(item);
+        setChWarning(item.warning || '');
+        setChResults([]);
+        setChDropdownOpen(false);
+    };
+
+    const validatePromo = async (code) => {
+        if (!code.trim()) { setPromoStatus(null); return; }
+        setPromoChecking(true);
+        try {
+            const res = await axios.get(`${API_URL}/api/discount-codes/validate`, { params: { code } });
+            setPromoStatus(res.data);
+        } catch {
+            setPromoStatus({ valid: false, message: 'Could not validate code' });
+        } finally {
+            setPromoChecking(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await register(formData);
+            const payload = {
+                name: formData.name,
+                email: formData.email,
+                password: formData.password,
+                company_name: formData.company_name || undefined,
+                company_number: formData.company_number || undefined,
+                ch_snapshot: chSelected || undefined,
+                promo_code: (promoStatus?.valid && promoCode) ? promoCode.trim() : undefined,
+            };
+            await register(payload);
             toast.success('Account created successfully!');
             navigate('/dashboard');
         } catch (error) {
@@ -50,7 +154,7 @@ export default function RegisterPage() {
                         <img src="/logo-dark.png" alt="RealtouchHR" className="h-12 lg:h-16 w-auto" />
                     </div>
                 </div>
-                
+
                 <div className="space-y-8">
                     <div>
                         <h1 className="text-4xl lg:text-5xl font-bold font-['Plus_Jakarta_Sans'] leading-tight">
@@ -60,7 +164,7 @@ export default function RegisterPage() {
                             Join hundreds of UK businesses that trust RealtouchHR for their HR and payroll needs.
                         </p>
                     </div>
-                    
+
                     <div className="space-y-3">
                         {features.map((feature, index) => (
                             <div key={index} className="flex items-center gap-3">
@@ -72,7 +176,7 @@ export default function RegisterPage() {
                 </div>
 
                 <p className="text-white/60 text-sm">
-                    © 2024 RealtouchHR. Built for UK SMBs.
+                    © 2026 RealtouchHR. Built for UK SMBs.
                 </p>
             </div>
 
@@ -124,19 +228,98 @@ export default function RegisterPage() {
                                     data-testid="input-register-password"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="company_name">Company Name</Label>
-                                <Input
-                                    id="company_name"
-                                    value={formData.company_name}
-                                    onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                                    placeholder="Acme Ltd"
-                                    data-testid="input-register-company"
-                                />
+
+                            {/* Company section */}
+                            <div className="space-y-3 pt-1">
+                                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                    Company Details <span className="font-normal normal-case">(optional)</span>
+                                </div>
+
+                                {/* Company Name with CH lookup */}
+                                <div className="space-y-2 relative" ref={dropdownRef}>
+                                    <Label htmlFor="company_name">Company Name</Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="company_name"
+                                            value={formData.company_name}
+                                            onChange={handleCompanyNameChange}
+                                            placeholder="Acme Ltd"
+                                            autoComplete="off"
+                                            data-testid="input-register-company"
+                                            className="pr-8"
+                                        />
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                            {chLoading
+                                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                : <Search className="w-3.5 h-3.5" />
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {/* Results dropdown */}
+                                    {chDropdownOpen && chResults.length > 0 && (
+                                        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg max-h-56 overflow-y-auto">
+                                            {chResults.map((item) => (
+                                                <button
+                                                    key={item.company_number}
+                                                    type="button"
+                                                    onClick={() => handleChSelect(item)}
+                                                    className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors border-b border-border last:border-0"
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-sm font-medium text-foreground truncate">{item.company_name}</span>
+                                                        <span className="text-xs text-muted-foreground flex-shrink-0">{item.company_number}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className={`text-xs ${item.company_status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                            {item.company_status || 'unknown'}
+                                                        </span>
+                                                        {item.registered_office_address_str && (
+                                                            <span className="text-xs text-muted-foreground truncate">{item.registered_office_address_str}</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Company Number */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="company_number">
+                                        Company Registration Number
+                                        <span className="ml-1 text-xs text-muted-foreground font-normal">(Companies House)</span>
+                                    </Label>
+                                    <Input
+                                        id="company_number"
+                                        value={formData.company_number}
+                                        onChange={handleCompanyNumberChange}
+                                        placeholder="e.g. 12345678"
+                                        autoComplete="off"
+                                        maxLength={8}
+                                    />
+                                </div>
+
+                                {/* Verified badge */}
+                                {chSelected && !chWarning && (
+                                    <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded px-3 py-2">
+                                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                        <span>Verified via Companies House · {chSelected.company_type}</span>
+                                    </div>
+                                )}
+
+                                {/* Warning for inactive company status */}
+                                {chSelected && chWarning && (
+                                    <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded px-3 py-2">
+                                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                        <span>{chWarning} You may still proceed.</span>
+                                    </div>
+                                )}
                             </div>
-                            <Button 
-                                type="submit" 
-                                className="w-full bg-indigo-600 hover:bg-indigo-700" 
+
+                            <Button
+                                type="submit"
+                                className="w-full bg-indigo-600 hover:bg-indigo-700"
                                 disabled={loading}
                                 data-testid="register-submit-btn"
                             >
@@ -154,9 +337,9 @@ export default function RegisterPage() {
                             </div>
                         </div>
 
-                        <Button 
-                            variant="outline" 
-                            className="w-full" 
+                        <Button
+                            variant="outline"
+                            className="w-full"
                             onClick={loginWithGoogle}
                             data-testid="google-register-btn"
                         >
@@ -176,8 +359,49 @@ export default function RegisterPage() {
                             </Link>
                         </p>
 
+                        {/* Discount / promo code */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="promo_code" className="flex items-center gap-1.5 text-sm">
+                                <Tag className="w-3.5 h-3.5" /> Discount Code <span className="text-muted-foreground font-normal">(optional)</span>
+                            </Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="promo_code"
+                                    value={promoCode}
+                                    onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoStatus(null); }}
+                                    onBlur={() => validatePromo(promoCode)}
+                                    placeholder="Enter discount code"
+                                    className="uppercase"
+                                    maxLength={20}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-shrink-0"
+                                    onClick={() => validatePromo(promoCode)}
+                                    disabled={promoChecking || !promoCode.trim()}
+                                >
+                                    {promoChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Apply'}
+                                </Button>
+                            </div>
+                            {promoStatus?.valid && (
+                                <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+                                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <span>{promoStatus.description} — applied at checkout</span>
+                                </div>
+                            )}
+                            {promoStatus && !promoStatus.valid && (
+                                <div className="flex items-center gap-1.5 text-xs text-rose-600">
+                                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <span>{promoStatus.message || 'Invalid code'}</span>
+                                </div>
+                            )}
+                        </div>
+
                         <p className="text-center text-xs text-muted-foreground">
-                            By signing up, you agree to our Terms of Service and Privacy Policy
+                            By signing up, you agree to our{' '}
+                            <Link to="/privacy" className="text-indigo-600 hover:underline">Terms of Service and Privacy Policy</Link>
                         </p>
                     </CardContent>
                 </Card>

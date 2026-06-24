@@ -54,15 +54,15 @@ export default function LandingPage() {
             <header className="border-b border-white/5 backdrop-blur-md bg-slate-950/30">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center">
-                        <img src="/logo-dark.png" alt="RealtouchHR" className="h-10 sm:h-12 md:h-14 w-auto" />
+                        <img src="/logo-dark.png" alt="RealtouchHR" className="h-[140px] sm:h-[168px] md:h-[196px] w-auto" />
                     </div>
                     <nav className="hidden md:flex items-center gap-6 text-sm">
-                        <a href="#features" className="text-white/80 hover:text-white transition">Features</a>
-                        <a href="#pricing" className="text-white/80 hover:text-white transition">Pricing</a>
-                        <a href="#compliance" className="text-white/80 hover:text-white transition">Compliance</a>
+                        <a href="#features" className="text-white/90 hover:text-white transition">Features</a>
+                        <a href="#pricing" className="text-white/90 hover:text-white transition">Pricing</a>
+                        <a href="#compliance" className="text-white/90 hover:text-white transition">Compliance</a>
                     </nav>
                     <div className="flex items-center gap-2">
-                        <Link to="/login" className="text-sm text-white/80 hover:text-white px-3 py-1.5">
+                        <Link to="/login" className="text-sm text-white/90 hover:text-white px-3 py-1.5">
                             Sign in
                         </Link>
                         <Link
@@ -91,10 +91,10 @@ export default function LandingPage() {
                             Compliance
                         </span>
                     </h1>
-                    <p className="mt-6 text-lg md:text-xl text-white/70 max-w-2xl leading-relaxed">
+                    <p className="mt-6 text-lg md:text-xl text-white/85 max-w-2xl leading-relaxed">
                         HMRC-ready RTI submissions, UKVI compliance support, statutory pay calculators
                         and payroll all in one place. RealtouchHR replaces spreadsheets and
-                        consultants for under £39/month.
+                        consultants for under £29/month.
                     </p>
 
                     <div className="mt-10 flex flex-wrap gap-3">
@@ -133,7 +133,7 @@ export default function LandingPage() {
                         ].map((s) => (
                             <div key={s.label} className="border-l-2 border-white/20 pl-4">
                                 <div className="text-3xl font-bold">{s.value}</div>
-                                <div className="text-white/60 mt-1">{s.label}</div>
+                                <div className="text-white/75 mt-1">{s.label}</div>
                             </div>
                         ))}
                     </div>
@@ -167,7 +167,7 @@ export default function LandingPage() {
                                     <f.icon className="w-5 h-5 text-white" />
                                 </div>
                                 <h3 className="text-xl font-semibold text-white">{f.title}</h3>
-                                <p className="text-sm text-white/80 mt-2 leading-relaxed">{f.desc}</p>
+                                <p className="text-sm text-white/90 mt-2 leading-relaxed">{f.desc}</p>
                             </CardContent>
                         </Card>
                     ))}
@@ -179,14 +179,14 @@ export default function LandingPage() {
                 <div className="text-center mb-12">
                     <Badge className="mb-3 bg-white/10 border border-white/20">Pricing</Badge>
                     <h2 className="text-4xl md:text-5xl font-bold">Simple, all-in-GBP</h2>
-                    <p className="mt-3 text-white/60">No per-user surprise charges. Cancel any time.</p>
+                    <p className="mt-3 text-white/75">No per-user surprise charges. Cancel any time.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
                     {[
-                        { name: 'Starter', price: 39, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI', 'UKVI checks', 'Email support'] },
-                        { name: 'Professional', price: 59, employees: '50', featured: true, features: ['Everything in Starter', 'Statutory pay automation', 'HR Assistant', 'Priority chat support'] },
-                        { name: 'Enterprise', price: 149, employees: 'Unlimited', features: ['Multi-entity', 'SCIM/SAML SSO', 'Dedicated CSM', 'Sponsor licence health'] },
+                        { name: 'Starter', price: 29, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI', 'UKVI checks', 'Email support'] },
+                        { name: 'Professional', price: 39, employees: '50', featured: true, features: ['Everything in Starter', 'Statutory pay automation', 'HR Assistant', 'Priority chat support'] },
+                        { name: 'Enterprise', price: 129, employees: 'Unlimited', features: ['Multi-entity', 'SCIM/SAML SSO', 'Dedicated CSM', 'Sponsor licence health'] },
                     ].map((p) => (
                         <Card
                             key={p.name}
@@ -203,9 +203,9 @@ export default function LandingPage() {
                                 <h3 className="text-2xl font-bold">{p.name}</h3>
                                 <div className="mt-4 flex items-baseline gap-1">
                                     <span className="text-5xl font-bold">£{p.price}</span>
-                                    <span className="text-white/60">/month</span>
+                                    <span className="text-white/75">/month</span>
                                 </div>
-                                <p className="text-sm text-white/60 mt-1">Up to {p.employees} employees</p>
+                                <p className="text-sm text-white/75 mt-1">Up to {p.employees} employees</p>
                                 <ul className="mt-6 space-y-2 text-sm">
                                     {p.features.map((f) => (
                                         <li key={f} className="flex items-start gap-2">
@@ -238,7 +238,7 @@ export default function LandingPage() {
                         <h2 className="text-4xl font-bold leading-tight">
                             HMRC, UKVI and GDPR. We keep track so you don't have to.
                         </h2>
-                        <p className="mt-4 text-white/70 leading-relaxed">
+                        <p className="mt-4 text-white/85 leading-relaxed">
                             Your compliance score updates in real time as your team changes. Visa expiries,
                             sponsor licence ratings, statutory pay deadlines and RTI cut-offs are all
                             tracked and flagged before they become problems.
@@ -251,7 +251,7 @@ export default function LandingPage() {
                             ].map((c) => (
                                 <div key={c} className="flex items-start gap-2">
                                     <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                                    <span className="text-white/80">{c}</span>
+                                    <span className="text-white/90">{c}</span>
                                 </div>
                             ))}
                         </div>
@@ -261,7 +261,7 @@ export default function LandingPage() {
                             <div className="flex items-center gap-3 mb-4">
                                 <ShieldCheck className="w-8 h-8 text-emerald-400" />
                                 <div>
-                                    <p className="text-sm text-white/60">Compliance score</p>
+                                    <p className="text-sm text-white/75">Compliance score</p>
                                     <p className="text-4xl font-bold">96%</p>
                                 </div>
                             </div>
@@ -297,7 +297,7 @@ export default function LandingPage() {
                             <h2 className="text-3xl md:text-5xl font-bold leading-tight">
                                 See it in action. No email needed.
                             </h2>
-                            <p className="mt-4 text-white/80 text-lg">
+                            <p className="mt-4 text-white/90 text-lg">
                                 Click below and you are inside a live RealtouchHR account in under 5 seconds.
                                 Sample employees, a draft pay run, UKVI alerts and billing — explore everything.
                             </p>
@@ -320,9 +320,12 @@ export default function LandingPage() {
             <footer className="border-t border-white/5 py-10 text-sm text-white/50">
                 <div className="max-w-7xl mx-auto px-6 flex flex-wrap items-center justify-between gap-4">
                     <p>© 2026 RealtouchHR. Built for UK SMBs.</p>
-                    <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Sandbox demos auto-expire after 24h</span>
+                    <div className="flex items-center gap-4">
+                        <a href="/privacy" className="hover:text-white/90 transition-colors">Privacy Policy</a>
+                        <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Sandbox demos auto-expire after 24h</span>
+                        </div>
                     </div>
                 </div>
             </footer>

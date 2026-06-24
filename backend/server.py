@@ -153,11 +153,27 @@ api_router = APIRouter(prefix="/api")
 # ==================== MODELS ====================
 
 # Auth Models
+# Pre-configured promotional discount codes
+PROMO_CODES: dict = {
+    "BGS2026": {
+        "code": "BGS2026",
+        "display": "BGS2026-",
+        "discount_percent": 15,
+        "months": 6,
+        "plans": "all",
+        "description": "15% off all plans for 6 months",
+        "active": True,
+    }
+}
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
     company_name: Optional[str] = None
+    company_number: Optional[str] = None
+    ch_snapshot: Optional[dict] = None
+    promo_code: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -730,9 +746,59 @@ async def register(request: Request, data: UserCreate, response: Response):
             "trial_ends_at": trial_ends.isoformat(),
             "created_at": now.isoformat()
         }
+        if data.company_number:
+            company_doc["company_registration_number"] = data.company_number.upper()
+        if data.ch_snapshot:
+            company_doc["ch_verified_snapshot"] = data.ch_snapshot
+            company_doc["ch_lookup_timestamp"] = now.isoformat()
+            company_doc["ch_source"] = "Companies House"
         await db.companies.insert_one(company_doc)
         await db.users.update_one({"user_id": user_id}, {"$set": {"company_id": company_id}})
         user_doc["company_id"] = company_id
+
+        # Audit log for CH verification
+        if data.ch_snapshot:
+            try:
+                await db.audit_logs.insert_one({
+                    "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+                    "company_id": company_id,
+                    "user_id": user_id,
+                    "action": "company_ch_verified",
+                    "details": f"Company verified via Companies House during registration: {data.company_name} ({data.company_number})",
+                    "created_at": now.isoformat()
+                })
+            except Exception:
+                pass
+
+        # Apply promotional discount code if provided
+        if data.promo_code:
+            normalized_code = data.promo_code.strip().upper().rstrip('-')
+            promo = PROMO_CODES.get(normalized_code)
+            if promo and promo.get("active"):
+                try:
+                    await db.companies.update_one(
+                        {"company_id": company_id},
+                        {"$set": {
+                            "promo_code": normalized_code,
+                            "promo_discount_percent": promo["discount_percent"],
+                            "promo_months": promo["months"],
+                            "promo_applied_at": now.isoformat(),
+                        }}
+                    )
+                    await db.promo_code_usage.insert_one({
+                        "usage_id": f"promo_{uuid.uuid4().hex[:12]}",
+                        "code": normalized_code,
+                        "company_id": company_id,
+                        "user_id": user_id,
+                        "user_email": data.email,
+                        "user_name": data.name,
+                        "company_name": data.company_name or "",
+                        "discount_percent": promo["discount_percent"],
+                        "months": promo["months"],
+                        "applied_at": now.isoformat(),
+                    })
+                except Exception as _pe:
+                    logger.warning("Promo code save failed: %s", _pe)
     
     # Create session
     token = create_jwt_token(user_id, data.email)
@@ -759,11 +825,18 @@ async def register(request: Request, data: UserCreate, response: Response):
     user_doc.pop("_id", None)
     user_doc["created_at"] = now
 
-    # Send welcome email
+    # Send welcome email (use DB template if saved, otherwise built-in default)
     try:
-        from services.email_service import email_service, welcome_email
-        html = welcome_email(data.name, data.company_name or "your company")
-        await email_service.send_email(data.email, "Welcome to RealtouchHR 🎉", html)
+        from services.email_service import email_service, get_default_welcome_template, render_welcome_email
+        tpl_doc = await db.email_templates.find_one({"template_id": "welcome"}, {"_id": 0})
+        if tpl_doc:
+            subject = tpl_doc.get("subject", "Welcome to RealtouchHR 🎉")
+            html = render_welcome_email(tpl_doc.get("html_body", ""), data.name, data.company_name or "your company")
+        else:
+            tpl = get_default_welcome_template()
+            subject = tpl["subject"]
+            html = render_welcome_email(tpl["html_body"], data.name, data.company_name or "your company")
+        await email_service.send_email(data.email, subject, html)
     except Exception as e:
         logger.warning(f"Welcome email failed: {e}")
 
@@ -1107,6 +1180,23 @@ async def upload_company_logo(data: dict, user: User = Depends(get_current_user)
         {"$set": {"logo_url": logo_data}},
     )
     return {"message": "Logo updated", "logo_url": logo_data[:60] + "…"}
+
+@api_router.get("/discount-codes/validate")
+async def validate_discount_code(code: str):
+    """Validate a promotional discount code. No auth required."""
+    normalized = code.strip().upper().rstrip('-')
+    promo = PROMO_CODES.get(normalized)
+    if not promo or not promo.get("active"):
+        return {"valid": False, "message": "Invalid or expired discount code"}
+    return {
+        "valid": True,
+        "code": promo["code"],
+        "display": promo["display"],
+        "discount_percent": promo["discount_percent"],
+        "months": promo["months"],
+        "plans": promo["plans"],
+        "description": promo["description"],
+    }
 
 @api_router.get("/companies-house/search")
 async def companies_house_search(q: str, user: User = Depends(get_current_user)):
@@ -3686,9 +3776,11 @@ try:
     from routes.expenses import router as expenses_router
     from routes.recruitment import router as recruitment_router
     from routes.reports import router as reports_router
+    from routes.company_lookup import router as company_lookup_router
     api_router.include_router(expenses_router)
     api_router.include_router(recruitment_router)
     api_router.include_router(reports_router)
+    api_router.include_router(company_lookup_router)
     api_router.include_router(hmrc_router)
     api_router.include_router(self_service_router)
     api_router.include_router(rti_sync_router)

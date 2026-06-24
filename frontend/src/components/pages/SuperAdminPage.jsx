@@ -13,13 +13,14 @@ import {
     ToggleLeft, CreditCard, Save, X, ChevronRight, CalendarPlus,
     UserX, UserCheck, Trash2, Flag, RefreshCw, Mail, Clock,
     UserCog, Zap, PlusCircle, Lock, HeartPulse, CheckCircle2,
-    AlertCircle, XCircle, Server, LogOut,
+    AlertCircle, XCircle, Server, LogOut, Send, RotateCcw,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
+import { Textarea } from '../ui/textarea';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -56,6 +57,12 @@ export default function SuperAdminPage() {
     const [savingSecSettings, setSavingSecSettings] = useState(false);
     const [systemHealth, setSystemHealth]     = useState(null);
     const [healthLoading, setHealthLoading]   = useState(false);
+    const [discountUsages, setDiscountUsages] = useState([]);
+    const [discountSummary, setDiscountSummary] = useState([]);
+    const [emailTpl, setEmailTpl] = useState({ subject: '', html_body: '', from_name: 'RealtouchHR', from_email: '', is_default: true });
+    const [emailTplSaving, setEmailTplSaving] = useState(false);
+    const [emailTplTesting, setEmailTplTesting] = useState(false);
+    const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
 
     // Dialogs
     const [moduleDialog, setModuleDialog]   = useState(null);
@@ -72,7 +79,7 @@ export default function SuperAdminPage() {
     const load = useCallback(async () => {
         setLoading(true);
         const safe = async (promise) => { try { return await promise; } catch (e) { return { error: e }; } };
-        const [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes, paRes, secRes, hlthRes] = await Promise.all([
+        const [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes, paRes, secRes, hlthRes, discRes, tplRes] = await Promise.all([
             safe(ax('get', '/api/super-admin/metrics')),
             safe(ax('get', '/api/super-admin/companies')),
             safe(ax('get', '/api/super-admin/audit-log?limit=100')),
@@ -84,6 +91,8 @@ export default function SuperAdminPage() {
             safe(ax('get', '/api/super-admin/audit-log?limit=50')),
             safe(ax('get', '/api/super-admin/security/settings')),
             safe(ax('get', '/api/super-admin/system/health')),
+            safe(ax('get', '/api/super-admin/discount-codes')),
+            safe(ax('get', '/api/super-admin/email-templates/welcome')),
         ]);
 
         const firstAuthErr = [mRes, cRes].find(r => r?.error?.response?.status === 403);
@@ -108,6 +117,11 @@ export default function SuperAdminPage() {
             setDesignatedAdmins(secRes.data.designated_admins || []);
         }
         if (!hlthRes.error) setSystemHealth(hlthRes.data);
+        if (!discRes.error) {
+            setDiscountUsages(discRes.data.usages || []);
+            setDiscountSummary(discRes.data.summary || []);
+        }
+        if (!tplRes.error) setEmailTpl(tplRes.data);
 
         [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes].forEach((r, i) => {
             if (r?.error) console.warn(`Super-admin load[${i}] failed:`, r.error?.response?.data || r.error?.message);
@@ -392,6 +406,8 @@ export default function SuperAdminPage() {
                     <TabsTrigger value="audit"><Activity className="w-3.5 h-3.5 mr-1" />Audit Log</TabsTrigger>
                     <TabsTrigger value="security"><Lock className="w-3.5 h-3.5 mr-1" />Security</TabsTrigger>
                     <TabsTrigger value="health"><HeartPulse className="w-3.5 h-3.5 mr-1" />System Health</TabsTrigger>
+                    <TabsTrigger value="discounts"><PoundSterling className="w-3.5 h-3.5 mr-1" />Discount Codes</TabsTrigger>
+                    <TabsTrigger value="email"><Mail className="w-3.5 h-3.5 mr-1" />Welcome Email</TabsTrigger>
                 </TabsList>
 
                 {/* ── Companies ── */}
@@ -1053,7 +1069,193 @@ export default function SuperAdminPage() {
                         )}
                     </div>
                 </TabsContent>
+
+                {/* ── Discount Codes ── */}
+                <TabsContent value="discounts">
+                    <div className="space-y-4">
+                        {/* Summary cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            {discountSummary.length === 0 ? (
+                                <Card className="col-span-3">
+                                    <CardContent className="p-6 text-center text-muted-foreground text-sm">
+                                        No discount code redemptions yet.
+                                    </CardContent>
+                                </Card>
+                            ) : discountSummary.map(s => (
+                                <Card key={s.code}>
+                                    <CardContent className="p-4">
+                                        <p className="text-xs text-muted-foreground">Code</p>
+                                        <p className="text-lg font-bold font-mono">{s.code}-</p>
+                                        <p className="text-sm mt-1">{s.discount_percent}% off · {s.months} months</p>
+                                        <p className="text-2xl font-bold text-indigo-600 mt-2">{s.total_uses}</p>
+                                        <p className="text-xs text-muted-foreground">total redemptions</p>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+
+                        {/* Full usage table */}
+                        <Card>
+                            <CardHeader><CardTitle>Redemption Log — BGS2026-</CardTitle></CardHeader>
+                            <CardContent className="p-0">
+                                {discountUsages.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground p-6">No redemptions recorded yet. Users who enter this code at signup will appear here.</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b bg-muted/40">
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Code</th>
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Discount</th>
+                                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Applied</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {discountUsages.map((u, i) => (
+                                                    <tr key={u.usage_id || i} className="border-b last:border-0 hover:bg-accent/30">
+                                                        <td className="px-4 py-3 font-mono font-semibold text-indigo-600">{u.code}-</td>
+                                                        <td className="px-4 py-3">{u.user_name || '—'}</td>
+                                                        <td className="px-4 py-3 text-muted-foreground">{u.user_email || '—'}</td>
+                                                        <td className="px-4 py-3">{u.company_name || '—'}</td>
+                                                        <td className="px-4 py-3">
+                                                            <Badge className="bg-emerald-100 text-emerald-700">{u.discount_percent}% · {u.months}mo</Badge>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                                                            {u.applied_at ? new Date(u.applied_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── Welcome Email Editor ── */}
+                <TabsContent value="email">
+                    <div className="space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2"><Mail className="w-4 h-4" /> Welcome Email Template</CardTitle>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            Sent automatically to every new signup. Use <code className="bg-muted px-1 rounded text-xs">{'{{name}}'}</code> and <code className="bg-muted px-1 rounded text-xs">{'{{company_name}}'}</code> as placeholders.
+                                            {emailTpl.is_default && <span className="ml-2 text-amber-600 font-medium">(Using built-in default — save to customise)</span>}
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => setEmailPreviewOpen(true)}>
+                                            <Eye className="w-3.5 h-3.5 mr-1" /> Preview
+                                        </Button>
+                                        <Button
+                                            size="sm" variant="outline"
+                                            disabled={emailTplTesting}
+                                            onClick={async () => {
+                                                setEmailTplTesting(true);
+                                                try {
+                                                    const r = await ax('post', '/api/super-admin/email-templates/welcome/send-test');
+                                                    if (r.data.status === 'sent') toast.success(`Test email sent to ${r.data.to}`);
+                                                    else if (r.data.status === 'mock') toast.info('Email service in mock mode — set RESEND_API_KEY to send real emails');
+                                                    else toast.error(r.data.error || 'Failed to send test');
+                                                } catch { toast.error('Failed to send test email'); }
+                                                finally { setEmailTplTesting(false); }
+                                            }}
+                                        >
+                                            {emailTplTesting ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                                            Send Test to My Email
+                                        </Button>
+                                        <Button
+                                            size="sm" variant="ghost" className="text-muted-foreground"
+                                            onClick={async () => {
+                                                if (!window.confirm('Reset to the built-in default template? Your edits will be lost.')) return;
+                                                try {
+                                                    await ax('post', '/api/super-admin/email-templates/welcome/reset');
+                                                    const r = await ax('get', '/api/super-admin/email-templates/welcome');
+                                                    setEmailTpl(r.data);
+                                                    toast.success('Reset to default template');
+                                                } catch { toast.error('Reset failed'); }
+                                            }}
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset to Default
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <Label>From Name</Label>
+                                        <Input value={emailTpl.from_name || ''} onChange={e => setEmailTpl(t => ({ ...t, from_name: e.target.value }))} placeholder="RealtouchHR" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>From Email</Label>
+                                        <Input value={emailTpl.from_email || ''} onChange={e => setEmailTpl(t => ({ ...t, from_email: e.target.value }))} placeholder="info@realtouchhr.com" />
+                                        <p className="text-xs text-muted-foreground">Must be a verified sender in your Resend account</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Subject Line</Label>
+                                    <Input value={emailTpl.subject || ''} onChange={e => setEmailTpl(t => ({ ...t, subject: e.target.value }))} placeholder="Welcome to RealtouchHR 🎉" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>HTML Body</Label>
+                                    <Textarea
+                                        value={emailTpl.html_body || ''}
+                                        onChange={e => setEmailTpl(t => ({ ...t, html_body: e.target.value }))}
+                                        className="font-mono text-xs min-h-[420px] resize-y"
+                                        placeholder="Enter full HTML email body here..."
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button
+                                        disabled={emailTplSaving}
+                                        onClick={async () => {
+                                            setEmailTplSaving(true);
+                                            try {
+                                                await ax('put', '/api/super-admin/email-templates/welcome', emailTpl);
+                                                setEmailTpl(t => ({ ...t, is_default: false }));
+                                                toast.success('Welcome email template saved');
+                                            } catch { toast.error('Failed to save template'); }
+                                            finally { setEmailTplSaving(false); }
+                                        }}
+                                    >
+                                        {emailTplSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                        Save Template
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
             </Tabs>
+
+            {/* ── Email Preview Modal ── */}
+            <Dialog open={emailPreviewOpen} onOpenChange={setEmailPreviewOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Email Preview — {emailTpl.subject}</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-hidden rounded border">
+                        <iframe
+                            title="email-preview"
+                            srcDoc={emailTpl.html_body ? emailTpl.html_body.replace(/\{\{name\}\}/g, 'John Smith').replace(/\{\{company_name\}\}/g, 'Acme Ltd') : '<p style="padding:20px;font-family:sans-serif;color:#6b7280">No HTML content yet</p>'}
+                            className="w-full h-[60vh] border-0"
+                            sandbox="allow-same-origin"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEmailPreviewOpen(false)}>Close</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* ── Company detail sheet ── */}
             <Sheet open={!!detailSheet} onOpenChange={o => !o && setDetailSheet(null)}>
