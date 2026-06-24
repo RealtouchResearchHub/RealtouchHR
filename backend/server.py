@@ -831,6 +831,81 @@ async def logout(request: Request, response: Response):
     response.delete_cookie("session_token", path="/")
     return {"message": "Logged out"}
 
+@api_router.post("/auth/forgot-password")
+@limiter.limit("5/hour")
+async def forgot_password(request: Request, data: dict):
+    """Send a password reset link to the user's email (always returns 200 to prevent enumeration)."""
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return {"message": "If that email exists, a reset link has been sent."}
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if user_doc:
+        import os as _os, resend as _resend, secrets as _secrets
+        reset_token = _secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+        await db.password_reset_tokens.update_one(
+            {"email": email},
+            {"$set": {"token": reset_token, "expires_at": expires, "email": email, "used": False}},
+            upsert=True,
+        )
+        app_url = _os.environ.get("APP_URL", "http://localhost:3000")
+        reset_url = f"{app_url}/reset-password?token={reset_token}"
+        resend_api_key = _os.environ.get("RESEND_API_KEY", "")
+        sender = _os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+        if resend_api_key:
+            try:
+                _resend.api_key = resend_api_key
+                _resend.Emails.send({
+                    "from": f"RealtouchHR <{sender}>",
+                    "to": [email],
+                    "subject": "Reset your RealtouchHR password",
+                    "html": f"""
+                        <p>Hi {user_doc.get('name', '')}.</p>
+                        <p>We received a request to reset your RealtouchHR password.
+                        Click the button below to set a new password. This link expires in 2 hours.</p>
+                        <p><a href="{reset_url}" style="background:#4f46e5;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Reset Password</a></p>
+                        <p>If you didn't request this, you can safely ignore this email.</p>
+                    """,
+                })
+            except Exception as exc:
+                logger.warning(f"Password reset email failed: {exc}")
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password_endpoint(data: dict):
+    """Use a reset token to set a new password."""
+    import bcrypt as _bcrypt
+    token_val = (data.get("token") or "").strip()
+    new_password = (data.get("password") or "").strip()
+    if not token_val or not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Invalid request")
+    record = await db.password_reset_tokens.find_one({"token": token_val, "used": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has already been used.")
+    if datetime.fromisoformat(record["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+    hashed = _bcrypt.hashpw(new_password.encode(), _bcrypt.gensalt()).decode()
+    await db.users.update_one({"email": record["email"]}, {"$set": {"password_hash": hashed}})
+    await db.password_reset_tokens.update_one({"token": token_val}, {"$set": {"used": True}})
+    return {"message": "Password updated successfully. You can now sign in."}
+
+
+@api_router.post("/auth/change-password")
+async def change_password_endpoint(data: dict, user: User = Depends(get_current_user)):
+    """Authenticated user changes their own password (used for first-login forced change)."""
+    import bcrypt as _bcrypt
+    new_password = (data.get("new_password") or "").strip()
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    hashed = _bcrypt.hashpw(new_password.encode(), _bcrypt.gensalt()).decode()
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"password_hash": hashed, "must_change_password": False}},
+    )
+    return {"message": "Password updated"}
+
+
 @api_router.put("/auth/preferences")
 async def update_preferences(data: dict, user: User = Depends(get_current_user)):
     update_fields = {}
