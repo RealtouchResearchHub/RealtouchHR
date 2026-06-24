@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: realtouchhr
+    name: realtouchhr-api
     runtime: python
-    buildCommand: cd frontend && npm install && CI=false npm run build && cd ../backend && pip install -r requirements.txt
+    # Backend only — frontend is deployed separately on Vercel
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT
-    plan: free
+    plan: starter
     envVars:
       # Supabase
       - key: SUPABASE_URL
@@ -14,20 +15,20 @@ services:
       # Auth
       - key: JWT_SECRET
         generateValue: true
-      # Set both to your Render service URL: https://realtouchhr.onrender.com
+      # APP_URL = your FRONTEND URL (used for CORS, email links, OAuth redirects back to app)
+      # Set to: https://www.realtouchhr.com
       - key: APP_URL
         sync: false
       - key: PUBLIC_APP_URL
         sync: false
-      # React — set to same Render URL so frontend calls the right backend
-      - key: REACT_APP_BACKEND_URL
-        sync: false
-      # Google OAuth
+      # Google OAuth — REDIRECT_URI must point to this BACKEND service URL
+      # e.g. https://realtouchhr-api.onrender.com/api/auth/google/callback
+      # or https://api.realtouchhr.com/api/auth/google/callback if you set a custom domain
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
-      - key: GOOGLE_API_KEY
+      - key: GOOGLE_REDIRECT_URI
         sync: false
       # Stripe
       - key: STRIPE_API_KEY
@@ -47,18 +48,12 @@ services:
       # Companies House
       - key: COMPANIES_HOUSE_API_KEY
         sync: false
-      # Stripe (both secret and publishable keys needed)
-      - key: STRIPE_PUBLISHABLE_KEY
-        sync: false
-      # Google OAuth redirect must match your production domain exactly
-      - key: GOOGLE_REDIRECT_URI
-        sync: false
       # 2FA / Admin
       - key: TOTP_ISSUER
         value: RealtouchHR
       - key: PLATFORM_ADMINS
         sync: false
-      # HMRC / RTI
+      # HMRC / RTI — keep sandbox for Phase 1
       - key: RTI_LIVE_SUBMISSION_ENABLED
         value: "false"
       - key: RTI_AUTO_PREPARE_ENABLED
