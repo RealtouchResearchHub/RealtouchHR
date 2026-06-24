@@ -23,7 +23,7 @@ import {
     Plus, Search, Users, AlertTriangle, ArrowRight, Mail, Briefcase,
     Filter, CheckCircle2, XCircle, MoreVertical, Download,
     RefreshCw, Eye, Archive, ArrowUpDown, ChevronLeft, ChevronRight as ChevronRightIcon,
-    UserCheck, Save
+    UserCheck, Save, LayoutList, LayoutGrid
 } from 'lucide-react';
 import { cn, getStatusColor, getComplianceColor } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -713,6 +713,33 @@ function sortEmployees(employees, sortBy) {
     }
 }
 
+function ReadinessBadge({ ready, label }) {
+    return (
+        <span className={cn(
+            'inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded whitespace-nowrap',
+            ready
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+        )}>
+            {ready ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+            {label}
+        </span>
+    );
+}
+
+function ComplianceBadge({ score }) {
+    if (score === null || score === undefined) {
+        return <span className="text-xs text-muted-foreground">Unscanned</span>;
+    }
+    const color = score >= 90 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-rose-600';
+    return (
+        <span className={cn('text-xs font-medium', color)}>
+            {score}%
+            {score < 80 && <AlertTriangle className="w-3 h-3 inline ml-1" />}
+        </span>
+    );
+}
+
 export default function EmployeesPage() {
     const navigate = useNavigate();
     const { token, user } = useAuth();
@@ -724,6 +751,7 @@ export default function EmployeesPage() {
     const [readinessFilter, setReadinessFilter] = useState('all');
     const [sortBy, setSortBy] = useState('name_asc');
     const [wizardOpen, setWizardOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('table');
 
     useEffect(() => {
         fetchEmployees();
@@ -846,7 +874,24 @@ export default function EmployeesPage() {
                         {employees.length} total &mdash; {employees.filter(e => e.status === 'active').length} active
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    {/* View toggle */}
+                    <div className="flex rounded-md border overflow-hidden">
+                        <button
+                            className={cn('px-2.5 py-1.5 text-sm flex items-center gap-1.5 transition-colors', viewMode === 'table' ? 'bg-indigo-600 text-white' : 'hover:bg-muted')}
+                            onClick={() => setViewMode('table')}
+                            title="Table view"
+                        >
+                            <LayoutList className="w-4 h-4" />
+                        </button>
+                        <button
+                            className={cn('px-2.5 py-1.5 text-sm flex items-center gap-1.5 transition-colors border-l', viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'hover:bg-muted')}
+                            onClick={() => setViewMode('grid')}
+                            title="Grid view"
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </button>
+                    </div>
                     <Button variant="outline" size="sm" onClick={exportEmployees}>
                         <Download className="w-4 h-4 mr-2" />
                         Export
@@ -905,7 +950,7 @@ export default function EmployeesPage() {
                 <span className="text-sm text-muted-foreground">{filteredEmployees.length} of {employees.length}</span>
             </div>
 
-            {/* Employees Grid */}
+            {/* Empty state */}
             {filteredEmployees.length === 0 ? (
                 <Card>
                     <CardContent className="py-16 text-center">
@@ -923,7 +968,106 @@ export default function EmployeesPage() {
                         )}
                     </CardContent>
                 </Card>
+            ) : viewMode === 'table' ? (
+                /* ---- TABLE VIEW ---- */
+                <Card className="overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b bg-muted/40">
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Employee</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Department</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Job Title</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Start Date</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Payroll</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">RTI</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">RTW</th>
+                                    <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Compliance</th>
+                                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredEmployees.map((emp, idx) => (
+                                    <tr
+                                        key={emp.employee_id}
+                                        className={cn(
+                                            'border-b last:border-0 hover:bg-accent/50 cursor-pointer transition-colors',
+                                            idx % 2 === 0 ? '' : 'bg-muted/20'
+                                        )}
+                                        onClick={() => navigate(`/employees/${emp.employee_id}`)}
+                                        data-testid={`employee-row-${emp.employee_id}`}
+                                    >
+                                        {/* Employee name + avatar */}
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                                        {emp.first_name?.[0]}{emp.last_name?.[0]}
+                                                    </span>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-medium truncate max-w-[140px]">{emp.first_name} {emp.last_name}</p>
+                                                    <p className="text-xs text-muted-foreground truncate max-w-[140px]">{emp.email}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground">{emp.department || '—'}</td>
+                                        <td className="px-4 py-3 text-muted-foreground truncate max-w-[140px]">{emp.job_title || '—'}</td>
+                                        <td className="px-4 py-3">
+                                            <Badge className={getStatusColor(emp.status)} variant="secondary">
+                                                {emp.status || 'active'}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                            {emp.start_date ? emp.start_date.slice(0, 10) : '—'}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <ReadinessBadge ready={emp.payroll_ready} label="Payroll" />
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <ReadinessBadge ready={emp.rti_ready} label="RTI" />
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <ReadinessBadge ready={emp.right_to_work_ready} label="RTW" />
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <ComplianceBadge score={emp.compliance_score} />
+                                        </td>
+                                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                        <MoreVertical className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => navigate(`/employees/${emp.employee_id}`)}>
+                                                        <Eye className="w-4 h-4 mr-2" /> View profile
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={(e) => runReadinessCheck(emp.employee_id, e)}>
+                                                        <RefreshCw className="w-4 h-4 mr-2" /> Run readiness check
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem className="text-rose-600" onClick={(e) => archiveEmployee(emp.employee_id, e)}>
+                                                        <Archive className="w-4 h-4 mr-2" /> Archive
+                                                    </DropdownMenuItem>
+                                                    {isAdmin && (
+                                                        <DropdownMenuItem className="text-red-700 font-medium" onClick={(e) => deleteEmployee(emp, e)}>
+                                                            <XCircle className="w-4 h-4 mr-2" /> Delete permanently
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
             ) : (
+                /* ---- GRID / CARD VIEW ---- */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredEmployees.map((emp) => (
                         <Card
@@ -989,35 +1133,13 @@ export default function EmployeesPage() {
 
                                 {/* Readiness flags */}
                                 <div className="mt-3 flex flex-wrap gap-1">
-                                    {[
-                                        { key: 'payroll_ready', label: 'Payroll' },
-                                        { key: 'rti_ready', label: 'RTI' },
-                                        { key: 'right_to_work_ready', label: 'RTW' },
-                                    ].map(({ key, label }) => (
-                                        <span key={key} className={cn(
-                                            'inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded',
-                                            emp[key]
-                                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                                        )}>
-                                            {emp[key]
-                                                ? <CheckCircle2 className="w-3 h-3" />
-                                                : <XCircle className="w-3 h-3" />
-                                            }
-                                            {label}
-                                        </span>
-                                    ))}
+                                    <ReadinessBadge ready={emp.payroll_ready} label="Payroll" />
+                                    <ReadinessBadge ready={emp.rti_ready} label="RTI" />
+                                    <ReadinessBadge ready={emp.right_to_work_ready} label="RTW" />
                                 </div>
 
                                 <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className={cn("text-sm font-medium", getComplianceColor(emp.compliance_score))}>
-                                            {emp.compliance_score ?? 100}% Compliant
-                                        </span>
-                                        {(emp.compliance_score ?? 100) < 100 && (
-                                            <AlertTriangle className="w-4 h-4 text-amber-500" />
-                                        )}
-                                    </div>
+                                    <ComplianceBadge score={emp.compliance_score} />
                                     <ArrowRight className="w-4 h-4 text-muted-foreground" />
                                 </div>
                             </CardContent>

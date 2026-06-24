@@ -8,21 +8,33 @@ import { Badge } from '../ui/badge';
 import ComplianceScore from '../shared/ComplianceScore';
 import NextActionBanner from '../shared/NextActionBanner';
 import { DemoLauncherCard } from '../shared/DemoTour';
-import { 
-    Users, 
-    Calendar, 
-    CreditCard, 
+import {
+    Users,
+    Calendar,
+    CreditCard,
     Clock,
     ArrowRight,
     TrendingUp,
     AlertTriangle,
     CheckCircle2,
-    Plus
+    Plus,
+    FileText,
+    Bell,
+    ShieldCheck,
 } from 'lucide-react';
 import { cn, formatCurrency, getStatusColor } from '../../lib/utils';
 import { requestOrDefault } from '../../lib/loaders';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+const STATE_MESSAGES = {
+    not_assessed:   'No compliance scan has been run yet. Add employees and run a scan.',
+    demo_data_only: 'Only demo data present. Add real employees to see your score.',
+    setup_incomplete: 'Company setup is incomplete. Finish setup to enable scanning.',
+    needs_attention: 'Some compliance items need attention.',
+    high_risk:       'Compliance issues require urgent attention.',
+    compliant:       'All employees meet compliance requirements.',
+};
 
 export default function Dashboard() {
     const { user, company, token } = useAuth();
@@ -43,7 +55,8 @@ export default function Dashboard() {
                         active_employees: 0,
                         on_leave_today: 0,
                         pending_approvals: 0,
-                        compliance_score: 100,
+                        compliance_score: null,
+                        compliance_state: 'not_assessed',
                     },
                     'dashboard stats'
                 ),
@@ -77,10 +90,8 @@ export default function Dashboard() {
     }, []);
 
     const handleStartTour = (steps) => {
-        // Persist steps in localStorage so MainLayout DemoTour can pick them up
         localStorage.setItem('demo_tour_steps', JSON.stringify(steps));
         localStorage.setItem('demo_tour_active', 'true');
-        // Force MainLayout to re-render via storage event (synthetic)
         window.dispatchEvent(new Event('demo-tour-start'));
         fetchData();
     };
@@ -93,28 +104,44 @@ export default function Dashboard() {
         );
     }
 
+    const complianceScore = stats?.compliance_score ?? null;
+    const complianceState = stats?.compliance_state || 'not_assessed';
+    const complianceIsAssessed = complianceScore !== null && complianceScore !== undefined;
+
     const statCards = [
         {
             title: 'Total Employees',
             value: stats?.total_employees || 0,
             icon: Users,
             color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30',
-            link: '/employees'
+            link: '/employees',
         },
         {
             title: 'On Leave Today',
             value: stats?.on_leave_today || 0,
             icon: Calendar,
             color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
-            link: '/leave'
+            link: '/leave',
         },
         {
             title: 'Pending Approvals',
             value: stats?.pending_approvals || 0,
             icon: Clock,
             color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/30',
-            link: '/leave'
-        }
+            link: '/leave',
+        },
+        {
+            title: 'Compliance Status',
+            value: complianceIsAssessed ? `${complianceScore}%` : '—',
+            icon: ShieldCheck,
+            color: complianceIsAssessed
+                ? (complianceScore >= 90 ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30'
+                    : complianceScore >= 70 ? 'text-amber-600 bg-amber-100 dark:bg-amber-900/30'
+                    : 'text-rose-600 bg-rose-100 dark:bg-rose-900/30')
+                : 'text-slate-500 bg-slate-100 dark:bg-slate-800',
+            link: '/settings',
+            subtitle: complianceIsAssessed ? null : 'Not assessed yet',
+        },
     ];
 
     return (
@@ -125,33 +152,39 @@ export default function Dashboard() {
                     Welcome back, {user?.name?.split(' ')[0]}
                 </h1>
                 <p className="mt-2 text-lg text-muted-foreground">
-                    Here's what's happening with your HR today.
+                    {company?.name ? `${company.name} · ` : ''}Here's what's happening with your HR today.
                 </p>
             </div>
 
-            {/* Next Best Action - Hero */}
+            {/* Next Best Action */}
             <NextActionBanner action={stats?.next_action} />
 
-            {/* Demo launcher - prominent if no demo seeded yet */}
+            {/* Demo launcher */}
             <DemoLauncherCard
                 isSeeded={demoStatus.demo_mode}
                 onStart={handleStartTour}
                 onReset={fetchData}
             />
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* KPI Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {statCards.map((stat, index) => (
                     <Link key={index} to={stat.link}>
-                        <Card className="hover:shadow-md transition-all hover-lift cursor-pointer" data-testid={`stat-card-${stat.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                            <CardContent className="p-6">
+                        <Card
+                            className="hover:shadow-md transition-all hover-lift cursor-pointer h-full"
+                            data-testid={`stat-card-${stat.title.toLowerCase().replace(/\s+/g, '-')}`}
+                        >
+                            <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                                        <p className="text-3xl font-bold font-['Plus_Jakarta_Sans'] mt-1">{stat.value}</p>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{stat.title}</p>
+                                        <p className="text-2xl font-bold font-['Plus_Jakarta_Sans'] mt-1">{stat.value}</p>
+                                        {stat.subtitle && (
+                                            <p className="text-xs text-muted-foreground mt-0.5">{stat.subtitle}</p>
+                                        )}
                                     </div>
-                                    <div className={cn("p-3 rounded-xl", stat.color)}>
-                                        <stat.icon className="w-6 h-6" />
+                                    <div className={cn('p-2.5 rounded-xl flex-shrink-0', stat.color)}>
+                                        <stat.icon className="w-5 h-5" />
                                     </div>
                                 </div>
                             </CardContent>
@@ -162,27 +195,36 @@ export default function Dashboard() {
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Compliance Score - Larger Card */}
-                <Card className="lg:col-span-4 relative overflow-hidden bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-background border-emerald-100 dark:border-emerald-900/50" data-testid="compliance-score-card">
+                {/* Compliance Score Card */}
+                <Card
+                    className={cn(
+                        'lg:col-span-4 relative overflow-hidden',
+                        complianceIsAssessed
+                            ? 'bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-background border-emerald-100 dark:border-emerald-900/50'
+                            : 'bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/30 dark:to-background'
+                    )}
+                    data-testid="compliance-score-card"
+                >
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                            <CheckCircle2 className={cn('w-5 h-5', complianceIsAssessed ? 'text-emerald-600' : 'text-slate-400')} />
                             Compliance Status
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col items-center py-8">
-                        <ComplianceScore score={stats?.compliance_score || 100} size="lg" />
-                        <p className="mt-4 text-center text-muted-foreground">
-                            {stats?.compliance_score >= 90 
-                                ? 'Excellent! Your compliance is in great shape.'
-                                : stats?.compliance_score >= 70
-                                    ? 'Good, but there are some items to address.'
-                                    : 'Attention needed. Please review compliance tasks.'
-                            }
+                    <CardContent className="flex flex-col items-center py-6">
+                        <ComplianceScore score={complianceScore} state={complianceState} size="lg" />
+                        <p className="mt-4 text-center text-sm text-muted-foreground px-2">
+                            {STATE_MESSAGES[complianceState] || (
+                                complianceIsAssessed && complianceScore >= 90
+                                    ? 'Excellent! Your compliance is in great shape.'
+                                    : complianceIsAssessed && complianceScore >= 70
+                                        ? 'Good, but there are some items to address.'
+                                        : 'Attention needed. Please review compliance tasks.'
+                            )}
                         </p>
                         <Link to="/settings" className="mt-4">
                             <Button variant="outline" size="sm">
-                                View Details
+                                {complianceIsAssessed ? 'View Details' : 'Run Compliance Scan'}
                                 <ArrowRight className="w-4 h-4 ml-2" />
                             </Button>
                         </Link>
@@ -213,32 +255,40 @@ export default function Dashboard() {
                                 </Link>
                             </div>
                         ) : (
-                            <div className="space-y-3">
-                                {employees.map((emp) => (
-                                    <Link 
-                                        key={emp.employee_id} 
-                                        to={`/employees/${emp.employee_id}`}
-                                        className="flex items-center justify-between p-3 rounded-lg hover:bg-accent transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                                                <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                                                    {emp.first_name[0]}{emp.last_name[0]}
-                                                </span>
+                            <div className="space-y-2">
+                                {employees.map((emp) => {
+                                    const hasAlerts = emp.compliance_score !== null && emp.compliance_score < 80;
+                                    return (
+                                        <Link
+                                            key={emp.employee_id}
+                                            to={`/employees/${emp.employee_id}`}
+                                            className="flex items-center justify-between p-3 rounded-lg hover:bg-accent transition-colors"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                                        {emp.first_name?.[0]}{emp.last_name?.[0]}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
+                                                    <p className="text-xs text-muted-foreground">{emp.job_title || emp.department || 'No title'}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-medium">{emp.first_name} {emp.last_name}</p>
-                                                <p className="text-sm text-muted-foreground">{emp.job_title || 'No title'}</p>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className={getStatusColor(emp.status)} variant="secondary">
+                                                    {emp.status || 'active'}
+                                                </Badge>
+                                                {hasAlerts && (
+                                                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                                )}
+                                                {emp.compliance_score === null && (
+                                                    <span className="text-xs text-muted-foreground">Unscanned</span>
+                                                )}
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <Badge className={getStatusColor(emp.status)}>{emp.status}</Badge>
-                                            {emp.compliance_score < 100 && (
-                                                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                                            )}
-                                        </div>
-                                    </Link>
-                                ))}
+                                        </Link>
+                                    );
+                                })}
                             </div>
                         )}
                     </CardContent>
@@ -254,7 +304,9 @@ export default function Dashboard() {
                             Recent Leave Requests
                         </CardTitle>
                         <Link to="/leave">
-                            <Button variant="ghost" size="sm">View All <ArrowRight className="w-4 h-4 ml-1" /></Button>
+                            <Button variant="ghost" size="sm">
+                                View All <ArrowRight className="w-4 h-4 ml-1" />
+                            </Button>
                         </Link>
                     </CardHeader>
                     <CardContent>
@@ -265,7 +317,11 @@ export default function Dashboard() {
                                         <p className="font-medium capitalize">{leave.leave_type?.replace(/_/g, ' ')}</p>
                                         <p className="text-xs text-muted-foreground">{leave.start_date} → {leave.end_date}</p>
                                     </div>
-                                    <Badge className={leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}>
+                                    <Badge className={
+                                        leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                        leave.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                        'bg-amber-100 text-amber-700'
+                                    }>
                                         {leave.status}
                                     </Badge>
                                 </div>
@@ -295,7 +351,11 @@ export default function Dashboard() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <p className="font-medium text-sm">{item.title}</p>
-                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.tag === 'New' ? 'bg-emerald-100 text-emerald-700' : item.tag === 'Improved' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{item.tag}</span>
+                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                            item.tag === 'New' ? 'bg-emerald-100 text-emerald-700' :
+                                            item.tag === 'Improved' ? 'bg-blue-100 text-blue-700' :
+                                            'bg-amber-100 text-amber-700'
+                                        }`}>{item.tag}</span>
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
                                 </div>
@@ -342,7 +402,7 @@ export default function Dashboard() {
                     <Card className="hover:shadow-md transition-all hover-lift cursor-pointer h-full" data-testid="quick-documents">
                         <CardContent className="p-6 flex flex-col items-center text-center">
                             <div className="p-3 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 mb-3">
-                                <TrendingUp className="w-6 h-6" />
+                                <FileText className="w-6 h-6" />
                             </div>
                             <p className="font-medium">Documents</p>
                         </CardContent>

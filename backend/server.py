@@ -1840,19 +1840,36 @@ async def get_compliance_tasks(user: User = Depends(get_current_user)):
 @api_router.get("/compliance/score")
 async def get_compliance_score(user: User = Depends(get_current_user)):
     if not user.company_id:
-        return {"score": 100, "issues": [], "next_action": None}
-    
+        return {"score": None, "state": "not_assessed", "issues": [], "next_action": None}
+
     employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
     tasks = await db.compliance_tasks.find({"company_id": user.company_id, "status": "pending"}, {"_id": 0}).to_list(100)
-    
+
     if not employees:
-        return {"score": 100, "issues": [], "next_action": {"title": "Add your first employee", "type": "onboarding"}}
-    
-    total_score = sum(emp.get("compliance_score", 100) for emp in employees)
-    avg_score = total_score // len(employees)
-    
+        return {"score": None, "state": "not_assessed", "issues": [], "next_action": {"title": "Add your first employee", "type": "onboarding"}}
+
+    # Only count employees that have actually been assessed (have a compliance_score set, not defaulting)
+    assessed = [emp for emp in employees if emp.get("compliance_score") is not None]
+    real_employees = [emp for emp in employees if not emp.get("is_demo_data")]
+    assessed_real = [emp for emp in real_employees if emp.get("compliance_score") is not None]
+
+    if not assessed_real:
+        # No real employee has been assessed yet
+        state = "demo_data_only" if real_employees == [] and employees else "not_assessed"
+        return {"score": None, "state": state, "issues": [], "next_action": {"title": "Run compliance scan to get your score", "type": "compliance"}}
+
+    total_score = sum(emp.get("compliance_score", 0) for emp in assessed_real)
+    avg_score = total_score // len(assessed_real)
+
+    if avg_score >= 90:
+        state = "compliant"
+    elif avg_score >= 70:
+        state = "needs_attention"
+    else:
+        state = "high_risk"
+
     issues = []
-    for emp in employees:
+    for emp in real_employees:
         try:
             for issue in emp.get("compliance_issues", []):
                 issues.append({
@@ -1870,7 +1887,7 @@ async def get_compliance_score(user: User = Depends(get_current_user)):
     elif issues:
         next_action = {"title": f"Fix compliance issues for {issues[0]['employee_name']}", "type": "employee", "employee_id": issues[0]["employee_id"]}
 
-    return {"score": avg_score, "issues": issues[:10], "next_action": next_action}
+    return {"score": avg_score, "state": state, "issues": issues[:10], "next_action": next_action}
 
 @api_router.put("/compliance/tasks/{task_id}")
 async def update_compliance_task(task_id: str, data: dict, user: User = Depends(get_current_user)):
@@ -1888,7 +1905,7 @@ async def update_compliance_task(task_id: str, data: dict, user: User = Depends(
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(user: User = Depends(get_current_user)):
-    _safe = {"total_employees": 0, "active_employees": 0, "on_leave_today": 0, "pending_approvals": 0, "compliance_score": 100, "next_action": None}
+    _safe = {"total_employees": 0, "active_employees": 0, "on_leave_today": 0, "pending_approvals": 0, "compliance_score": None, "compliance_state": "not_assessed", "next_action": None}
     if not user.company_id:
         return _safe
     try:
@@ -1907,7 +1924,8 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
             "active_employees": len(active),
             "on_leave_today": len(leaves),
             "pending_approvals": pending_leaves + pending_timesheets,
-            "compliance_score": compliance.get("score", 100),
+            "compliance_score": compliance.get("score"),
+            "compliance_state": compliance.get("state", "not_assessed"),
             "next_action": compliance.get("next_action"),
         }
     except Exception as exc:

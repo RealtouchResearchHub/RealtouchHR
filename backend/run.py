@@ -10,7 +10,7 @@ except Exception as e:
 import uvicorn
 print("Starting uvicorn...", flush=True)
 try:
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="debug")
 except Exception as e:
     print(f"STARTUP ERROR: {e}", flush=True)
     sys.exit(1)
