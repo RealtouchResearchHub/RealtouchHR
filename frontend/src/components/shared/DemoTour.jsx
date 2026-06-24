@@ -105,7 +105,7 @@ export default function DemoTour({ open, onClose, steps, onComplete }) {
 }
 
 // Card that user clicks to start the demo (placed on Dashboard)
-export function DemoLauncherCard({ onStart, isSeeded, onReset }) {
+export function DemoLauncherCard({ onStart, isSeeded, onReset, compact = false }) {
     const [loading, setLoading] = useState(false);
 
     const handleSeed = async () => {
@@ -142,6 +142,43 @@ export function DemoLauncherCard({ onStart, isSeeded, onReset }) {
             setLoading(false);
         }
     };
+
+    if (compact) {
+        return (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 text-white px-4 py-3" data-testid="demo-launcher-card">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <Sparkles className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm font-semibold truncate">
+                        {isSeeded ? 'Demo Active — Continue your guided tour' : 'Try the Demo — Experience the full platform in 60 seconds'}
+                    </span>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                    <Button
+                        size="sm"
+                        onClick={handleSeed}
+                        disabled={loading}
+                        className="bg-white text-indigo-700 hover:bg-indigo-50 font-semibold h-8 text-xs"
+                        data-testid="start-demo-btn"
+                    >
+                        <PlayCircle className="w-3.5 h-3.5 mr-1.5" />
+                        {isSeeded ? 'Restart' : 'Start Tour'}
+                    </Button>
+                    {isSeeded && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleReset}
+                            disabled={loading}
+                            className="border-white/40 text-white hover:bg-white/10 h-8 text-xs"
+                            data-testid="reset-demo-btn"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Clear
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <Card className="overflow-hidden border-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 text-white" data-testid="demo-launcher-card">

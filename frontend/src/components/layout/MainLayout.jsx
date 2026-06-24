@@ -54,6 +54,13 @@ import AICopilot from '../shared/AICopilot';
 import NotificationsPopover from '../shared/NotificationsPopover';
 import DemoTour from '../shared/DemoTour';
 import TrialBanner from '../shared/TrialBanner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -100,6 +107,10 @@ export default function MainLayout({ children }) {
     const [copilotOpen, setCopilotOpen] = useState(false);
     const [tourOpen, setTourOpen] = useState(false);
     const [tourSteps, setTourSteps] = useState([]);
+    const [forceChangePwd, setForceChangePwd] = useState(!!user?.must_change_password);
+    const [newPwd, setNewPwd] = useState('');
+    const [confirmPwd, setConfirmPwd] = useState('');
+    const [changingPwd, setChangingPwd] = useState(false);
 
     useEffect(() => {
         const loadTour = () => {
@@ -132,6 +143,22 @@ export default function MainLayout({ children }) {
     };
 
     const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
+
+    const handleForcePasswordChange = async (e) => {
+        e.preventDefault();
+        if (newPwd !== confirmPwd) { toast.error('Passwords do not match'); return; }
+        if (newPwd.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+        setChangingPwd(true);
+        try {
+            await axios.post(`${API_URL}/api/auth/change-password`, { new_password: newPwd }, { withCredentials: true });
+            toast.success('Password changed successfully');
+            setForceChangePwd(false);
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Failed to change password');
+        } finally {
+            setChangingPwd(false);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-background">
@@ -231,7 +258,15 @@ export default function MainLayout({ children }) {
                             <Menu className="w-5 h-5" />
                         </button>
 
-                        <div className="flex-1" />
+                        {/* Company name + logo in header */}
+                        <div className="flex-1 flex items-center gap-2.5 px-2 min-w-0">
+                            {company?.logo_url && (
+                                <img src={company.logo_url} alt={company.name} className="h-7 w-auto max-w-[80px] object-contain rounded" />
+                            )}
+                            {company?.name && (
+                                <span className="text-sm font-semibold text-foreground truncate hidden sm:block">{company.name}</span>
+                            )}
+                        </div>
 
                         <div className="flex items-center gap-2">
                             {/* Notifications */}
@@ -321,6 +356,31 @@ export default function MainLayout({ children }) {
                 onClose={closeTour}
                 onComplete={closeTour}
             />
+
+            {/* Forced first-login password change */}
+            <Dialog open={forceChangePwd} onOpenChange={() => {}}>
+                <DialogContent className="sm:max-w-md" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
+                    <DialogHeader>
+                        <DialogTitle>Set your password</DialogTitle>
+                        <DialogDescription>
+                            This is your first login. Please set a permanent password before continuing.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleForcePasswordChange} className="space-y-4 mt-2">
+                        <div className="space-y-2">
+                            <Label>New password</Label>
+                            <Input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Minimum 8 characters" required minLength={8} autoFocus />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Confirm password</Label>
+                            <Input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Repeat new password" required />
+                        </div>
+                        <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={changingPwd}>
+                            {changingPwd ? 'Saving…' : 'Set password & continue'}
+                        </Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

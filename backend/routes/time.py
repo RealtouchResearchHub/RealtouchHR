@@ -162,8 +162,8 @@ async def clock_in(
         if employee:
             employee_id = employee["employee_id"]
         else:
-            raise HTTPException(status_code=404, detail="No employee record found for user")
-    
+            raise HTTPException(status_code=400, detail="You need an employee record to clock in. Please contact your administrator.")
+
     from services.time_service import time_service
     
     try:
@@ -278,12 +278,16 @@ async def get_clock_status(
         if employee:
             employee_id = employee["employee_id"]
         else:
-            raise HTTPException(status_code=404, detail="No employee record found")
-    
+            # Return graceful "not clocked in" state for admins/owners with no employee record
+            return {"status": "not_clocked_in", "employee_id": None, "last_event": None, "no_employee_record": True}
+
     from services.time_service import time_service
-    
-    status = await time_service.get_employee_status(employee_id)
-    return status
+
+    try:
+        status = await time_service.get_employee_status(employee_id)
+        return status
+    except Exception:
+        return {"status": "not_clocked_in", "employee_id": employee_id, "last_event": None}
 
 
 @router.get("/events")

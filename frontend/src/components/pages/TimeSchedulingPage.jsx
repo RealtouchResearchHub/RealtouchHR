@@ -309,17 +309,22 @@ export default function TimeSchedulingPage() {
                 </div>
               )}
 
+              {clockStatus?.no_employee_record && (
+                <div className="text-center text-sm text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 rounded-lg p-2 mb-2">
+                  Your account has no linked employee record. Time tracking is only available for employees.
+                </div>
+              )}
               <div className="flex justify-center gap-3">
-                {clockStatus?.status === 'not_clocked_in' ? (
-                  <Button 
-                    size="lg" 
+                {clockStatus?.status === 'not_clocked_in' && !clockStatus?.no_employee_record ? (
+                  <Button
+                    size="lg"
                     onClick={handleClockIn}
                     disabled={clockLoading}
-                    className="gap-2"
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700"
                     data-testid="clock-in-btn"
                   >
                     <Play className="w-5 h-5" />
-                    Clock In
+                    {clockLoading ? 'Clocking in…' : 'Clock In'}
                   </Button>
                 ) : clockStatus?.status === 'clocked_in' ? (
                   <>

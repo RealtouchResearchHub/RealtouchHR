@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -17,7 +17,7 @@ import {
 } from '../ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import ComplianceScore from '../shared/ComplianceScore';
-import { 
+import {
     Building2,
     User,
     Shield,
@@ -26,7 +26,11 @@ import {
     Sun,
     Moon,
     CheckCircle2,
-    AlertTriangle
+    AlertTriangle,
+    Upload,
+    X,
+    Search,
+    Loader2
 } from 'lucide-react';
 import { cn, getStatusColor } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -36,6 +40,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 export default function SettingsPage() {
     const { user, company, updatePreferences, refreshCompany } = useAuth();
     const { theme, setTheme } = useTheme();
+    const logoInputRef = useRef(null);
     const [companyData, setCompanyData] = useState({
         name: '',
         industry: '',
@@ -48,10 +53,16 @@ export default function SettingsPage() {
         sponsor_licence_expiry: '',
         sponsor_licence_rating: '',
         small_employer_relief: false,
+        company_registration_number: '',
     });
     const [complianceScore, setComplianceScore] = useState(null);
     const [complianceTasks, setComplianceTasks] = useState([]);
     const [saving, setSaving] = useState(false);
+    const [logoPreview, setLogoPreview] = useState(null);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [chResults, setChResults] = useState([]);
+    const [chLoading, setChLoading] = useState(false);
+    const chDebounceRef = useRef(null);
 
     useEffect(() => {
         if (company) {
@@ -67,10 +78,62 @@ export default function SettingsPage() {
                 sponsor_licence_expiry: company.sponsor_licence_expiry || '',
                 sponsor_licence_rating: company.sponsor_licence_rating || '',
                 small_employer_relief: company.small_employer_relief || false,
+                company_registration_number: company.company_registration_number || '',
             });
+            if (company.logo_url) setLogoPreview(company.logo_url);
         }
         fetchCompliance();
     }, [company]);
+
+    const handleLogoFile = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+        if (file.size > 500_000) { toast.error('Logo must be under 500 KB'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => setLogoPreview(ev.target.result);
+        reader.readAsDataURL(file);
+    };
+
+    const handleLogoUpload = async () => {
+        if (!logoPreview) return;
+        setUploadingLogo(true);
+        try {
+            await axios.post(`${API_URL}/api/company/logo`, { logo_url: logoPreview }, { withCredentials: true });
+            toast.success('Company logo saved');
+            refreshCompany();
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Logo upload failed');
+        } finally {
+            setUploadingLogo(false);
+        }
+    };
+
+    const handleChSearch = async (query) => {
+        if (!query || query.length < 2) { setChResults([]); return; }
+        setChLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/api/companies-house/search`, {
+                params: { q: query },
+                withCredentials: true,
+            });
+            setChResults(res.data?.items || []);
+        } catch {
+            setChResults([]);
+        } finally {
+            setChLoading(false);
+        }
+    };
+
+    const handleChSelect = (item) => {
+        setCompanyData(prev => ({
+            ...prev,
+            name: item.title || prev.name,
+            company_registration_number: item.company_number || prev.company_registration_number,
+            address: item.address_snippet || prev.address,
+        }));
+        setChResults([]);
+    };
 
     const fetchCompliance = async () => {
         try {
@@ -156,15 +219,83 @@ export default function SettingsPage() {
                             <CardDescription>Update your company details</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
+                            {/* Company Logo */}
+                            <div className="flex items-start gap-5 pb-4 border-b">
+                                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center bg-muted/30 overflow-hidden flex-shrink-0 cursor-pointer hover:border-indigo-400 transition-colors" onClick={() => logoInputRef.current?.click()}>
+                                    {logoPreview ? (
+                                        <img src={logoPreview} alt="Company logo" className="w-full h-full object-contain p-1" />
+                                    ) : (
+                                        <Upload className="w-6 h-6 text-muted-foreground" />
+                                    )}
+                                </div>
+                                <div className="flex-1 space-y-1.5">
+                                    <Label>Company Logo</Label>
+                                    <p className="text-xs text-muted-foreground">PNG, JPG or SVG — max 500 KB. Displayed in the dashboard header.</p>
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => logoInputRef.current?.click()}>
+                                            <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose file
+                                        </Button>
+                                        {logoPreview && (
+                                            <>
+                                                <Button size="sm" onClick={handleLogoUpload} disabled={uploadingLogo} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                                                    {uploadingLogo ? 'Saving…' : 'Save Logo'}
+                                                </Button>
+                                                <Button size="sm" variant="ghost" onClick={() => { setLogoPreview(null); }}>
+                                                    <X className="w-3.5 h-3.5" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
+                                <div className="space-y-2 relative">
                                     <Label htmlFor="company_name">Company Name</Label>
-                                    <Input
-                                        id="company_name"
-                                        value={companyData.name}
-                                        onChange={(e) => setCompanyData({ ...companyData, name: e.target.value })}
-                                        data-testid="input-company-name"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            id="company_name"
+                                            value={companyData.name}
+                                            onChange={(e) => {
+                                                setCompanyData({ ...companyData, name: e.target.value });
+                                                clearTimeout(chDebounceRef.current);
+                                                chDebounceRef.current = setTimeout(() => handleChSearch(e.target.value), 400);
+                                            }}
+                                            data-testid="input-company-name"
+                                            autoComplete="off"
+                                        />
+                                        {chLoading && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
+                                    </div>
+                                    {chResults.length > 0 && (
+                                        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                                            {chResults.slice(0, 6).map((item, i) => (
+                                                <button key={i} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors border-b last:border-0"
+                                                    onClick={() => handleChSelect(item)}>
+                                                    <p className="font-medium">{item.title}</p>
+                                                    <p className="text-xs text-muted-foreground">{item.company_number} · {item.address_snippet}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="company_reg">Company Registration Number</Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="company_reg"
+                                            value={companyData.company_registration_number}
+                                            onChange={(e) => {
+                                                setCompanyData({ ...companyData, company_registration_number: e.target.value });
+                                                clearTimeout(chDebounceRef.current);
+                                                chDebounceRef.current = setTimeout(() => handleChSearch(e.target.value), 400);
+                                            }}
+                                            placeholder="e.g. 12345678"
+                                            data-testid="input-company-reg"
+                                        />
+                                        {chLoading && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Start typing to auto-lookup via Companies House</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="industry">Industry</Label>

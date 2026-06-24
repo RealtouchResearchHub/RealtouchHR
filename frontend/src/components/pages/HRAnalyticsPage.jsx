@@ -5,7 +5,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { toast } from 'sonner';
-import { CalendarClock, BarChart3, Network, Loader2, Download, AlertTriangle, TrendingUp, Users } from 'lucide-react';
+import { CalendarClock, BarChart3, Network, Loader2, Download, AlertTriangle, TrendingUp, Users, LayoutList, GitBranch } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -19,6 +20,7 @@ export default function HRAnalyticsPage() {
     const [summary, setSummary] = useState(null);
     const [tree, setTree] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [orgView, setOrgView] = useState('list');
 
     const load = async () => {
         setLoading(true);
@@ -139,15 +141,45 @@ export default function HRAnalyticsPage() {
 
                 <TabsContent value="orgchart">
                     <Card>
-                        <CardHeader><CardTitle>Organisation Chart</CardTitle></CardHeader>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle>Organisation Chart</CardTitle>
+                            <div className="flex gap-1 border rounded-lg p-1">
+                                <Button
+                                    size="sm"
+                                    variant={orgView === 'list' ? 'default' : 'ghost'}
+                                    className="h-7 px-2"
+                                    onClick={() => setOrgView('list')}
+                                >
+                                    <LayoutList className="w-3.5 h-3.5 mr-1" /> List
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={orgView === 'tree' ? 'default' : 'ghost'}
+                                    className="h-7 px-2"
+                                    onClick={() => setOrgView('tree')}
+                                >
+                                    <GitBranch className="w-3.5 h-3.5 mr-1" /> Tree
+                                </Button>
+                            </div>
+                        </CardHeader>
                         <CardContent>
                             {tree && tree.tree && tree.tree.length > 0 ? (
-                                <div className="space-y-4" data-testid="org-tree">
-                                    <p className="text-xs text-muted-foreground">
+                                <>
+                                    <p className="text-xs text-muted-foreground mb-4">
                                         {tree.stats.total_employees} employees · {tree.stats.total_managers} managers · {tree.stats.max_depth} levels
                                     </p>
-                                    {tree.tree.map((n) => <OrgNode key={n.employee_id} node={n} depth={0} />)}
-                                </div>
+                                    {orgView === 'list' ? (
+                                        <div className="space-y-1" data-testid="org-list">
+                                            {tree.tree.map((n) => <OrgNode key={n.employee_id} node={n} depth={0} />)}
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto" data-testid="org-tree-visual">
+                                            <div className="flex gap-8 min-w-max py-4">
+                                                {tree.tree.map((n) => <OrgTreeNode key={n.employee_id} node={n} />)}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             ) : <p className="text-sm text-muted-foreground">No employees with line manager relationships yet. Set line managers on employee profiles to build the chart.</p>}
                         </CardContent>
                     </Card>
@@ -196,15 +228,64 @@ function OrgNode({ node, depth }) {
     return (
         <div style={{ marginLeft: depth * 18 }}>
             <div className="flex items-center gap-2 p-2 rounded border bg-card my-1">
-                <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-xs font-semibold text-indigo-700 dark:text-indigo-200">
-                    {(node.name || '').split(' ').map((s) => s[0]).slice(0, 2).join('')}
-                </div>
+                {node.avatar_url ? (
+                    <img src={node.avatar_url} alt={node.name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-xs font-semibold text-indigo-700 dark:text-indigo-200 flex-shrink-0">
+                        {(node.name || '').split(' ').map((s) => s[0]).slice(0, 2).join('')}
+                    </div>
+                )}
                 <div>
                     <p className="text-sm font-medium">{node.name || 'Unnamed'}</p>
                     <p className="text-xs text-muted-foreground">{node.title || '—'} {node.department ? `· ${node.department}` : ''}</p>
                 </div>
             </div>
             {(node.reports || []).map((c) => <OrgNode key={c.employee_id} node={c} depth={depth + 1} />)}
+        </div>
+    );
+}
+
+function OrgTreeCard({ node }) {
+    const initials = (node.name || '').split(' ').map(s => s[0]).slice(0, 2).join('');
+    return (
+        <div className="flex flex-col items-center">
+            <div className="rounded-xl border bg-card shadow-sm p-3 w-36 text-center hover:shadow-md transition-shadow">
+                {node.avatar_url ? (
+                    <img src={node.avatar_url} alt={node.name} className="w-10 h-10 rounded-full object-cover mx-auto mb-1.5" />
+                ) : (
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-sm font-bold text-indigo-700 dark:text-indigo-200 mx-auto mb-1.5">
+                        {initials}
+                    </div>
+                )}
+                <p className="text-xs font-semibold truncate">{node.name || 'Unnamed'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{node.title || '—'}</p>
+                {node.department && <p className="text-[10px] text-indigo-600 dark:text-indigo-400 truncate">{node.department}</p>}
+            </div>
+        </div>
+    );
+}
+
+function OrgTreeNode({ node }) {
+    const reports = node.reports || [];
+    return (
+        <div className="flex flex-col items-center gap-0">
+            <OrgTreeCard node={node} />
+            {reports.length > 0 && (
+                <>
+                    <div className="w-px h-6 bg-border" />
+                    <div className="relative flex gap-8">
+                        {reports.length > 1 && (
+                            <div className="absolute top-0 left-[18px] right-[18px] h-px bg-border" />
+                        )}
+                        {reports.map((child) => (
+                            <div key={child.employee_id} className="flex flex-col items-center gap-0">
+                                <div className="w-px h-6 bg-border" />
+                                <OrgTreeNode node={child} />
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 }

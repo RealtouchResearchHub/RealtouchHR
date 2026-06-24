@@ -1001,11 +1001,15 @@ export default function EmployeesPage() {
                                         {/* Employee name + avatar */}
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                                                    <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
-                                                        {emp.first_name?.[0]}{emp.last_name?.[0]}
-                                                    </span>
-                                                </div>
+                                                {emp.avatar_url ? (
+                                                    <img src={emp.avatar_url} alt={`${emp.first_name} ${emp.last_name}`} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                                            {emp.first_name?.[0]}{emp.last_name?.[0]}
+                                                        </span>
+                                                    </div>
+                                                )}
                                                 <div className="min-w-0">
                                                     <p className="font-medium truncate max-w-[140px]">{emp.first_name} {emp.last_name}</p>
                                                     <p className="text-xs text-muted-foreground truncate max-w-[140px]">{emp.email}</p>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,7 +23,7 @@ import {
     ArrowLeft, Save, Mail, Phone, Briefcase, Calendar, CreditCard,
     AlertTriangle, CheckCircle2, XCircle, FileText, Clock, MoreVertical,
     UserMinus, FileDown, RefreshCw, Shield, Activity, Eye, EyeOff,
-    MapPin, User, Building2, Plus, Trash2
+    MapPin, User, Building2, Plus, Trash2, Camera
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate, getStatusColor, getComplianceColor } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -60,6 +60,8 @@ export default function EmployeeDetail() {
     const [bankVisible, setBankVisible] = useState(false);
     const [emergencyContacts, setEmergencyContacts] = useState([]);
     const [documents, setDocuments] = useState([]);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const avatarInputRef = useRef(null);
 
     // Roles that can see bank details
     const canSeeBankDetails = user && ['owner', 'admin', 'payroll_admin'].includes(user.role);
@@ -169,6 +171,27 @@ export default function EmployeeDetail() {
         }
     };
 
+    const handleAvatarFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+        if (file.size > 500_000) { toast.error('Image must be under 500 KB'); return; }
+        setUploadingAvatar(true);
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                await axios.post(`${API_URL}/api/employees/${id}/avatar`, { avatar_url: ev.target.result }, { withCredentials: true });
+                toast.success('Profile photo updated');
+                fetchEmployee();
+            } catch (err) {
+                toast.error(err.response?.data?.detail || 'Failed to upload photo');
+            } finally {
+                setUploadingAvatar(false);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
     const SaveButton = ({ section }) => (
         <Button onClick={() => handleSave()} disabled={saving} data-testid={`save-${section}-btn`} className="bg-indigo-600 hover:bg-indigo-700">
             <Save className="w-4 h-4 mr-2" />
@@ -188,11 +211,33 @@ export default function EmployeeDetail() {
 
     return (
         <div className="space-y-6" data-testid="employee-detail-page">
+            {/* Hidden avatar file input */}
+            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} />
+
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" onClick={() => navigate('/employees')} data-testid="back-btn">
                     <ArrowLeft className="w-5 h-5" />
                 </Button>
+                {/* Avatar with upload on click */}
+                <div className="relative group cursor-pointer flex-shrink-0" onClick={() => avatarInputRef.current?.click()}>
+                    {employee.avatar_url ? (
+                        <img src={employee.avatar_url} alt="Profile" className="w-14 h-14 rounded-full object-cover border-2 border-border" />
+                    ) : (
+                        <div className="w-14 h-14 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center border-2 border-border">
+                            <span className="text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                                {employee.first_name?.[0]}{employee.last_name?.[0]}
+                            </span>
+                        </div>
+                    )}
+                    <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        {uploadingAvatar ? (
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Camera className="w-5 h-5 text-white" />
+                        )}
+                    </div>
+                </div>
                 <div className="flex-1">
                     <h1 className="text-3xl font-bold font-['Plus_Jakarta_Sans']">
                         {employee.preferred_name || employee.first_name} {employee.last_name}

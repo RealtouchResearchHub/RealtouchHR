@@ -277,13 +277,92 @@ async def login(data: UserLogin, response: Response):
     user_doc.pop("password_hash", None)
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
-    return TokenResponse(token=token, user=User(**user_doc))
+    # Clear must_change_password flag from response only after user has logged in (flag stays in DB until changed)
+    response_user = dict(user_doc)
+    return TokenResponse(token=token, user=User(**response_user))
 
 
 @router.get("/me", response_model=User)
 async def get_me(user: User = Depends(get_current_user)):
     """Get current user info"""
     return user
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: dict):
+    """Send password reset email (always returns 200 to prevent enumeration)."""
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return {"message": "If that email exists, a reset link has been sent."}
+
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if user_doc:
+        import os, resend as resend_lib
+        reset_token = secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+        await db.password_reset_tokens.update_one(
+            {"email": email},
+            {"$set": {"token": reset_token, "expires_at": expires, "email": email, "used": False}},
+            upsert=True,
+        )
+        app_url = os.environ.get("APP_URL", "http://localhost:3000")
+        reset_url = f"{app_url}/reset-password?token={reset_token}"
+        resend_api_key = os.environ.get("RESEND_API_KEY", "")
+        sender = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+        if resend_api_key:
+            try:
+                resend_lib.api_key = resend_api_key
+                resend_lib.Emails.send({
+                    "from": f"RealtouchHR <{sender}>",
+                    "to": [email],
+                    "subject": "Reset your RealtouchHR password",
+                    "html": f"""
+                        <p>Hi {user_doc.get('name', '')}.</p>
+                        <p>We received a request to reset your RealtouchHR password.
+                        Click the button below to set a new password. This link expires in 2 hours.</p>
+                        <p><a href="{reset_url}" style="background:#4f46e5;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Reset Password</a></p>
+                        <p>If you didn't request this, you can safely ignore this email.</p>
+                    """,
+                })
+            except Exception as exc:
+                import logging; logging.getLogger(__name__).warning(f"Password reset email failed: {exc}")
+
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(data: dict):
+    """Use a reset token to set a new password."""
+    token = (data.get("token") or "").strip()
+    new_password = (data.get("password") or "").strip()
+    if not token or not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    record = await db.password_reset_tokens.find_one({"token": token, "used": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has already been used.")
+
+    if datetime.fromisoformat(record["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+
+    hashed = hash_password(new_password)
+    await db.users.update_one({"email": record["email"]}, {"$set": {"password_hash": hashed}})
+    await db.password_reset_tokens.update_one({"token": token}, {"$set": {"used": True}})
+    return {"message": "Password updated successfully. You can now sign in."}
+
+
+@router.post("/change-password")
+async def change_password(data: dict, user=Depends(get_current_user)):
+    """Authenticated user changes their own password (used for first-login forced change)."""
+    new_password = (data.get("new_password") or "").strip()
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    hashed = hash_password(new_password)
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"password_hash": hashed, "must_change_password": False}},
+    )
+    return {"message": "Password updated"}
 
 
 @router.post("/logout")

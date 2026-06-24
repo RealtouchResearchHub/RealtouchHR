@@ -448,10 +448,13 @@ class UKVIComplianceService:
             {"_id": 0},
         ).to_list(1000)
 
-        ukvi_alerts = await db.ukvi_alerts.find(
-            {"company_id": company_id, "status": "open"},
-            {"_id": 0},
-        ).to_list(500)
+        try:
+            ukvi_alerts = await db.ukvi_alerts.find(
+                {"company_id": company_id, "status": "open"},
+                {"_id": 0},
+            ).to_list(500)
+        except Exception:
+            ukvi_alerts = []
 
         old_alerts = [
             a for a in ukvi_alerts
@@ -459,12 +462,15 @@ class UKVIComplianceService:
         ]
 
         cos_records: Dict[str, List] = {}
-        all_cos = await db.certificates_of_sponsorship.find(
-            {"company_id": company_id, "status": "active"},
-            {"_id": 0},
-        ).to_list(500)
-        for c in all_cos:
-            cos_records.setdefault(c.get("employee_id", ""), []).append(c)
+        try:
+            all_cos = await db.certificates_of_sponsorship.find(
+                {"company_id": company_id, "status": "active"},
+                {"_id": 0},
+            ).to_list(500)
+            for c in all_cos:
+                cos_records.setdefault(c.get("employee_id", ""), []).append(c)
+        except Exception:
+            pass
 
         rtw_records: Dict[str, List] = {}
         all_rtw = await db.rtw_checks.find(

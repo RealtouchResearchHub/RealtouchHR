@@ -18,6 +18,7 @@ axios.interceptors.request.use((config) => {
 // Pages
 import LoginPage from './components/pages/LoginPage';
 import RegisterPage from './components/pages/RegisterPage';
+import ResetPasswordPage from './components/pages/ResetPasswordPage';
 import AuthCallback from './components/pages/AuthCallback';
 import GoogleCallbackPage from './components/pages/GoogleCallbackPage';
 import Dashboard from './components/pages/Dashboard';
@@ -185,6 +186,7 @@ function AppRouter() {
             {/* Public Routes */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+            <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
             <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
             
             {/* Onboarding Wizard - accessible after login */}

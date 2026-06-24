@@ -285,7 +285,7 @@ async def org_chart(user: CurrentUser = Depends(get_current_user)):
     emps = await db.employees.find(
         {"company_id": user.company_id, "status": {"$ne": "terminated"}},
         {"_id": 0, "employee_id": 1, "first_name": 1, "last_name": 1,
-         "job_title": 1, "department": 1, "line_manager_id": 1, "email": 1}
+         "job_title": 1, "department": 1, "line_manager_id": 1, "email": 1, "avatar_url": 1}
     ).to_list(length=5000)
 
     # Build a name lookup
@@ -319,6 +319,7 @@ async def org_chart(user: CurrentUser = Depends(get_current_user)):
             "title": e.get("job_title"),
             "department": e.get("department"),
             "email": e.get("email"),
+            "avatar_url": e.get("avatar_url"),
             "reports": [build_node(c["employee_id"], visited) for c in children.get(emp_id, [])]
         }
 

@@ -524,6 +524,17 @@ async def run_compliance_scan(user: User = Depends(require_hr_admin)):
 
     from services.ukvi_compliance_service import ukvi_compliance_service
 
+    # Check if there are any employees to scan first
+    emp_count = await db.employees.count_documents({"company_id": user.company_id})
+    if emp_count == 0:
+        return {
+            "scan_id": None,
+            "status": "no_employees",
+            "message": "No employees found to scan. Add employees first.",
+            "overall_score": None,
+            "summary": {"total_employees": 0, "flagged_employees": 0, "passed": 0, "failed": 0, "warnings": 0},
+        }
+
     try:
         result = await ukvi_compliance_service.run_scan(
             company_id=user.company_id,
@@ -533,8 +544,8 @@ async def run_compliance_scan(user: User = Depends(require_hr_admin)):
     except ValueError as exc:
         raise HTTPException(status_code=429, detail=str(exc))
     except Exception as exc:
-        logger.error(f"UKVI scan error: {exc}")
-        raise HTTPException(status_code=500, detail="Scan failed — please try again.")
+        logger.error(f"UKVI scan error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Scan failed — {str(exc)[:120]}")
 
     # Audit log
     await db.audit_log.insert_one({

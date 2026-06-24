@@ -990,7 +990,7 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
         "paye_reference", "accounts_office_reference", "corporation_tax_reference",
         "hmrc_sender_id", "hmrc_password",
         "sponsor_licence_number", "sponsor_licence_expiry", "sponsor_licence_rating",
-        "small_employer_relief"
+        "small_employer_relief", "company_registration_number", "logo_url",
     ]
     update_fields = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -1018,6 +1018,40 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
         await create_audit_entry(user.company_id, user, "update", "company", user.company_id, update_fields)
     
     return {"message": "Company updated"}
+
+@api_router.post("/company/logo")
+async def upload_company_logo(data: dict, user: User = Depends(get_current_user)):
+    """Store a base64-encoded company logo (max ~500 KB after encoding)."""
+    if not user.company_id:
+        raise HTTPException(status_code=404, detail="No company found")
+    logo_data = data.get("logo_url") or data.get("logo") or ""
+    if len(logo_data) > 700_000:
+        raise HTTPException(status_code=413, detail="Logo too large. Please use a smaller image (max ~500 KB).")
+    await db.companies.update_one(
+        {"company_id": user.company_id},
+        {"$set": {"logo_url": logo_data}},
+    )
+    return {"message": "Logo updated", "logo_url": logo_data[:60] + "…"}
+
+@api_router.get("/companies-house/search")
+async def companies_house_search(q: str, user: User = Depends(get_current_user)):
+    """Proxy search against Companies House API (requires COMPANIES_HOUSE_API_KEY env var)."""
+    import httpx, os
+    api_key = os.environ.get("COMPANIES_HOUSE_API_KEY", "")
+    if not api_key:
+        return {"items": [], "message": "Companies House API key not configured"}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                "https://api.companieshouse.gov.uk/search/companies",
+                params={"q": q, "items_per_page": 8},
+                auth=(api_key, ""),
+            )
+            r.raise_for_status()
+            data = r.json()
+            return {"items": data.get("items", [])}
+    except Exception as exc:
+        return {"items": [], "error": str(exc)}
 
 # ==================== EMPLOYEE ROUTES ====================
 
@@ -1118,8 +1152,54 @@ async def create_employee(data: EmployeeCreate, user: User = Depends(get_current
         "updated_at": now.isoformat(),
     }
     await db.employees.insert_one(employee_doc)
-    
+
     await create_audit_entry(user.company_id, user, "create", "employee", employee_id, {"name": f"{data.first_name} {data.last_name}"})
+
+    # --- Welcome email: create login account and notify new employee ---
+    if data.email:
+        try:
+            import os, resend as resend_lib, secrets as secrets_mod
+            import bcrypt
+            existing_user = await db.users.find_one({"email": data.email})
+            if not existing_user:
+                temp_password = secrets_mod.token_urlsafe(10)
+                hashed = bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode()
+                await db.users.insert_one({
+                    "user_id": f"usr_{uuid.uuid4().hex[:12]}",
+                    "email": data.email,
+                    "name": f"{data.first_name} {data.last_name}",
+                    "password_hash": hashed,
+                    "role": "employee",
+                    "company_id": user.company_id,
+                    "must_change_password": True,
+                    "created_at": now.isoformat(),
+                })
+                resend_api_key = os.environ.get("RESEND_API_KEY", "")
+                sender = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+                app_url = os.environ.get("APP_URL", "http://localhost:3000")
+                company_obj = await db.companies.find_one({"company_id": user.company_id}, {"_id": 0})
+                company_name = company_obj.get("name", "your company") if company_obj else "your company"
+                if resend_api_key:
+                    try:
+                        resend_lib.api_key = resend_api_key
+                        resend_lib.Emails.send({
+                            "from": f"RealtouchHR <{sender}>",
+                            "to": [data.email],
+                            "subject": f"Welcome to {company_name} — Your RealtouchHR login details",
+                            "html": f"""
+                                <h2>Welcome to {company_name}!</h2>
+                                <p>Hi {data.first_name},</p>
+                                <p>Your HR account on RealtouchHR has been created. Here are your login details:</p>
+                                <p><strong>Email:</strong> {data.email}<br/>
+                                   <strong>Temporary password:</strong> {temp_password}</p>
+                                <p><a href="{app_url}/login" style="background:#4f46e5;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Sign in now</a></p>
+                                <p style="color:#666;font-size:12px;">You will be prompted to change your password on first login. If you have any questions, contact your HR team.</p>
+                            """,
+                        })
+                    except Exception as mail_exc:
+                        logger.warning(f"Welcome email failed: {mail_exc}")
+        except Exception as we_exc:
+            logger.warning(f"Employee welcome account creation failed: {we_exc}")
     
     # Create compliance tasks for missing data (non-fatal if table schema mismatch)
     for issue in compliance_issues:
@@ -1175,7 +1255,7 @@ async def update_employee(employee_id: str, data: dict, user: User = Depends(get
     allowed_fields = [
         # Personal
         "title", "first_name", "middle_name", "last_name", "preferred_name",
-        "date_of_birth", "gender", "nationality", "ni_number", "picture",
+        "date_of_birth", "gender", "nationality", "ni_number", "picture", "avatar_url",
         # Contact
         "email", "work_email", "phone", "mobile_phone", "alternative_phone",
         "address_line1", "address_line2", "town", "county", "postcode", "country",
@@ -1304,6 +1384,22 @@ async def archive_employee(
     data["status"] = "archived"
     return await change_employee_lifecycle(employee_id, data, user)
 
+@api_router.post("/employees/{employee_id}/avatar")
+async def upload_employee_avatar(employee_id: str, data: dict, user: User = Depends(get_current_user)):
+    """Store a base64-encoded profile picture for an employee."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+    emp = await db.employees.find_one({"employee_id": employee_id, "company_id": user.company_id})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    avatar = data.get("avatar_url") or ""
+    if len(avatar) > 700_000:
+        raise HTTPException(status_code=413, detail="Image too large. Max ~500 KB.")
+    await db.employees.update_one(
+        {"employee_id": employee_id},
+        {"$set": {"avatar_url": avatar, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"message": "Avatar updated"}
 
 @api_router.delete("/employees/{employee_id}")
 async def delete_employee(employee_id: str, user: User = Depends(get_current_user)):
@@ -1905,28 +2001,75 @@ async def update_compliance_task(task_id: str, data: dict, user: User = Depends(
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(user: User = Depends(get_current_user)):
-    _safe = {"total_employees": 0, "active_employees": 0, "on_leave_today": 0, "pending_approvals": 0, "compliance_score": None, "compliance_state": "not_assessed", "next_action": None}
+    _safe = {"total_employees": 0, "active_employees": 0, "on_leave_today": 0, "pending_approvals": 0,
+             "compliance_score": None, "compliance_state": "not_assessed", "next_action": None,
+             "documents_expiring": 0, "status_breakdown": {}, "next_payroll_date": None}
     if not user.company_id:
         return _safe
     try:
         employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
-        active = [e for e in employees if e.get("status") == "active"]
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        in_30_days = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+
         leaves = await db.leave_requests.find({
             "company_id": user.company_id, "status": "approved",
             "start_date": {"$lte": today}, "end_date": {"$gte": today}
         }, {"_id": 0}).to_list(100)
         pending_leaves = await db.leave_requests.count_documents({"company_id": user.company_id, "status": "pending"})
         pending_timesheets = await db.timesheets.count_documents({"company_id": user.company_id, "status": "pending"})
+
+        # Documents expiring in the next 30 days
+        docs_expiring = 0
+        try:
+            docs_expiring = await db.documents.count_documents({
+                "company_id": user.company_id,
+                "expiry_date": {"$gte": today, "$lte": in_30_days},
+            })
+        except Exception:
+            pass
+
+        # Employee status breakdown
+        status_breakdown = {}
+        for emp in employees:
+            s = emp.get("status") or "active"
+            status_breakdown[s] = status_breakdown.get(s, 0) + 1
+
+        # Next payroll run (latest pay run + frequency, or None)
+        next_payroll_date = None
+        try:
+            last_run = await db.pay_runs.find_one(
+                {"company_id": user.company_id, "status": {"$in": ["draft", "completed"]}},
+                {"_id": 0},
+                sort=[("pay_date", -1)],
+            )
+            if last_run and last_run.get("pay_date"):
+                from dateutil.relativedelta import relativedelta
+                last_date = datetime.strptime(last_run["pay_date"][:10], "%Y-%m-%d")
+                freq = last_run.get("pay_frequency", "monthly")
+                if freq == "weekly":
+                    next_payroll_date = (last_date + timedelta(weeks=1)).strftime("%Y-%m-%d")
+                elif freq == "fortnightly":
+                    next_payroll_date = (last_date + timedelta(weeks=2)).strftime("%Y-%m-%d")
+                elif freq == "four_weekly":
+                    next_payroll_date = (last_date + timedelta(weeks=4)).strftime("%Y-%m-%d")
+                else:
+                    next_payroll_date = (last_date + relativedelta(months=1)).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
         compliance = await get_compliance_score(user)
         return {
             "total_employees": len(employees),
-            "active_employees": len(active),
+            "active_employees": len([e for e in employees if e.get("status") == "active"]),
             "on_leave_today": len(leaves),
             "pending_approvals": pending_leaves + pending_timesheets,
             "compliance_score": compliance.get("score"),
             "compliance_state": compliance.get("state", "not_assessed"),
+            "compliance_issues": compliance.get("issues", []),
             "next_action": compliance.get("next_action"),
+            "documents_expiring": docs_expiring,
+            "status_breakdown": status_breakdown,
+            "next_payroll_date": next_payroll_date,
         }
     except Exception as exc:
         logger.warning("dashboard/stats failed for %s: %s", user.company_id, exc)
