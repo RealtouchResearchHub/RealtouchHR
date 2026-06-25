@@ -487,8 +487,15 @@ class PaymentService:
                 "session_id": session_id
             }
         
-        # Check if already processed
+        # Check if already processed — but still ensure subscription is active
+        # (it may have been skipped if e.g. the email step failed on first attempt)
         if transaction.get("payment_status") == "paid":
+            if transaction.get("type") == "subscription" and transaction.get("company_id"):
+                company = await db.companies.find_one(
+                    {"company_id": transaction["company_id"]}, {"_id": 0, "subscription_active": 1}
+                ) or {}
+                if not company.get("subscription_active"):
+                    await self._process_successful_payment(transaction)
             return {
                 "status": transaction.get("status"),
                 "payment_status": "paid",
@@ -588,14 +595,17 @@ class PaymentService:
                 "timestamp": now.isoformat()
             })
             
-            # Send notification email
-            from services.email_service import email_service
-            await email_service.send_subscription_confirmation(
-                to_email=transaction.get("user_email"),
-                plan_name=plan.get("name"),
-                amount=transaction.get("amount"),
-                currency=transaction.get("currency")
-            )
+            # Send notification email — non-fatal: never let this block activation
+            try:
+                from services.email_service import email_service
+                await email_service.send_subscription_confirmation(
+                    to_email=transaction.get("user_email"),
+                    plan_name=plan.get("name"),
+                    amount=transaction.get("amount"),
+                    currency=transaction.get("currency")
+                )
+            except Exception as email_exc:
+                logger.warning("Subscription confirmation email failed (non-fatal): %s", email_exc)
 
         elif payment_type == "payslip_download":
             # Issue a one-use download pass valid for 30 min

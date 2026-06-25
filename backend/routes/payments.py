@@ -223,6 +223,34 @@ async def check_checkout_status(
     return result
 
 
+@router.post("/reactivate")
+async def reactivate_subscription(user: User = Depends(require_owner)):
+    """Re-process the most recent paid subscription transaction if the company
+    subscription is not yet active. Handles cases where payment succeeded but
+    activation was skipped (e.g. email failure on first attempt)."""
+    if not user.company_id:
+        raise HTTPException(status_code=400, detail="No company setup")
+
+    from services.payment_service import payment_service
+
+    company = await db.companies.find_one(
+        {"company_id": user.company_id}, {"_id": 0, "subscription_active": 1}
+    ) or {}
+    if company.get("subscription_active"):
+        return {"status": "already_active"}
+
+    txn = await db.payment_transactions.find_one(
+        {"company_id": user.company_id, "type": "subscription", "payment_status": "paid"},
+        {"_id": 0},
+        sort=[("created_at", -1)]
+    )
+    if not txn:
+        return {"status": "no_paid_transaction"}
+
+    await payment_service._process_successful_payment(txn)
+    return {"status": "activated", "plan_id": txn.get("plan_id")}
+
+
 @router.get("/transactions")
 async def get_transactions(
     limit: int = 20,

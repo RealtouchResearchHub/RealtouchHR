@@ -134,6 +134,31 @@ export default function BillingPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams.get('session_id')]);
 
+    const handleReactivate = async () => {
+        setCheckoutLoading('reactivate');
+        try {
+            const token = authToken;
+            const res = await axios.post(
+                `${API_URL}/api/payments/reactivate`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` }, withCredentials: true }
+            );
+            if (res.data?.status === 'activated') {
+                toast.success('Subscription activated successfully!');
+                fetchBilling();
+            } else if (res.data?.status === 'already_active') {
+                toast.info('Your subscription is already active. Refreshing…');
+                fetchBilling();
+            } else {
+                toast.warning('No paid transaction found. Please contact support.');
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Could not reactivate subscription');
+        } finally {
+            setCheckoutLoading(null);
+        }
+    };
+
     const handleSubscribe = async (planId) => {
         setCheckoutLoading(planId);
         try {
@@ -258,8 +283,24 @@ export default function BillingPage() {
                             {billing?.subscription_active ? 'ACTIVE' : 'INACTIVE'}
                         </Badge>
                     </div>
-                    {billing?.subscription_active && (
-                        <div className="mt-4 pt-4 border-t flex justify-end">
+                    <div className="mt-4 pt-4 border-t flex items-center justify-between flex-wrap gap-2">
+                        {!billing?.subscription_active && billing?.transactions?.some(t => t.payment_status === 'paid') && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleReactivate}
+                                disabled={checkoutLoading === 'reactivate'}
+                                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400"
+                                data-testid="reactivate-btn"
+                            >
+                                {checkoutLoading === 'reactivate' ? (
+                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</>
+                                ) : (
+                                    <><AlertCircle className="w-4 h-4 mr-2" /> Payment made but inactive? Click to activate</>
+                                )}
+                            </Button>
+                        )}
+                        {billing?.subscription_active && (
                             <Button
                                 variant="outline"
                                 onClick={handleManageSubscription}
@@ -272,8 +313,8 @@ export default function BillingPage() {
                                     <>Manage subscription &amp; payment methods <CreditCard className="w-4 h-4 ml-2" /></>
                                 )}
                             </Button>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </CardContent>
             </Card>
 
