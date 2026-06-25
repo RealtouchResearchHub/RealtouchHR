@@ -54,6 +54,7 @@ import AICopilot from '../shared/AICopilot';
 import NotificationsPopover from '../shared/NotificationsPopover';
 import DemoTour from '../shared/DemoTour';
 import TrialBanner from '../shared/TrialBanner';
+import SubscriptionWall from '../shared/SubscriptionWall';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -345,6 +346,9 @@ export default function MainLayout({ children }) {
                     {children}
                 </main>
             </div>
+
+            {/* Subscription wall — shown when trial expired and no active subscription */}
+            {!user?.is_sandbox && <SubscriptionWall />}
 
             {/* AI Copilot Sidebar */}
             <AICopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />

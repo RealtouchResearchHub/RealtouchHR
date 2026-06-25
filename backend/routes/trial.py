@@ -62,7 +62,7 @@ async def get_trial_status(user: CurrentUser = Depends(get_current_user)):
 
 @router.post("/start")
 async def start_trial(user: CurrentUser = Depends(get_current_user)):
-    """Idempotent: start a 7-day trial for the current company"""
+    """Idempotent: start a 14-day trial for the current company"""
     if user.role != "owner":
         raise HTTPException(status_code=403, detail="Only owner can start trial")
     if not user.company_id:

@@ -69,7 +69,7 @@ export default function PrivacyPolicyPage() {
 
                     <Section id="intro" title="1. Introduction">
                         <p>
-                            RealtouchHR Ltd ("we", "us", "our") operates the RealtouchHR platform, a cloud-based human resources and payroll management service designed for UK small and medium-sized businesses. This Privacy Policy explains how we collect, use, share, and protect your personal data when you use our website at <strong>realtouchhr.com</strong> and our associated services (collectively, the "Service").
+                            RealtouchHR is a product of Realtouch Research and Consulting, a brand of Realtouch Global Ventures Ltd ("we", "us", "our"). We operate the RealtouchHR platform, a cloud-based human resources and payroll management service designed for UK small and medium-sized businesses. This Privacy Policy explains how we collect, use, share, and protect your personal data when you use our website at <strong>realtouchhr.com</strong> and our associated services (collectively, the "Service").
                         </p>
                         <p>
                             We are committed to protecting your privacy and handling your data in an open and transparent manner in accordance with the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.
@@ -276,9 +276,12 @@ export default function PrivacyPolicyPage() {
                     <Section id="contact" title="14. Contact Us">
                         <p>If you have any questions, concerns, or requests relating to this Privacy Policy or our data practices, please contact us:</p>
                         <div className="mt-3 p-4 bg-muted rounded-lg space-y-1">
-                            <p><strong>RealtouchHR Ltd</strong></p>
+                            <p><strong>Realtouch Global Ventures Ltd</strong></p>
+                            <p className="text-sm text-muted-foreground">Trading as: Realtouch Research and Consulting — RealtouchHR</p>
                             <p>Data Protection Officer</p>
-                            <p>Email: <a href="mailto:privacy@realtouchhr.com" className="text-indigo-600 hover:underline">privacy@realtouchhr.com</a></p>
+                            <p>Privacy: <a href="mailto:privacy@realtouchhr.com" className="text-indigo-600 hover:underline">privacy@realtouchhr.com</a></p>
+                            <p>Support: <a href="mailto:support@realtouchhr.com" className="text-indigo-600 hover:underline">support@realtouchhr.com</a></p>
+                            <p>General: <a href="mailto:info@realtouchhr.com" className="text-indigo-600 hover:underline">info@realtouchhr.com</a></p>
                             <p>Website: <Link to="/" className="text-indigo-600 hover:underline">realtouchhr.com</Link></p>
                         </div>
                         <p className="mt-3">
@@ -295,11 +298,21 @@ export default function PrivacyPolicyPage() {
             </div>
 
             <footer className="border-t border-border py-8 mt-12">
-                <div className="max-w-6xl mx-auto px-6 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-                    <p>© 2026 RealtouchHR Ltd. All rights reserved.</p>
-                    <div className="flex gap-4">
-                        <Link to="/" className="hover:text-foreground transition-colors">Home</Link>
-                        <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+                <div className="max-w-6xl mx-auto px-6 space-y-3 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <p>© 2026 RealtouchHR. All rights reserved.</p>
+                        <div className="flex gap-4">
+                            <Link to="/" className="hover:text-foreground transition-colors">Home</Link>
+                            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">
+                        RealtouchHR is a product of Realtouch Research and Consulting, a brand of Realtouch Global Ventures Ltd.
+                    </p>
+                    <div className="flex flex-wrap gap-5 text-xs">
+                        <a href="mailto:info@realtouchhr.com" className="hover:text-foreground transition-colors">info@realtouchhr.com</a>
+                        <a href="mailto:support@realtouchhr.com" className="hover:text-foreground transition-colors">support@realtouchhr.com</a>
+                        <a href="mailto:privacy@realtouchhr.com" className="hover:text-foreground transition-colors">privacy@realtouchhr.com</a>
                     </div>
                 </div>
             </footer>

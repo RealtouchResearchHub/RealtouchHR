@@ -64,6 +64,7 @@ import PrivacyPolicyPage from './components/pages/PrivacyPolicyPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
+import CookieConsent from './components/shared/CookieConsent';
 
 import './App.css';
 
@@ -250,6 +251,7 @@ function App() {
                 <BrowserRouter>
                     <AppRouter />
                     <Toaster position="top-right" richColors />
+                    <CookieConsent />
                 </BrowserRouter>
             </AuthProvider>
         </ThemeProvider>

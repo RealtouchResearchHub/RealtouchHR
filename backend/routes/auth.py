@@ -201,6 +201,7 @@ async def register(data: UserCreate, response: Response):
     await db.users.insert_one(user_doc)
     
     # Create company if provided
+    company_id = None
     if data.company_name:
         company_id = generate_company_id()
         company_doc = {
@@ -215,7 +216,23 @@ async def register(data: UserCreate, response: Response):
         await db.companies.insert_one(company_doc)
         await db.users.update_one({"user_id": user_id}, {"$set": {"company_id": company_id}})
         user_doc["company_id"] = company_id
-    
+
+        # Auto-start 14-day free trial (non-blocking)
+        try:
+            from services.trial_service import trial_service
+            await trial_service.start_trial(company_id)
+        except Exception as _trial_err:
+            logger.warning(f"Trial auto-start failed for {company_id}: {_trial_err}")
+
+    # Send welcome email (non-blocking — email failure must not break signup)
+    try:
+        from services.email_service import email_service, render_welcome_email, get_default_welcome_template
+        _tmpl = get_default_welcome_template()
+        _html = render_welcome_email(_tmpl["html_body"], data.name, data.company_name or "your company")
+        await email_service.send_email(data.email, _tmpl["subject"], _html)
+    except Exception as _email_err:
+        logger.warning(f"Welcome email failed for {data.email}: {_email_err}")
+
     # Create session
     token = create_jwt_token(user_id, data.email, user_doc.get("role", "owner"))
     session_doc = {

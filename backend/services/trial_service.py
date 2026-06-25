@@ -20,7 +20,7 @@ from database import db
 logger = logging.getLogger(__name__)
 
 # Trial settings
-TRIAL_DURATION_DAYS = 7
+TRIAL_DURATION_DAYS = 14
 PAYSLIP_DOWNLOAD_PRICE = 5.00  # GBP — immutable on backend
 PAYSLIP_DOWNLOAD_CURRENCY = "gbp"
 DOWNLOAD_PASS_VALIDITY_MINUTES = 30
@@ -84,13 +84,22 @@ class TrialService:
             subscription_active = True
             plan_id = last_tx.get("plan_id")
 
+        trial_expired = bool(
+            trial_ends_at
+            and not trial_active
+            and not subscription_active
+            and not company.get("is_sandbox")
+            and not company.get("demo_mode")
+        )
+
         return {
             "trial_active": trial_active and not subscription_active,
             "trial_ends_at": trial_ends_at,
             "days_remaining": days_remaining,
             "subscription_active": subscription_active,
             "plan_id": plan_id,
-            "downloads_allowed": subscription_active,  # Trial blocks all downloads
+            "downloads_allowed": subscription_active,
+            "trial_expired": trial_expired,
         }
 
 

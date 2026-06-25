@@ -116,7 +116,7 @@ const MODULES = [
 ];
 
 const PREMIUM_FEATURES = [
-    { key: 'ukvi_compliance_scanner', label: 'UKVI Compliance Scanner', desc: '2 automated scans per billing month', plans: 'All plans' },
+    { key: 'ukvi_compliance_scanner', label: 'UKVI Compliance Scanner', desc: '2 automated scans per billing month', plans: 'Professional & Enterprise' },
     { key: 'ukvi_report_download', label: 'UKVI Report Downloads', desc: 'PDF/DOCX compliance reports', plans: 'Professional + Enterprise' },
     { key: 'hmrc_rti', label: 'HMRC RTI Submissions', desc: 'FPS/EPS live submission to HMRC', plans: 'Professional + Enterprise' },
     { key: 'enterprise_multi_entity', label: 'Multi-Entity Support', desc: 'Manage multiple companies', plans: 'Enterprise' },

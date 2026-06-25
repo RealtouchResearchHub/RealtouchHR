@@ -92,7 +92,7 @@ export default function LandingPage() {
                         </span>
                     </h1>
                     <p className="mt-6 text-lg md:text-xl text-white/85 max-w-2xl leading-relaxed">
-                        HMRC-ready RTI submissions, UKVI compliance support, statutory pay calculators
+                        HMRC RTI readiness support, UKVI compliance support, statutory pay calculators
                         and payroll all in one place. RealtouchHR replaces spreadsheets and
                         consultants for under £29/month.
                     </p>
@@ -152,7 +152,7 @@ export default function LandingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {[
                         { icon: Users, title: 'HR and Self-Service', desc: 'Employee records, leave, documents and onboarding. Role-based access and a full audit log included.' },
-                        { icon: PoundSterling, title: 'Payroll', desc: 'PAYE, NI, pension and student loans (Plans 1/2/4/5 + Postgrad). Payslip PDFs and HMRC RTI/FPS submission.' },
+                        { icon: PoundSterling, title: 'Payroll', desc: 'PAYE, NI, pension and student loans (Plans 1/2/4/5 + Postgrad). Payslip PDFs and HMRC RTI/FPS readiness support.' },
                         { icon: ShieldCheck, title: 'UKVI Compliance Support', desc: 'Right-to-Work evidence capture, visa expiry alerts, CoS tracking and salary threshold compliance reminders.' },
                         { icon: HeartPulse, title: 'Statutory Payments', desc: 'SSP, SMP, SPP, ShPP and SAP calculators with 92% and 103% recovery rates.' },
                         { icon: FileCheck2, title: 'P45, P60 and P11D', desc: 'Tax documents generated automatically at offboarding, on demand or at year end.' },
@@ -221,9 +221,10 @@ export default function LandingPage() {
                                                 : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
                                         }`}
                                     >
-                                        Start {p.name}
+                                        Start 14-day free trial
                                     </Button>
                                 </Link>
+                                <p className="text-center text-xs text-white/50 mt-2">No credit card required</p>
                             </CardContent>
                         </Card>
                     ))}
@@ -245,7 +246,7 @@ export default function LandingPage() {
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                             {[
-                                'HMRC-ready RTI/FPS/EPS submissions', 'UKVI compliance support & alerts',
+                                'HMRC RTI/FPS/EPS readiness support', 'UKVI compliance support & alerts',
                                 'Right-to-Work evidence capture', 'GDPR-grade audit log',
                                 'P45/P60/P11D auto-generation', '7-year HMRC record retention',
                             ].map((c) => (
@@ -318,14 +319,24 @@ export default function LandingPage() {
 
             {/* Footer */}
             <footer className="border-t border-white/5 py-10 text-sm text-white/50">
-                <div className="max-w-7xl mx-auto px-6 flex flex-wrap items-center justify-between gap-4">
-                    <p>© 2026 RealtouchHR. Built for UK SMBs.</p>
-                    <div className="flex items-center gap-4">
-                        <a href="/privacy" className="hover:text-white/90 transition-colors">Privacy Policy</a>
-                        <div className="flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Sandbox demos auto-expire after 24h</span>
+                <div className="max-w-7xl mx-auto px-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <p>© 2026 RealtouchHR. Built for UK SMBs.</p>
+                        <div className="flex items-center gap-4">
+                            <a href="/privacy" className="hover:text-white/90 transition-colors">Privacy Policy</a>
+                            <div className="flex items-center gap-2">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>Sandbox demos auto-expire after 24h</span>
+                            </div>
                         </div>
+                    </div>
+                    <p className="text-xs text-white/35">
+                        RealtouchHR is a product of Realtouch Research and Consulting, a brand of Realtouch Global Ventures Ltd.
+                    </p>
+                    <div className="flex flex-wrap gap-5 text-xs text-white/40">
+                        <a href="mailto:info@realtouchhr.com" className="hover:text-white/70 transition-colors">info@realtouchhr.com</a>
+                        <a href="mailto:support@realtouchhr.com" className="hover:text-white/70 transition-colors">support@realtouchhr.com</a>
+                        <a href="mailto:privacy@realtouchhr.com" className="hover:text-white/70 transition-colors">privacy@realtouchhr.com</a>
                     </div>
                 </div>
             </footer>

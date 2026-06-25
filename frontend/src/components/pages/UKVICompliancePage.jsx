@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -26,7 +26,9 @@ import {
   Eye,
   Loader2,
   CheckCircle2,
-  XCircle as X
+  XCircle as X,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,18 +50,20 @@ export default function UKVICompliancePage() {
   const [scanLoading, setScanLoading] = useState(false);
   const [scanPreview, setScanPreview] = useState(null);
   const [exportLoading, setExportLoading] = useState(null);
+  const [planStatus, setPlanStatus] = useState(null);
   const [selectedScanId, setSelectedScanId] = useState(null);
 
   const fetchData = async () => {
     try {
-      const token = token;
-      const headers = { 'Authorization': `Bearer ${token}` };
+      const _token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${_token}` };
 
-      const [dashboardRes, checklistRes, alertsRes, scannerRes] = await Promise.all([
+      const [dashboardRes, checklistRes, alertsRes, scannerRes, planRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/ukvi/dashboard`, { headers }),
         fetch(`${BACKEND_URL}/api/ukvi/reporting/checklist`, { headers }),
         fetch(`${BACKEND_URL}/api/ukvi/alerts?resolved=false`, { headers }),
         fetch(`${BACKEND_URL}/api/ukvi/compliance/status`, { headers }),
+        fetch(`${BACKEND_URL}/api/trial/status`, { headers }),
       ]);
 
       if (dashboardRes.ok) setDashboard(await dashboardRes.json());
@@ -69,6 +73,7 @@ export default function UKVICompliancePage() {
         setAlerts(alertData.alerts || []);
       }
       if (scannerRes.ok) setScannerStatus(await scannerRes.json());
+      if (planRes.ok) setPlanStatus(await planRes.json());
     } catch (error) {
       console.error('Error fetching UKVI data:', error);
     } finally {
@@ -80,10 +85,10 @@ export default function UKVICompliancePage() {
   const handleRunScan = async () => {
     setScanLoading(true);
     try {
-      const token = token;
+      const _token = localStorage.getItem('token');
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/run`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${_token}` },
       });
       if (!res.ok) {
         const err = await res.json();
@@ -251,6 +256,10 @@ export default function UKVICompliancePage() {
         return <Badge variant="secondary">Normal</Badge>;
     }
   };
+
+  // Scanner is locked for Starter plan and trial users — requires Professional or Enterprise
+  const scannerLocked = !planStatus?.subscription_active ||
+    !['professional', 'enterprise'].some(p => (planStatus?.plan_id || '').toLowerCase().includes(p));
 
   if (loading) {
     return (
@@ -492,7 +501,31 @@ export default function UKVICompliancePage() {
       {/* ======================================================= */}
       {/* COMPLIANCE SCANNER TAB                                  */}
       {/* ======================================================= */}
-      {activeTab === 'scanner' && (
+      {activeTab === 'scanner' && scannerLocked && (
+        <Card>
+          <CardContent className="p-12 flex flex-col items-center text-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+              <Lock className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Professional or Enterprise Plan Required</h3>
+              <p className="text-muted-foreground max-w-sm">
+                The UKVI Compliance Scanner is available on Professional and Enterprise plans.
+                Upgrade to run automated compliance scans across all employees.
+              </p>
+            </div>
+            <Link to="/billing">
+              <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-8">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Upgrade to unlock
+              </Button>
+            </Link>
+            <p className="text-xs text-muted-foreground">Professional from £39/month · No setup fee</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === 'scanner' && !scannerLocked && (
         <div className="space-y-6">
           {/* Scanner Header */}
           <Card className="border-purple-200 dark:border-purple-800">
