@@ -28,36 +28,45 @@ logger = logging.getLogger(__name__)
 
 import stripe as _stripe_sdk
 
+# Stripe Price IDs for recurring subscription plans (set in .env)
+# When set, checkout uses mode="subscription" with the pre-created Stripe price.
+# When missing, falls back to ad-hoc price_data with recurring interval.
+STRIPE_PRICE_IDS = {
+    "starter":      os.environ.get("STRIPE_PRICE_STARTER", ""),
+    "professional": os.environ.get("STRIPE_PRICE_PROFESSIONAL", ""),
+    "enterprise":   os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
+}
+
 
 # ==================== STRIPE HELPERS ====================
 
 class CheckoutSessionRequest:
-    def __init__(self, amount, currency, success_url, cancel_url, metadata=None):
+    def __init__(self, amount, currency, success_url, cancel_url,
+                 metadata=None, price_id=None, mode="payment", product_name=None):
         self.amount = amount
         self.currency = currency
         self.success_url = success_url
         self.cancel_url = cancel_url
         self.metadata = metadata or {}
+        self.price_id = price_id        # Stripe Price ID; triggers subscription mode
+        self.mode = mode                # "payment" | "subscription"
+        self.product_name = product_name or "RealtouchHR Payment"
 
 
 class _CheckoutResult:
     def __init__(self, session):
         self.session_id = session.id
-        self.url = session.url
-        self.payment_status = session.payment_status
-        self.status = session.status
-        self.amount_total = session.amount_total
-        self.currency = session.currency
-        self.customer_id = session.get("customer")
-        self.customer = session.get("customer")
-
-
-class _WebhookResult:
-    def __init__(self, event_type, event_id, session_id, payment_status):
-        self.event_type = event_type
-        self.event_id = event_id
-        self.session_id = session_id
-        self.payment_status = payment_status
+        self.url = getattr(session, "url", None)
+        # Subscription mode: payment_status is None; derive from session status
+        raw_ps = getattr(session, "payment_status", None)
+        sess_status = getattr(session, "status", None)
+        self.payment_status = raw_ps if raw_ps else ("paid" if sess_status == "complete" else "unpaid")
+        self.status = sess_status
+        self.amount_total = getattr(session, "amount_total", None)
+        self.currency = getattr(session, "currency", None)
+        self.customer_id = session.get("customer") if hasattr(session, "get") else getattr(session, "customer", None)
+        self.customer = self.customer_id
+        self.subscription_id = session.get("subscription") if hasattr(session, "get") else getattr(session, "subscription", None)
 
 
 class StripeCheckout:
@@ -66,51 +75,57 @@ class StripeCheckout:
 
     async def create_checkout_session(self, request: CheckoutSessionRequest) -> _CheckoutResult:
         _stripe_sdk.api_key = self.api_key
-        session = _stripe_sdk.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": request.currency,
-                    "product_data": {"name": "RealtouchHR Payment"},
-                    "unit_amount": int(request.amount * 100),
-                },
-                "quantity": 1,
-            }],
-            mode="payment",
-            success_url=request.success_url,
-            cancel_url=request.cancel_url,
-            metadata=request.metadata,
-        )
+        if request.price_id and request.mode == "subscription":
+            # Pre-created Stripe recurring price
+            session = _stripe_sdk.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[{"price": request.price_id, "quantity": 1}],
+                mode="subscription",
+                success_url=request.success_url,
+                cancel_url=request.cancel_url,
+                metadata=request.metadata,
+            )
+        elif request.mode == "subscription":
+            # Subscription mode with ad-hoc price_data (no pre-created Price ID yet)
+            session = _stripe_sdk.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[{
+                    "price_data": {
+                        "currency": request.currency,
+                        "product_data": {"name": request.product_name},
+                        "unit_amount": int(request.amount * 100),
+                        "recurring": {"interval": "month"},
+                    },
+                    "quantity": 1,
+                }],
+                mode="subscription",
+                success_url=request.success_url,
+                cancel_url=request.cancel_url,
+                metadata=request.metadata,
+            )
+        else:
+            # One-time payment (payslip downloads, add-ons)
+            session = _stripe_sdk.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[{
+                    "price_data": {
+                        "currency": request.currency,
+                        "product_data": {"name": request.product_name},
+                        "unit_amount": int(request.amount * 100),
+                    },
+                    "quantity": 1,
+                }],
+                mode="payment",
+                success_url=request.success_url,
+                cancel_url=request.cancel_url,
+                metadata=request.metadata,
+            )
         return _CheckoutResult(session)
 
     async def get_checkout_status(self, session_id: str) -> _CheckoutResult:
         _stripe_sdk.api_key = self.api_key
         session = _stripe_sdk.checkout.Session.retrieve(session_id)
         return _CheckoutResult(session)
-
-    async def handle_webhook(self, body: bytes, signature: str) -> _WebhookResult:
-        _stripe_sdk.api_key = self.api_key
-        webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-        try:
-            event = _stripe_sdk.Webhook.construct_event(body, signature, webhook_secret)
-        except Exception as exc:
-            raise ValueError(f"Invalid webhook signature: {exc}")
-        session_id = None
-        payment_status = None
-        if event.type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
-            obj = event.data.object
-            session_id = obj.id
-            payment_status = obj.payment_status
-        elif event.type == "checkout.session.async_payment_failed":
-            obj = event.data.object
-            session_id = obj.id
-            payment_status = "unpaid"
-        return _WebhookResult(
-            event_type=event.type,
-            event_id=event.id,
-            session_id=session_id,
-            payment_status=payment_status,
-        )
 
 
 # ==================== SUBSCRIPTION PLANS ====================
@@ -253,28 +268,20 @@ class PaymentService:
         user_email: str,
         origin_url: str
     ) -> Dict[str, Any]:
-        """
-        Create a Stripe checkout session for a subscription plan.
-        
-        Amount is determined server-side from SUBSCRIPTION_PLANS.
-        """
+        """Create a Stripe checkout session for a subscription plan.
+        Uses a pre-created Stripe Price ID when configured (STRIPE_PRICE_*),
+        otherwise falls back to ad-hoc price_data with monthly recurrence."""
         if plan_id not in SUBSCRIPTION_PLANS:
             raise ValueError(f"Invalid plan: {plan_id}")
-        
+
         plan = SUBSCRIPTION_PLANS[plan_id]
-        
-        # Build URLs from origin
+        price_id = STRIPE_PRICE_IDS.get(plan_id, "")
+
         success_url = f"{origin_url}/settings/billing?session_id={{CHECKOUT_SESSION_ID}}&status=success"
         cancel_url = f"{origin_url}/settings/billing?status=cancelled"
-        webhook_url = f"{origin_url}/api/webhook/stripe"
-        
-        # Initialize Stripe checkout
-        stripe_checkout = StripeCheckout(
-            api_key=self.stripe_api_key,
-            webhook_url=webhook_url
-        )
-        
-        # Create checkout request
+
+        stripe_checkout = StripeCheckout(api_key=self.stripe_api_key)
+
         checkout_request = CheckoutSessionRequest(
             amount=plan["price"],
             currency=plan["currency"],
@@ -286,14 +293,15 @@ class PaymentService:
                 "user_email": user_email,
                 "plan_id": plan_id,
                 "plan_name": plan["name"],
-                "type": "subscription"
-            }
+                "type": "subscription",
+            },
+            price_id=price_id or None,
+            mode="subscription",
+            product_name=f"RealtouchHR {plan['name']} Plan",
         )
-        
-        # Create Stripe checkout session
+
         session = await stripe_checkout.create_checkout_session(checkout_request)
-        
-        # Create payment transaction record
+
         now = datetime.now(timezone.utc)
         transaction = {
             "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
@@ -306,18 +314,21 @@ class PaymentService:
             "plan_name": plan["name"],
             "amount": plan["price"],
             "currency": plan["currency"],
+            "stripe_price_id": price_id or None,
+            "checkout_mode": "subscription",
             "payment_status": "pending",
             "status": "initiated",
             "created_at": now.isoformat(),
-            "updated_at": now.isoformat()
+            "updated_at": now.isoformat(),
         }
-        
         await db.payment_transactions.insert_one(transaction)
-        
+
         return {
             "checkout_url": session.url,
             "session_id": session.session_id,
-            "plan": plan
+            "plan": plan,
+            "mode": "subscription",
+            "price_id_used": bool(price_id),
         }
     
     async def create_payslip_download_checkout(
@@ -523,6 +534,9 @@ class PaymentService:
         except Exception as exc:
             logger.warning(f"Could not fetch Stripe receipt: {exc}")
 
+        # Also capture subscription_id (set for subscription mode sessions)
+        subscription_id = getattr(status_response, "subscription_id", None)
+
         update_fields = {
             "status": new_status,
             "payment_status": new_payment_status,
@@ -535,23 +549,32 @@ class PaymentService:
             update_fields["receipt_url"] = receipt_url
         if payment_intent_id:
             update_fields["payment_intent_id"] = payment_intent_id
-        
+        if subscription_id:
+            update_fields["stripe_subscription_id"] = subscription_id
+
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": update_fields}
         )
 
-        # Mirror customer id to company for billing portal
-        if customer_id and transaction.get("company_id"):
-            await db.companies.update_one(
-                {"company_id": transaction["company_id"]},
-                {"$set": {"stripe_customer_id": customer_id}}
-            )
-        
-        # If payment successful, update company subscription
+        # Mirror customer id and subscription id to company
+        if transaction.get("company_id"):
+            company_update = {}
+            if customer_id:
+                company_update["stripe_customer_id"] = customer_id
+            if subscription_id:
+                company_update["stripe_subscription_id"] = subscription_id
+            if company_update:
+                await db.companies.update_one(
+                    {"company_id": transaction["company_id"]},
+                    {"$set": company_update}
+                )
+
+        # If payment successful, activate subscription
         if new_payment_status == "paid":
-            await self._process_successful_payment(transaction)
-        
+            merged_txn = {**transaction, **update_fields}
+            await self._process_successful_payment(merged_txn)
+
         return {
             "status": new_status,
             "payment_status": new_payment_status,
@@ -559,27 +582,31 @@ class PaymentService:
             "currency": status_response.currency,
             "session_id": session_id
         }
-    
+
     async def _process_successful_payment(self, transaction: dict):
         """Process successful payment - update subscription, send notifications"""
         company_id = transaction.get("company_id")
         payment_type = transaction.get("type")
         now = datetime.now(timezone.utc)
-        
+
         if payment_type == "subscription":
             plan_id = transaction.get("plan_id")
             plan = SUBSCRIPTION_PLANS.get(plan_id, {})
-            
+
+            company_update = {
+                "subscription_plan": plan_id,
+                "subscription_name": plan.get("name"),
+                "employee_limit": plan.get("employee_limit", 10),
+                "subscription_updated_at": now.isoformat(),
+                "subscription_active": True,
+            }
+            if transaction.get("stripe_subscription_id"):
+                company_update["stripe_subscription_id"] = transaction["stripe_subscription_id"]
+
             # Update company subscription
             await db.companies.update_one(
                 {"company_id": company_id},
-                {"$set": {
-                    "subscription_plan": plan_id,
-                    "subscription_name": plan.get("name"),
-                    "employee_limit": plan.get("employee_limit", 10),
-                    "subscription_updated_at": now.isoformat(),
-                    "subscription_active": True
-                }}
+                {"$set": company_update}
             )
             
             # Create audit log
@@ -682,28 +709,114 @@ class PaymentService:
         signature: str,
         origin_url: str
     ) -> Dict[str, Any]:
-        """Handle Stripe webhook events"""
-        webhook_url = f"{origin_url}/api/webhook/stripe"
-        stripe_checkout = StripeCheckout(
-            api_key=self.stripe_api_key,
-            webhook_url=webhook_url
-        )
-        
-        webhook_response = await stripe_checkout.handle_webhook(
-            request_body,
-            signature
-        )
-        
-        # Process based on event type
-        if webhook_response.payment_status == "paid":
-            await self.check_payment_status(webhook_response.session_id, origin_url)
-        
-        return {
-            "event_type": webhook_response.event_type,
-            "event_id": webhook_response.event_id,
-            "session_id": webhook_response.session_id,
-            "payment_status": webhook_response.payment_status
-        }
+        """Handle all Stripe webhook events — checkout, subscription lifecycle, renewals."""
+        _stripe_sdk.api_key = self.stripe_api_key
+        webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+        try:
+            event = _stripe_sdk.Webhook.construct_event(request_body, signature, webhook_secret)
+        except Exception as exc:
+            raise ValueError(f"Invalid webhook signature: {exc}")
+
+        event_type = event.type
+        obj = event.data.object
+
+        # ── Checkout completed (both payment and subscription modes) ──────────
+        if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+            session_id = obj.id
+            raw_ps = obj.get("payment_status")
+            is_paid = raw_ps == "paid" or (not raw_ps and obj.get("status") == "complete")
+            if is_paid:
+                try:
+                    await self.check_payment_status(session_id, origin_url)
+                except Exception as exc:
+                    logger.warning("Webhook check_payment_status failed for %s: %s", session_id, exc)
+            return {"event_type": event_type, "event_id": event.id, "session_id": session_id}
+
+        if event_type == "checkout.session.async_payment_failed":
+            session_id = obj.id
+            await db.payment_transactions.update_one(
+                {"session_id": session_id},
+                {"$set": {"payment_status": "failed", "status": "failed",
+                          "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            return {"event_type": event_type, "event_id": event.id, "session_id": session_id}
+
+        # ── Recurring invoice paid (subscription renewal) ─────────────────────
+        if event_type == "invoice.paid":
+            try:
+                await self._handle_invoice_paid(obj)
+            except Exception as exc:
+                logger.warning("invoice.paid handling failed: %s", exc)
+            return {"event_type": event_type, "event_id": event.id}
+
+        # ── Subscription lifecycle ─────────────────────────────────────────────
+        if event_type in ("customer.subscription.deleted", "customer.subscription.updated"):
+            try:
+                await self._handle_subscription_event(event_type, obj)
+            except Exception as exc:
+                logger.warning("%s handling failed: %s", event_type, exc)
+            return {"event_type": event_type, "event_id": event.id}
+
+        return {"event_type": event_type, "event_id": event.id, "skipped": True}
+
+    async def _handle_invoice_paid(self, invoice: dict):
+        """Keep subscription active on monthly renewal."""
+        customer_id = invoice.get("customer")
+        subscription_id = invoice.get("subscription")
+        if not customer_id:
+            return
+        company = await db.companies.find_one({"stripe_customer_id": customer_id}, {"_id": 0}) or {}
+        if not company:
+            logger.warning("invoice.paid: no company for customer %s", customer_id)
+            return
+        company_id = company.get("company_id")
+        now = datetime.now(timezone.utc)
+        update = {"subscription_active": True, "subscription_renewed_at": now.isoformat()}
+        if subscription_id:
+            update["stripe_subscription_id"] = subscription_id
+        await db.companies.update_one({"company_id": company_id}, {"$set": update})
+        await db.audit_log.insert_one({
+            "action": "subscription_renewed",
+            "entity_type": "company",
+            "entity_id": company_id,
+            "details": {"subscription_id": subscription_id, "invoice_id": invoice.get("id")},
+            "timestamp": now.isoformat(),
+        })
+
+    async def _handle_subscription_event(self, event_type: str, subscription: dict):
+        """Handle subscription updated/deleted — activate or deactivate accordingly."""
+        customer_id = subscription.get("customer")
+        subscription_id = subscription.get("id")
+        status = subscription.get("status")
+        if not customer_id:
+            return
+        company = await db.companies.find_one({"stripe_customer_id": customer_id}, {"_id": 0}) or {}
+        if not company:
+            logger.warning("%s: no company for customer %s", event_type, customer_id)
+            return
+        company_id = company.get("company_id")
+        now = datetime.now(timezone.utc)
+        if event_type == "customer.subscription.deleted" or status in ("canceled", "unpaid"):
+            await db.companies.update_one(
+                {"company_id": company_id},
+                {"$set": {
+                    "subscription_active": False,
+                    "subscription_cancelled_at": now.isoformat(),
+                    "stripe_subscription_id": subscription_id,
+                }}
+            )
+            await db.audit_log.insert_one({
+                "action": "subscription_cancelled",
+                "entity_type": "company",
+                "entity_id": company_id,
+                "details": {"subscription_id": subscription_id, "status": status},
+                "timestamp": now.isoformat(),
+            })
+        elif status == "active":
+            await db.companies.update_one(
+                {"company_id": company_id},
+                {"$set": {"subscription_active": True, "stripe_subscription_id": subscription_id}}
+            )
     
     async def get_company_billing(self, company_id: str) -> Dict[str, Any]:
         """Get company billing information and transaction history"""
