@@ -3844,7 +3844,8 @@ app.include_router(api_router)
 
 # CORS Middleware — credentials=True requires explicit origins (not "*")
 _app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
-_cors_origins = list({_app_url, "http://localhost:3000", "http://localhost:3001"})
+_extra_origins = [o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+_cors_origins = list({_app_url, "http://localhost:3000", "http://localhost:3001"} | set(_extra_origins))
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
