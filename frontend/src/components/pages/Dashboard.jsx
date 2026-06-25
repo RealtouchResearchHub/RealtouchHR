@@ -57,7 +57,7 @@ function ComplianceDonut({ score }) {
 }
 
 export default function Dashboard() {
-    const { user, company, token } = useAuth();
+    const { user, company, token, refreshCompany } = useAuth();
     const [stats, setStats] = useState(null);
     const [employees, setEmployees] = useState([]);
     const [recentLeaves, setRecentLeaves] = useState([]);
@@ -99,10 +99,12 @@ export default function Dashboard() {
 
     useEffect(() => { fetchData(); }, []);
 
-    const handleStartTour = (steps) => {
+    const handleStartTour = async (steps) => {
         localStorage.setItem('demo_tour_steps', JSON.stringify(steps));
         localStorage.setItem('demo_tour_active', 'true');
         window.dispatchEvent(new Event('demo-tour-start'));
+        // Refresh company in case it was auto-created for this new user
+        await refreshCompany();
         fetchData();
     };
 

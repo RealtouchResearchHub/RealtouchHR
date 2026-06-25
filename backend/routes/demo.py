@@ -67,9 +67,39 @@ DEMO_EMPLOYEES = [
 
 @router.post("/seed")
 async def seed_demo(user: CurrentUser = Depends(get_current_user)):
-    """Idempotently seed demo data for the current company"""
+    """Idempotently seed demo data for the current company.
+    If the user has no company yet, a demo company is auto-created so new
+    users can try the tour without completing company setup first."""
     if not user.company_id:
-        raise HTTPException(status_code=400, detail="No company setup")
+        now = datetime.now(timezone.utc)
+        company_id = f"company_demo_{uuid.uuid4().hex[:12]}"
+        await db.companies.insert_one({
+            "company_id": company_id,
+            "name": f"{user.name}'s Demo Company",
+            "industry": "Technology",
+            "size": "10-50",
+            "address": "1 Demo Street, London EC1A 1BB",
+            "payroll_frequency": "monthly",
+            "owner_id": user.user_id,
+            "setup_completed": False,
+            "demo_mode": True,
+            "demo_seeded_at": now.isoformat(),
+            "created_at": now.isoformat(),
+            "paye_reference": "120/AB1234",
+            "accounts_office_reference": "120PA00012345",
+            "small_employer_relief": True,
+        })
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": {"company_id": company_id}}
+        )
+        user = CurrentUser(
+            user_id=user.user_id,
+            email=user.email,
+            name=user.name,
+            role=user.role,
+            company_id=company_id,
+        )
     try:
         return await _do_seed(user)
     except Exception as exc:
