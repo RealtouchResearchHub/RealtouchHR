@@ -200,15 +200,15 @@ export default function LandingPage() {
                                 <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 border-0">Most popular</Badge>
                             )}
                             <CardContent className="p-6">
-                                <h3 className="text-2xl font-bold">{p.name}</h3>
+                                <h3 className="text-2xl font-bold text-white">{p.name}</h3>
                                 <div className="mt-4 flex items-baseline gap-1">
-                                    <span className="text-5xl font-bold">£{p.price}</span>
+                                    <span className="text-5xl font-bold text-white">£{p.price}</span>
                                     <span className="text-white/75">/month</span>
                                 </div>
                                 <p className="text-sm text-white/75 mt-1">Up to {p.employees} employees</p>
                                 <ul className="mt-6 space-y-2 text-sm">
                                     {p.features.map((f) => (
-                                        <li key={f} className="flex items-start gap-2">
+                                        <li key={f} className="flex items-start gap-2 text-white/90">
                                             <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" /> {f}
                                         </li>
                                     ))}
