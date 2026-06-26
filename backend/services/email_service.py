@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Replace with your Resend API key - set in .env file
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'info@realtouchhr.com')
 COMPANY_NAME = "RealtouchHR"
 
 # Email templates base URL (for links in emails)
