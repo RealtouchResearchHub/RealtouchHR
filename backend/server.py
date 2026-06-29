@@ -2308,6 +2308,7 @@ Current context:
     _load_dotenv(ROOT_DIR / ".env", override=True)
 
     ai_response = None
+    _copilot_error = None
 
     # --- Primary: Claude (Anthropic) ---
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -2323,6 +2324,7 @@ Current context:
             )
             ai_response = msg.content[0].text
         except Exception as e:
+            _copilot_error = f"Claude error: {e}"
             logger.warning(f"Claude copilot error (falling back to OpenAI): {e}")
 
     # --- Fallback: OpenAI ---
@@ -2344,8 +2346,9 @@ Current context:
                 logger.error(f"OpenAI copilot fallback error: {e}")
 
     if not ai_response:
+        _debug = f" (Debug: {_copilot_error})" if _copilot_error else " (Debug: ANTHROPIC_API_KEY not found)" if not anthropic_key else ""
         return CopilotResponse(
-            response="AI Copilot is currently unavailable. Please add ANTHROPIC_API_KEY or OPENAI_API_KEY to backend/.env.",
+            response=f"AI Copilot is currently unavailable.{_debug}",
             suggestions=["Check system configuration", "Contact administrator"],
             requires_approval=False,
         )
