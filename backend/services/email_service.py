@@ -616,8 +616,8 @@ DEFAULT_WELCOME_HTML_BODY = """\
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="text-align:center;">
-                  <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 24px;">
-                    <span style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;">Realtouch<span style="color:#c4b5fd;">HR</span></span>
+                  <div style="display:inline-block;background:#ffffff;border-radius:14px;padding:12px 26px;box-shadow:0 8px 24px rgba(17,24,39,0.14);">
+                    <img src="https://www.realtouchhr.com/logo-white.png" width="260" alt="RealtouchHR" style="display:block;width:260px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;">
                   </div>
                   <p style="color:#e0e7ff;margin:12px 0 0 0;font-size:14px;font-weight:500;">Compliance Confidence for UK Businesses</p>
                 </td>
