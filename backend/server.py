@@ -825,18 +825,30 @@ async def register(request: Request, data: UserCreate, response: Response):
     user_doc.pop("_id", None)
     user_doc["created_at"] = now
 
-    # Send welcome email (use DB template if saved, otherwise built-in default)
+    # Send welcome email — read API key fresh at call time (same pattern as forgot-password)
     try:
-        from services.email_service import email_service, get_default_welcome_template, render_welcome_email
-        tpl_doc = await db.email_templates.find_one({"template_id": "welcome"}, {"_id": 0})
-        if tpl_doc:
-            subject = tpl_doc.get("subject", "Welcome to RealtouchHR 🎉")
-            html = render_welcome_email(tpl_doc.get("html_body", ""), data.name, data.company_name or "your company")
+        from services.email_service import get_default_welcome_template, render_welcome_email
+        _resend_key = os.environ.get("RESEND_API_KEY", "")
+        _sender = os.environ.get("SENDER_EMAIL", "info@realtouchhr.com")
+        if _resend_key:
+            tpl_doc = await db.email_templates.find_one({"template_id": "welcome"}, {"_id": 0})
+            if tpl_doc:
+                _subject = tpl_doc.get("subject", "Welcome to RealtouchHR 🎉")
+                _html = render_welcome_email(tpl_doc.get("html_body", ""), data.name, data.company_name or "your company")
+            else:
+                tpl = get_default_welcome_template()
+                _subject = tpl["subject"]
+                _html = render_welcome_email(tpl["html_body"], data.name, data.company_name or "your company")
+            resend.api_key = _resend_key
+            resend.Emails.send({
+                "from": f"RealtouchHR <{_sender}>",
+                "to": [data.email],
+                "subject": _subject,
+                "html": _html,
+            })
+            logger.info(f"Welcome email sent to {data.email}")
         else:
-            tpl = get_default_welcome_template()
-            subject = tpl["subject"]
-            html = render_welcome_email(tpl["html_body"], data.name, data.company_name or "your company")
-        await email_service.send_email(data.email, subject, html)
+            logger.warning("Welcome email skipped: RESEND_API_KEY not set")
     except Exception as e:
         logger.warning(f"Welcome email failed: {e}")
 

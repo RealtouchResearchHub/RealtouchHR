@@ -32,6 +32,19 @@ create index if not exists users_company_id_idx on users(company_id);
 create index if not exists users_email_idx on users(email);
 
 -- ---------------------------------------------------------------------------
+-- password_reset_tokens
+-- ---------------------------------------------------------------------------
+create table if not exists password_reset_tokens (
+    id          bigserial primary key,
+    email       text not null unique,
+    token       text not null,
+    expires_at  text not null,
+    used        boolean default false,
+    created_at  timestamptz default now()
+);
+create index if not exists prt_token_idx on password_reset_tokens(token);
+
+-- ---------------------------------------------------------------------------
 -- companies
 -- ---------------------------------------------------------------------------
 create table if not exists companies (
