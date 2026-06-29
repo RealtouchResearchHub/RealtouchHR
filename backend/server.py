@@ -2304,7 +2304,7 @@ Current context:
             import anthropic as _anthropic
             claude = _anthropic.AsyncAnthropic(api_key=anthropic_key)
             msg = await claude.messages.create(
-                model="claude-opus-4-7",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[{"role": "user", "content": data.message}],
