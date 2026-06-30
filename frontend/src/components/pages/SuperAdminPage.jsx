@@ -74,6 +74,7 @@ export default function SuperAdminPage() {
     const [setPlanDialog2, setSetPlanDialog2] = useState(null); // company_id
     const [selectedPlan, setSelectedPlan]   = useState('');
     const [deleteDialog, setDeleteDialog]   = useState(null);   // company_id
+    const [deleteUserDialog, setDeleteUserDialog] = useState(null); // user_id
     const [newFlagKey, setNewFlagKey]       = useState('');
 
     const load = useCallback(async () => {
@@ -217,6 +218,28 @@ export default function SuperAdminPage() {
             toast.success(disabled ? 'User disabled' : 'User re-enabled');
             setAllUsers(u => u.map(x => x.user_id === user_id ? { ...x, disabled } : x));
         } catch { toast.error('Failed'); }
+    };
+
+    // ── User remove (temporary) / restore / delete (permanent) ────
+    const removeUser = async (user_id) => {
+        const reason = window.prompt('Reason for removing this account? (Temporary — the email becomes free for a fresh signup, and the account can be restored later.)');
+        if (!reason) return;
+        try {
+            await ax('post', `/api/super-admin/users/${user_id}/remove`, { reason });
+            toast.success('Account removed. Email is now free to re-register.'); load();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
+    };
+    const restoreUser = async (user_id) => {
+        try {
+            await ax('post', `/api/super-admin/users/${user_id}/restore`, {});
+            toast.success('Account restored'); load();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Restore failed'); }
+    };
+    const deleteUser = async (user_id) => {
+        try {
+            await ax('post', `/api/super-admin/users/${user_id}/delete`, { confirm: user_id });
+            toast.success('Account permanently deleted'); setDeleteUserDialog(null); load();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
     };
 
     // ── Feature flags ─────────────────────────────────────────────
@@ -534,39 +557,55 @@ export default function SuperAdminPage() {
                                                             : <Badge variant="outline" className="text-xs text-muted-foreground">Off</Badge>}
                                                     </td>
                                                     <td className="p-2">
-                                                        {u.disabled
+                                                        {u.removed
+                                                            ? <Badge className="bg-amber-100 text-amber-700 text-xs">Removed</Badge>
+                                                            : u.disabled
                                                             ? <Badge className="bg-rose-100 text-rose-700 text-xs">Disabled</Badge>
                                                             : <Badge className="bg-emerald-100 text-emerald-700 text-xs">Active</Badge>}
                                                     </td>
                                                     <td className="p-2 text-xs text-muted-foreground">{u.created_at?.slice(0, 10)}</td>
                                                     <td className="p-2 text-right">
                                                         <div className="flex items-center justify-end gap-1">
-                                                            {u.disabled ? (
-                                                                <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, false)}>
-                                                                    <UserCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Enable
+                                                            {u.removed ? (
+                                                                <Button size="sm" variant="outline" onClick={() => restoreUser(u.user_id)}>
+                                                                    <Shield className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Restore
                                                                 </Button>
                                                             ) : (
-                                                                <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, true)}>
-                                                                    <UserX className="w-3.5 h-3.5 mr-1 text-rose-600" /> Disable
-                                                                </Button>
+                                                                <>
+                                                                    {u.disabled ? (
+                                                                        <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, false)}>
+                                                                            <UserCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Enable
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button size="sm" variant="outline" onClick={() => toggleUser(u.user_id, true)}>
+                                                                            <UserX className="w-3.5 h-3.5 mr-1 text-rose-600" /> Disable
+                                                                        </Button>
+                                                                    )}
+                                                                    <Button size="sm" variant="ghost" title="Remove account (temporary — frees email)" onClick={() => removeUser(u.user_id)}>
+                                                                        <ShieldOff className="w-3.5 h-3.5 text-amber-600" />
+                                                                    </Button>
+                                                                    <Button size="sm" variant="ghost" title="Reset MFA" onClick={async () => {
+                                                                        if (!window.confirm(`Reset 2FA for ${u.email}?`)) return;
+                                                                        try {
+                                                                            await axios.post(`/api/super-admin/users/${u.user_id}/reset-mfa`);
+                                                                            toast.success('2FA reset');
+                                                                        } catch { toast.error('Failed to reset 2FA'); }
+                                                                    }}>
+                                                                        <Shield className="w-3.5 h-3.5 text-amber-600" />
+                                                                    </Button>
+                                                                    <Button size="sm" variant="ghost" title="Force logout" onClick={async () => {
+                                                                        if (!window.confirm(`Force logout ${u.email}?`)) return;
+                                                                        try {
+                                                                            await axios.post(`/api/super-admin/users/${u.user_id}/force-logout`);
+                                                                            toast.success('User logged out');
+                                                                        } catch { toast.error('Failed to force logout'); }
+                                                                    }}>
+                                                                        <PowerOff className="w-3.5 h-3.5 text-rose-500" />
+                                                                    </Button>
+                                                                </>
                                                             )}
-                                                            <Button size="sm" variant="ghost" title="Reset MFA" onClick={async () => {
-                                                                if (!window.confirm(`Reset 2FA for ${u.email}?`)) return;
-                                                                try {
-                                                                    await axios.post(`/api/super-admin/users/${u.user_id}/reset-mfa`);
-                                                                    toast.success('2FA reset');
-                                                                } catch { toast.error('Failed to reset 2FA'); }
-                                                            }}>
-                                                                <Shield className="w-3.5 h-3.5 text-amber-600" />
-                                                            </Button>
-                                                            <Button size="sm" variant="ghost" title="Force logout" onClick={async () => {
-                                                                if (!window.confirm(`Force logout ${u.email}?`)) return;
-                                                                try {
-                                                                    await axios.post(`/api/super-admin/users/${u.user_id}/force-logout`);
-                                                                    toast.success('User logged out');
-                                                                } catch { toast.error('Failed to force logout'); }
-                                                            }}>
-                                                                <PowerOff className="w-3.5 h-3.5 text-rose-500" />
+                                                            <Button size="sm" variant="ghost" title="Delete account permanently" onClick={() => setDeleteUserDialog(u.user_id)}>
+                                                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                                                             </Button>
                                                         </div>
                                                     </td>
@@ -1435,6 +1474,19 @@ export default function SuperAdminPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
                         <Button variant="destructive" onClick={() => deleteCompany(deleteDialog)}>Delete permanently</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Delete user dialog ── */}
+            <Dialog open={!!deleteUserDialog} onOpenChange={o => !o && setDeleteUserDialog(null)}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader><DialogTitle className="flex items-center gap-2 text-rose-600"><AlertTriangle className="w-5 h-5" />Delete account</DialogTitle></DialogHeader>
+                    <p className="text-sm">This permanently deletes this user account. This cannot be undone. To temporarily free up the email instead (and allow restoring later), use Remove instead of Delete.</p>
+                    <p className="text-xs text-muted-foreground mt-2 font-mono break-all">{deleteUserDialog}</p>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteUserDialog(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={() => deleteUser(deleteUserDialog)}>Delete permanently</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

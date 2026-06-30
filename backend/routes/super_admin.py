@@ -330,6 +330,87 @@ async def enable_user(user_id: str, admin: CurrentUser = Depends(get_platform_ad
     return {"ok": True}
 
 
+@router.post("/users/{user_id}/remove")
+async def remove_user(user_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Temporary removal — frees the email for fresh registration while the account can still be restored."""
+    reason = data.get("reason", "Removed by platform admin")
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.get("removed"):
+        raise HTTPException(status_code=400, detail="Account is already removed")
+    now = datetime.now(timezone.utc).isoformat()
+    placeholder_email = f"removed+{user_id}@realtouchhr-removed.invalid"
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "removed": True,
+            "removed_at": now,
+            "removed_reason": reason,
+            "original_email": user["email"],
+            "email": placeholder_email,
+            "disabled": True,
+        }}
+    )
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.audit_log.insert_one({
+        "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+        "company_id": None, "user_id": admin.user_id, "user_name": admin.name,
+        "action": "user_removed", "entity_type": "user", "entity_id": user_id,
+        "details": {"reason": reason, "freed_email": user["email"]}, "timestamp": now,
+    })
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/restore")
+async def restore_user(user_id: str, admin: CurrentUser = Depends(get_platform_admin)):
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.get("removed"):
+        raise HTTPException(status_code=400, detail="Account is not removed")
+    original_email = user.get("original_email")
+    clash = await db.users.find_one({"email": original_email}, {"_id": 0})
+    if clash and clash.get("user_id") != user_id:
+        raise HTTPException(status_code=400, detail="That email has since been used by another account — cannot restore")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {"email": original_email, "removed": False, "disabled": False},
+            "$unset": {"removed_at": "", "removed_reason": "", "original_email": ""},
+        }
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+        "company_id": None, "user_id": admin.user_id, "user_name": admin.name,
+        "action": "user_restored", "entity_type": "user", "entity_id": user_id,
+        "details": {}, "timestamp": now,
+    })
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/delete")
+async def delete_user_permanently(user_id: str, data: dict, admin: CurrentUser = Depends(get_platform_admin)):
+    """Permanent deletion — the account row is removed entirely, immediately freeing the email."""
+    confirm = data.get("confirm")
+    if confirm != user_id:
+        raise HTTPException(status_code=400, detail="Pass confirm=user_id to confirm deletion")
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.users.delete_one({"user_id": user_id})
+    await db.audit_log.insert_one({
+        "audit_id": f"audit_{uuid.uuid4().hex[:12]}",
+        "company_id": "platform", "user_id": admin.user_id, "user_name": admin.name,
+        "action": "user_deleted_permanently", "entity_type": "user", "entity_id": user_id,
+        "details": {"freed_email": user.get("original_email") or user.get("email")}, "timestamp": now,
+    })
+    return {"ok": True}
+
+
 # ==================== FEATURE FLAGS (legacy simple store — superseded by /feature-flags below) ====================
 
 @router.get("/feature-flags/legacy")
