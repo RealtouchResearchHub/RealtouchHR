@@ -22,13 +22,18 @@ export async function downloadPayslipWithPaywall({
     filename,
     originUrl = window.location.origin,
     onPaywall,
+    selfService = false,
 }) {
     const token = localStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
 
+    const downloadUrl = selfService
+        ? `${API_URL}/api/self-service/payslips/${payrunId}/pdf`
+        : `${API_URL}/api/payroll/runs/${payrunId}/payslips/${employeeId}/pdf`;
+
     try {
         const res = await axios.get(
-            `${API_URL}/api/payroll/runs/${payrunId}/payslips/${employeeId}/pdf`,
+            downloadUrl,
             { headers, withCredentials: true, responseType: 'blob' }
         );
         const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
@@ -76,7 +81,7 @@ export async function downloadPayslipWithPaywall({
                         );
                         if (co.data?.checkout_url) {
                             sessionStorage.setItem('pending_payslip_download', JSON.stringify({
-                                payrunId, employeeId, filename,
+                                payrunId, employeeId, filename, selfService,
                                 session_id: co.data.session_id,
                                 isBulk: true,
                             }));
@@ -94,13 +99,13 @@ export async function downloadPayslipWithPaywall({
                 const co = await axios.post(
                     `${API_URL}/api/payments/checkout/payslip`,
                     {
-                        payslip_id: `${payrunId}:${employeeId}`,
+                        payslip_id: selfService ? payrunId : `${payrunId}:${employeeId}`,
                         origin_url: originUrl,
                     },
                     { headers, withCredentials: true }
                 );
                 sessionStorage.setItem('pending_payslip_download', JSON.stringify({
-                    payrunId, employeeId, filename,
+                    payrunId, employeeId, filename, selfService,
                     session_id: co.data.session_id,
                 }));
                 if (co.data?.checkout_url) {

@@ -3,10 +3,8 @@ RealtouchHR - Employee Self-Service Routes
 Portal for employees to view payslips, request leave, update details
 """
 from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi.responses import StreamingResponse
 from datetime import datetime, timezone
 from typing import List, Optional
-import io
 import logging
 import os
 import sys
@@ -293,44 +291,10 @@ async def get_my_payslips(
     return result
 
 
-@router.get("/payslips/{payrun_id}/download")
-async def download_my_payslip(
-    payrun_id: str,
-    user: User = Depends(get_current_user)
-):
-    """Download own payslip as PDF"""
-    employee = await get_employee_for_user(user)
-    
-    # Get payslip
-    payslip = await db.payslips.find_one(
-        {"payrun_id": payrun_id, "employee_id": employee["employee_id"]},
-        {"_id": 0}
-    )
-    if not payslip:
-        raise HTTPException(status_code=404, detail="Payslip not found")
-    
-    # Get pay run
-    payrun = await db.pay_runs.find_one({"payrun_id": payrun_id}, {"_id": 0})
-    if not payrun:
-        raise HTTPException(status_code=404, detail="Pay run not found")
-    
-    # Get company
-    company = await db.companies.find_one(
-        {"company_id": employee.get("company_id")},
-        {"_id": 0}
-    )
-    
-    # Generate PDF
-    from services.pdf_service import generate_payslip_pdf
-    pdf_bytes = generate_payslip_pdf(payslip, company, payrun, employee)
-    
-    filename = f"payslip_{employee['last_name']}_{payrun['period_end']}.pdf"
-    
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+# Note: payslip PDF download lives in server.py at GET /self-service/payslips/{payrun_id}/pdf,
+# which enforces the £5 download paywall via download_gate. This route intentionally has no
+# duplicate here — a prior unguarded duplicate at /payslips/{payrun_id}/download bypassed
+# payment entirely and has been removed.
 
 
 # ==================== LEAVE ====================

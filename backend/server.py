@@ -2775,6 +2775,7 @@ def generate_payslip_pdf(payslip: dict, company: dict, pay_period: dict) -> byte
 @api_router.get("/payroll/runs/{payrun_id}/payslips/{employee_id}/pdf")
 async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = Depends(get_current_user)):
     """Download individual payslip as PDF — requires valid download pass (£5 per download, blocked during trial)"""
+    require_roles(user, ADMIN_ROLES)
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
@@ -2821,6 +2822,7 @@ async def download_payslip_pdf(payrun_id: str, employee_id: str, user: User = De
 @api_router.get("/payroll/runs/{payrun_id}/payslips/pdf")
 async def download_all_payslips_pdf(payrun_id: str, user: User = Depends(get_current_user)):
     """Download all payslips for a pay run as a single PDF"""
+    require_roles(user, ADMIN_ROLES)
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     

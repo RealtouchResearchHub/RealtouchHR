@@ -5,11 +5,12 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
-import { 
-  User, FileText, Calendar, CreditCard, 
+import {
+  User, FileText, Calendar, CreditCard,
   Download, Clock, CheckCircle, XCircle, AlertCircle,
   Edit, Save, X
 } from 'lucide-react';
+import PaywallModal from '../shared/PaywallModal';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -23,10 +24,35 @@ export default function SelfServicePortal() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState('');
+  const [paywallResolver, setPaywallResolver] = useState(null);
+
+  const handlePaywallChoice = (choice) => {
+    setPaywallOpen(false);
+    if (paywallResolver) {
+      paywallResolver(choice);
+      setPaywallResolver(null);
+    }
+  };
 
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  // Resume a pending payslip download after returning from Stripe
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const status = params.get('status');
+    if (sessionId && status === 'success') {
+      (async () => {
+        const { resumePendingPayslipDownload } = await import('../../lib/payslipDownload');
+        await resumePendingPayslipDownload(sessionId);
+        window.history.replaceState({}, '', window.location.pathname);
+      })();
+    }
+  }, []);
 
   const fetchData = async () => {
     if (!token) return;
@@ -81,28 +107,17 @@ export default function SelfServicePortal() {
   };
 
   const handleDownloadPayslip = async (payrunId) => {
-    try {
-      const response = await fetch(`${API_URL}/api/self-service/payslips/${payrunId}/download`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `payslip_${payrunId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        toast.success('Payslip downloaded');
-      } else {
-        toast.error('Failed to download payslip');
-      }
-    } catch (error) {
-      toast.error('Error downloading payslip');
-    }
+    const { downloadPayslipWithPaywall } = await import('../../lib/payslipDownload');
+    await downloadPayslipWithPaywall({
+      payrunId,
+      filename: `payslip_${payrunId}.pdf`,
+      selfService: true,
+      onPaywall: (message) => new Promise((resolve) => {
+        setPaywallMessage(message);
+        setPaywallResolver(() => resolve);
+        setPaywallOpen(true);
+      }),
+    });
   };
 
   const getStatusBadge = (status) => {
@@ -539,6 +554,12 @@ export default function SelfServicePortal() {
           </CardContent>
         </Card>
       )}
+
+      <PaywallModal
+        open={paywallOpen}
+        message={paywallMessage}
+        onChoice={handlePaywallChoice}
+      />
     </div>
   );
 }

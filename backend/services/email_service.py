@@ -129,6 +129,14 @@ class EmailService:
         html = subscription_confirmation_email(user_name, plan_name, amount, currency)
         return await self.send_email(to_email, subject, html)
 
+    async def send_payslip_payment_confirmation(self, to_email: str, amount: float,
+                                                 currency: str = "gbp",
+                                                 user_name: str = "there",
+                                                 receipt_url: Optional[str] = None) -> dict:
+        subject = "Payment Receipt - Payslip Download"
+        html = payslip_payment_confirmation_email(user_name, amount, currency, receipt_url)
+        return await self.send_email(to_email, subject, html)
+
 
 # ==================== EMAIL TEMPLATES ====================
 
@@ -543,6 +551,39 @@ def subscription_confirmation_email(
                 View Billing
             </a>
         </div>
+    """
+    return get_base_template(content)
+
+
+def payslip_payment_confirmation_email(
+    user_name: str,
+    amount: float,
+    currency: str = "gbp",
+    receipt_url: Optional[str] = None
+) -> str:
+    """Payslip download payment receipt"""
+    currency_symbol = "£" if currency.lower() == "gbp" else "$" if currency.lower() == "usd" else currency.upper() + " "
+    receipt_link = f"""
+        <div style="text-align: center; margin-top: 8px;">
+            <a href="{receipt_url}" style="color: #4f46e5; font-size: 14px; text-decoration: underline;">View Stripe receipt</a>
+        </div>
+    """ if receipt_url else ""
+    content = f"""
+        <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px;">
+            Payment Received
+        </h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi {user_name},
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+            Thanks for your payment — your payslip download is ready.
+        </p>
+        <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); border-radius: 8px; padding: 24px; margin: 0 0 24px 0; text-align: center;">
+            <p style="color: #e0e7ff; font-size: 14px; margin: 0 0 8px 0;">Amount charged</p>
+            <p style="color: #ffffff; font-size: 36px; font-weight: 700; margin: 0;">{currency_symbol}{amount:,.2f}</p>
+            <p style="color: #c7d2fe; font-size: 14px; margin: 8px 0 0 0;">Payslip download</p>
+        </div>
+        {receipt_link}
     """
     return get_base_template(content)
 

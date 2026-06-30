@@ -658,6 +658,17 @@ class PaymentService:
                 "timestamp": now.isoformat()
             })
 
+            # Send payment receipt email — non-fatal: never let this block the download pass
+            try:
+                from services.email_service import email_service
+                await email_service.send_payslip_payment_confirmation(
+                    to_email=transaction.get("user_email"),
+                    amount=transaction.get("amount"),
+                    currency=transaction.get("currency", "gbp"),
+                )
+            except Exception as email_exc:
+                logger.warning("Payslip payment confirmation email failed (non-fatal): %s", email_exc)
+
         elif payment_type == "addon":
             addon_id = transaction.get("addon_id")
             quantity = transaction.get("quantity", 1)
