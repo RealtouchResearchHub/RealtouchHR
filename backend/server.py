@@ -1142,8 +1142,24 @@ async def get_company(user: User = Depends(get_current_user)):
 @api_router.put("/company")
 async def update_company(data: dict, user: User = Depends(get_current_user)):
     if not user.company_id:
-        raise HTTPException(status_code=404, detail="No company found")
-    
+        # User registered without a company name — create one now so Settings can complete setup.
+        now = datetime.now(timezone.utc)
+        company_id = f"company_{uuid.uuid4().hex[:12]}"
+        company_doc = {
+            "company_id": company_id,
+            "name": data.get("name") or "My Company",
+            "owner_id": user.user_id,
+            "payroll_frequency": "monthly",
+            "setup_completed": False,
+            "trial_active": True,
+            "trial_started_at": now.isoformat(),
+            "trial_ends_at": (now + timedelta(days=7)).isoformat(),
+            "created_at": now.isoformat(),
+        }
+        await db.companies.insert_one(company_doc)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"company_id": company_id}})
+        user.company_id = company_id
+
     # Allow updating HMRC + sponsor licence fields
     allowed_fields = [
         "name", "industry", "size", "address", "payroll_frequency", "setup_completed",

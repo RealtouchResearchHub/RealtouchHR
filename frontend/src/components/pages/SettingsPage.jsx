@@ -159,7 +159,7 @@ export default function SettingsPage() {
             toast.success('Company settings saved');
             refreshCompany();
         } catch (error) {
-            toast.error('Failed to save settings');
+            toast.error(error.response?.data?.detail || 'Failed to save settings');
         } finally {
             setSaving(false);
         }
