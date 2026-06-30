@@ -595,7 +595,7 @@ def employee_invite_email(
 # Placeholders: {{name}}, {{company_name}}
 # ===========================================================================
 
-DEFAULT_WELCOME_SUBJECT = "Welcome to RealtouchHR – Your Compliance-Ready HR Platform 🎉"
+DEFAULT_WELCOME_SUBJECT = "Welcome to RealtouchHR – Your Compliance-Ready HR Platform"
 
 DEFAULT_WELCOME_HTML_BODY = """\
 <!DOCTYPE html>
