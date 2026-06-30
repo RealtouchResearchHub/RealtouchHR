@@ -185,6 +185,8 @@ export default function EmployeeDetail() {
             try {
                 await axios.post(`${API_URL}/api/employees/${id}/avatar`, { avatar_url: ev.target.result }, { withCredentials: true });
                 toast.success('Profile photo updated');
+                setEmployee(prev => prev ? { ...prev, avatar_url: ev.target.result } : prev);
+                setFormData(prev => prev ? { ...prev, avatar_url: ev.target.result } : prev);
                 fetchEmployee();
             } catch (err) {
                 toast.error(err.response?.data?.detail || 'Failed to upload photo');

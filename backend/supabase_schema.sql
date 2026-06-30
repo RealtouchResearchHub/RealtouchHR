@@ -1450,6 +1450,13 @@ alter table if exists employees add column if not exists title             text;
 alter table if exists employees add column if not exists middle_name       text;
 alter table if exists employees add column if not exists working_pattern   text;
 alter table if exists employees add column if not exists hours_per_week    numeric;
+alter table if exists employees add column if not exists avatar_url        text;
+
+-- companies: logo storage
+alter table if exists companies add column if not exists logo_url          text;
+
+-- users: forced password change on first login for employee-created accounts
+alter table if exists users add column if not exists must_change_password  boolean default false;
 
 -- documents: columns used by the create-document route
 alter table if exists documents add column if not exists doc_type    text;

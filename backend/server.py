@@ -191,6 +191,7 @@ class User(BaseModel):
     auth_method: Optional[str] = None
     is_sandbox: bool = False
     sandbox_expires_at: Optional[str] = None
+    must_change_password: bool = False
     created_at: datetime
 
 class TokenResponse(BaseModel):
@@ -215,6 +216,7 @@ class Company(BaseModel):
     payroll_frequency: str = "monthly"
     owner_id: str
     setup_completed: bool = False
+    logo_url: Optional[str] = None
     created_at: datetime
     # HMRC references
     paye_reference: Optional[str] = None
@@ -314,6 +316,7 @@ class Employee(BaseModel):
     compliance_score: int = 0
     compliance_issues: List[str] = []
     immigration_status: Optional[dict] = None
+    avatar_url: Optional[str] = None
     student_loan_plan: Optional[str] = None
     has_postgrad_loan: bool = False
     pension_enrolled: bool = False
@@ -690,6 +693,14 @@ async def get_current_user(request: Request) -> User:
         user_doc["is_platform_admin"] = True
 
     return User(**_normalize_user_doc(user_doc))
+
+# Roles that may administer company-wide / other-employees' data.
+# A plain "employee" role is intentionally excluded regardless of job_title.
+ADMIN_ROLES = ("owner", "admin", "hr_admin", "hr_manager", "payroll_admin")
+
+def require_roles(user: User, allowed: tuple):
+    if user.role not in allowed:
+        raise HTTPException(status_code=403, detail="You do not have permission to perform this action")
 
 async def create_audit_entry(company_id: str, user: User, action: str, entity_type: str, entity_id: str, details: dict, reason: str = None):
     audit = {
@@ -1141,6 +1152,7 @@ async def get_company(user: User = Depends(get_current_user)):
 
 @api_router.put("/company")
 async def update_company(data: dict, user: User = Depends(get_current_user)):
+    require_roles(user, ("owner", "admin"))
     if not user.company_id:
         # User registered without a company name — create one now so Settings can complete setup.
         now = datetime.now(timezone.utc)
@@ -1198,6 +1210,7 @@ async def update_company(data: dict, user: User = Depends(get_current_user)):
 @api_router.post("/company/logo")
 async def upload_company_logo(data: dict, user: User = Depends(get_current_user)):
     """Store a base64-encoded company logo (max ~500 KB after encoding)."""
+    require_roles(user, ("owner", "admin"))
     if not user.company_id:
         raise HTTPException(status_code=404, detail="No company found")
     logo_data = data.get("logo_url") or data.get("logo") or ""
@@ -1207,6 +1220,8 @@ async def upload_company_logo(data: dict, user: User = Depends(get_current_user)
         {"company_id": user.company_id},
         {"$set": {"logo_url": logo_data}},
     )
+    # Also use the logo as the uploader's account profile image
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"picture": logo_data}})
     return {"message": "Logo updated", "logo_url": logo_data[:60] + "…"}
 
 @api_router.get("/discount-codes/validate")
@@ -1250,6 +1265,7 @@ async def companies_house_search(q: str, user: User = Depends(get_current_user))
 
 @api_router.post("/employees", response_model=Employee)
 async def create_employee(data: EmployeeCreate, user: User = Depends(get_current_user)):
+    require_roles(user, ("owner", "admin", "hr_admin", "hr_manager"))
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
 
@@ -1416,9 +1432,10 @@ async def create_employee(data: EmployeeCreate, user: User = Depends(get_current
 
 @api_router.get("/employees", response_model=List[Employee])
 async def get_employees(user: User = Depends(get_current_user)):
+    require_roles(user, ADMIN_ROLES)
     if not user.company_id:
         return []
-    
+
     employees = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
 
     result = []
@@ -1437,11 +1454,14 @@ async def get_employee(employee_id: str, user: User = Depends(get_current_user))
     emp = await db.employees.find_one({"employee_id": employee_id, "company_id": user.company_id}, {"_id": 0})
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if user.role not in ADMIN_ROLES and emp.get("email") != user.email:
+        raise HTTPException(status_code=403, detail="You can only view your own employee record")
 
     return Employee(**_normalize_employee_doc(emp))
 
 @api_router.put("/employees/{employee_id}")
 async def update_employee(employee_id: str, data: dict, user: User = Depends(get_current_user)):
+    require_roles(user, ADMIN_ROLES)
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     
@@ -1585,6 +1605,8 @@ async def upload_employee_avatar(employee_id: str, data: dict, user: User = Depe
     emp = await db.employees.find_one({"employee_id": employee_id, "company_id": user.company_id})
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if user.role not in ADMIN_ROLES and emp.get("email") != user.email:
+        raise HTTPException(status_code=403, detail="You can only update your own profile photo")
     avatar = data.get("avatar_url") or ""
     if len(avatar) > 700_000:
         raise HTTPException(status_code=413, detail="Image too large. Max ~500 KB.")
@@ -1592,6 +1614,9 @@ async def upload_employee_avatar(employee_id: str, data: dict, user: User = Depe
         {"employee_id": employee_id},
         {"$set": {"avatar_url": avatar, "updated_at": datetime.now(timezone.utc).isoformat()}},
     )
+    # Also use the photo as the linked user account's profile image, if one exists
+    if emp.get("email"):
+        await db.users.update_one({"email": emp["email"]}, {"$set": {"picture": avatar}})
     return {"message": "Avatar updated"}
 
 @api_router.delete("/employees/{employee_id}")
@@ -1948,9 +1973,10 @@ async def update_timesheet(timesheet_id: str, data: dict, user: User = Depends(g
 
 @api_router.post("/payroll/runs", response_model=PayRun)
 async def create_pay_run(data: PayRunCreate, user: User = Depends(get_current_user)):
+    require_roles(user, ("owner", "admin", "payroll_admin"))
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
     payrun_id = f"payrun_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
@@ -2083,9 +2109,10 @@ async def get_payslips(payrun_id: str, user: User = Depends(get_current_user)):
 
 @api_router.put("/payroll/runs/{payrun_id}")
 async def update_pay_run(payrun_id: str, data: dict, user: User = Depends(get_current_user)):
+    require_roles(user, ("owner", "admin", "payroll_admin"))
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
     update_fields = {}
     if "status" in data:
         update_fields["status"] = data["status"]
@@ -3371,6 +3398,7 @@ async def run_payroll_health_check(payrun_id: str, user: User = Depends(get_curr
 @api_router.post("/hmrc/rti/submit")
 async def submit_rti(data: RTISubmissionRequest, user: User = Depends(get_current_user)):
     """Submit RTI data to HMRC (test mode or live)"""
+    require_roles(user, ("owner", "admin", "payroll_admin"))
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     

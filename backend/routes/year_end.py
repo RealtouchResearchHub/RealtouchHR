@@ -111,6 +111,8 @@ async def preview_year_end(tax_year: str = "2024-25", user: CurrentUser = Depend
 @router.post("/close")
 async def close_year_end(tax_year: str = "2024-25", user: CurrentUser = Depends(get_current_user)):
     """Mark final FPS, queue P60 generation for all active employees, generate EPS submission record."""
+    if user.role not in ("owner", "admin", "payroll_admin"):
+        raise HTTPException(status_code=403, detail="You do not have permission to close the payroll year")
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     company_id = user.company_id

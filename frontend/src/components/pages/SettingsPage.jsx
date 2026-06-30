@@ -38,7 +38,7 @@ import { toast } from 'sonner';
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function SettingsPage() {
-    const { user, company, updatePreferences, refreshCompany } = useAuth();
+    const { user, company, updatePreferences, refreshCompany, refresh } = useAuth();
     const { theme, setTheme } = useTheme();
     const logoInputRef = useRef(null);
     const [companyData, setCompanyData] = useState({
@@ -102,6 +102,7 @@ export default function SettingsPage() {
             await axios.post(`${API_URL}/api/company/logo`, { logo_url: logoPreview }, { withCredentials: true });
             toast.success('Company logo saved');
             refreshCompany();
+            refresh();
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Logo upload failed');
         } finally {

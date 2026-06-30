@@ -71,6 +71,8 @@ async def get_termination_reasons():
 
 @router.post("/terminate")
 async def terminate_employee(req: TerminateRequest, user: CurrentUser = Depends(get_current_user)):
+    if user.role not in ("owner", "admin", "hr_admin", "hr_manager"):
+        raise HTTPException(status_code=403, detail="You do not have permission to terminate employees")
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     from services.offboarding_service import offboarding_service
@@ -106,6 +108,8 @@ async def list_terminations(user: CurrentUser = Depends(get_current_user)):
 @router.post("/reinstate/{employee_id}")
 async def reinstate_employee(employee_id: str, user: CurrentUser = Depends(get_current_user)):
     """Undo termination (clear leaver status)"""
+    if user.role not in ("owner", "admin", "hr_admin", "hr_manager"):
+        raise HTTPException(status_code=403, detail="You do not have permission to reinstate employees")
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
     now = datetime.now(timezone.utc).isoformat()

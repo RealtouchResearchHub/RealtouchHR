@@ -131,6 +131,31 @@ function AdminRoute({ children }) {
     return <MainLayout>{children}</MainLayout>;
 }
 
+// Blocks the plain "employee" role from admin-level pages (company settings,
+// payroll, HMRC, employee records, year-end) regardless of job_title.
+function EmployeeRestrictedRoute({ children }) {
+    const { user, loading } = useAuth();
+    const location = useLocation();
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (user.role === 'employee') {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return <MainLayout>{children}</MainLayout>;
+}
+
 // Super Admin route — requires platform_admin flag
 function SuperAdminRoute({ children }) {
     const { user, loading } = useAuth();
@@ -197,26 +222,26 @@ function AppRouter() {
             
             {/* Protected Routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
-            <Route path="/employees/new" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
-            <Route path="/employees/:id" element={<ProtectedRoute><EmployeeDetail /></ProtectedRoute>} />
+            <Route path="/employees" element={<EmployeeRestrictedRoute><EmployeesPage /></EmployeeRestrictedRoute>} />
+            <Route path="/employees/new" element={<EmployeeRestrictedRoute><EmployeesPage /></EmployeeRestrictedRoute>} />
+            <Route path="/employees/:id" element={<EmployeeRestrictedRoute><EmployeeDetail /></EmployeeRestrictedRoute>} />
             <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
             <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
             <Route path="/scheduling" element={<ProtectedRoute><SchedulingPage /></ProtectedRoute>} />
-            <Route path="/payroll" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
-            <Route path="/payroll/new" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
-            <Route path="/payroll/:id" element={<ProtectedRoute><PayRunDetail /></ProtectedRoute>} />
+            <Route path="/payroll" element={<EmployeeRestrictedRoute><PayrollPage /></EmployeeRestrictedRoute>} />
+            <Route path="/payroll/new" element={<EmployeeRestrictedRoute><PayrollPage /></EmployeeRestrictedRoute>} />
+            <Route path="/payroll/:id" element={<EmployeeRestrictedRoute><PayRunDetail /></EmployeeRestrictedRoute>} />
             <Route path="/audit" element={<ProtectedRoute><AuditPage /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<EmployeeRestrictedRoute><SettingsPage /></EmployeeRestrictedRoute>} />
             <Route path="/import" element={<ProtectedRoute><BulkImportPage /></ProtectedRoute>} />
             <Route path="/self-service" element={<ProtectedRoute><SelfServicePortal /></ProtectedRoute>} />
-            <Route path="/hmrc" element={<ProtectedRoute><HMRCDashboard /></ProtectedRoute>} />
+            <Route path="/hmrc" element={<EmployeeRestrictedRoute><HMRCDashboard /></EmployeeRestrictedRoute>} />
             <Route path="/rti-sync" element={<ProtectedRoute><HMRCSubmissionPage /></ProtectedRoute>} />
             <Route path="/ukvi" element={<ProtectedRoute><UKVICompliancePage /></ProtectedRoute>} />
             <Route path="/enterprise" element={<ProtectedRoute><EnterprisePage /></ProtectedRoute>} />
             <Route path="/time-tracking" element={<ProtectedRoute><TimeSchedulingPage /></ProtectedRoute>} />
             <Route path="/statutory" element={<ProtectedRoute><StatutoryPaymentsPage /></ProtectedRoute>} />
-            <Route path="/year-end" element={<ProtectedRoute><YearEndPage /></ProtectedRoute>} />
+            <Route path="/year-end" element={<EmployeeRestrictedRoute><YearEndPage /></EmployeeRestrictedRoute>} />
             <Route path="/admin" element={<AdminRoute><AdminPortalPage /></AdminRoute>} />
             <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminPage /></SuperAdminRoute>} />
             <Route path="/performance" element={<ProtectedRoute><PerformancePage /></ProtectedRoute>} />

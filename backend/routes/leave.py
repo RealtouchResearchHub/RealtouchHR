@@ -171,6 +171,8 @@ async def update_leave_request(
 
     update_fields = {}
     if "status" in data:
+        if user.role not in ("owner", "admin", "hr_admin", "hr_manager", "manager"):
+            raise HTTPException(status_code=403, detail="You do not have permission to approve or reject leave requests")
         update_fields["status"] = data["status"]
         from services.audit_service import create_notification
         from services.email_service import email_service, get_base_template

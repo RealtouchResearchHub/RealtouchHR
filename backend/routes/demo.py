@@ -346,8 +346,13 @@ async def create_sandbox_account():
 
 
 @router.post("/sandbox/cleanup")
-async def cleanup_expired_sandboxes():
-    """Delete sandbox companies + users + their data older than 24h. Idempotent."""
+async def cleanup_expired_sandboxes(request: Request):
+    """Delete sandbox companies + users + their data older than 24h. Idempotent.
+    Intended to be called by a scheduled job, not end users — gated by a shared
+    secret when DEMO_CLEANUP_SECRET is configured."""
+    cleanup_secret = os.environ.get("DEMO_CLEANUP_SECRET", "")
+    if cleanup_secret and request.headers.get("X-Cleanup-Secret") != cleanup_secret:
+        raise HTTPException(status_code=403, detail="Not authorized")
     now = datetime.now(timezone.utc)
     cutoff = now.isoformat()
     expired_companies = await db.companies.find(

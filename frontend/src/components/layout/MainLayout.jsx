@@ -65,15 +65,15 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Employees', href: '/employees', icon: Users },
+    { name: 'Employees', href: '/employees', icon: Users, employeeRestricted: true },
     { name: 'Leave', href: '/leave', icon: Calendar },
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Time Tracking', href: '/time-tracking', icon: Clock },
     { name: 'Scheduling', href: '/scheduling', icon: Clock },
-    { name: 'Payroll', href: '/payroll', icon: CreditCard },
+    { name: 'Payroll', href: '/payroll', icon: CreditCard, employeeRestricted: true },
     { name: 'Statutory Pay', href: '/statutory', icon: HeartPulse },
-    { name: 'Year-End', href: '/year-end', icon: CalendarCheck },
-    { name: 'HMRC RTI', href: '/hmrc', icon: Send },
+    { name: 'Year-End', href: '/year-end', icon: CalendarCheck, employeeRestricted: true },
+    { name: 'HMRC RTI', href: '/hmrc', icon: Send, employeeRestricted: true },
     { name: 'RTI Sync', href: '/rti-sync', icon: Shield },
     { name: 'UKVI Compliance', href: '/ukvi', icon: Globe },
     { name: 'Import', href: '/import', icon: Upload },
@@ -96,7 +96,7 @@ const navigation = [
     { name: 'Recruitment', href: '/recruitment', icon: Briefcase },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
     { name: 'Billing', href: '/billing', icon: Receipt, ownerOnly: true },
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Settings', href: '/settings', icon: Settings, employeeRestricted: true },
 ];
 
 export default function MainLayout({ children }) {
@@ -112,6 +112,10 @@ export default function MainLayout({ children }) {
     const [newPwd, setNewPwd] = useState('');
     const [confirmPwd, setConfirmPwd] = useState('');
     const [changingPwd, setChangingPwd] = useState(false);
+
+    useEffect(() => {
+        setForceChangePwd(!!user?.must_change_password);
+    }, [user?.must_change_password]);
 
     useEffect(() => {
         const loadTour = () => {
@@ -207,6 +211,7 @@ export default function MainLayout({ children }) {
                                 if (item.adminOnly && user?.role !== 'owner' && user?.role !== 'admin') return false;
                                 if (item.hrOnly && !['owner', 'admin', 'hr_manager'].includes(user?.role)) return false;
                                 if (item.platformAdminOnly && !user?.is_platform_admin) return false;
+                                if (item.employeeRestricted && user?.role === 'employee') return false;
                                 return true;
                             })
                             .map((item) => {
