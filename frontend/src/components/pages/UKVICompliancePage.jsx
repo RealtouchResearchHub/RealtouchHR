@@ -116,7 +116,6 @@ export default function UKVICompliancePage() {
   const handleViewScan = async (scanId) => {
     setSelectedScanId(scanId);
     try {
-      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/preview`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -133,7 +132,6 @@ export default function UKVICompliancePage() {
   const handleExportReport = async (scanId, format) => {
     setExportLoading(format);
     try {
-      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/scans/${scanId}/export?format=${format}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -169,7 +167,6 @@ export default function UKVICompliancePage() {
 
   const handleResolveAlert = async (alertId, resolution) => {
     try {
-      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/alerts/${alertId}/resolve`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -189,7 +186,6 @@ export default function UKVICompliancePage() {
 
   const handleUpdateAlertStatus = async (alertId, status) => {
     try {
-      const token = token;
       const res = await fetch(`${BACKEND_URL}/api/ukvi/compliance/alerts/${alertId}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -209,7 +205,6 @@ export default function UKVICompliancePage() {
 
   const handleGenerateAlerts = async () => {
     try {
-      const token = token;
       const response = await fetch(`${BACKEND_URL}/api/ukvi/alerts/generate`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }

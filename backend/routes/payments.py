@@ -62,6 +62,7 @@ class CheckStatusRequest(BaseModel):
 class PayslipCheckoutRequest(BaseModel):
     payslip_id: str
     origin_url: str
+    return_path: str = "/payroll"
 
 
 # ==================== AUTH HELPERS ====================
@@ -326,7 +327,8 @@ async def create_payslip_checkout(
             company_id=user.company_id,
             user_id=user.user_id,
             user_email=user.email,
-            origin_url=request_data.origin_url
+            origin_url=request_data.origin_url,
+            return_path=request_data.return_path
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

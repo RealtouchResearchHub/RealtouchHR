@@ -340,15 +340,23 @@ class PaymentService:
         company_id: str,
         user_id: str,
         user_email: str,
-        origin_url: str
+        origin_url: str,
+        return_path: str = "/payroll"
     ) -> Dict[str, Any]:
         """
         Create a Stripe checkout session for a single £5 payslip download.
         Amount is server-enforced.
+
+        return_path is the page the user initiated the download from (e.g.
+        "/payroll/<id>" for admins, "/self-service" for employees) so Stripe
+        redirects back to a page that actually has a download-resume handler
+        and that the user's role is allowed to visit.
         """
         from services.trial_service import PAYSLIP_DOWNLOAD_PRICE, PAYSLIP_DOWNLOAD_CURRENCY
-        success_url = f"{origin_url}/payroll?session_id={{CHECKOUT_SESSION_ID}}&status=success&payslip_id={payslip_id}"
-        cancel_url = f"{origin_url}/payroll?status=cancelled"
+        if not return_path.startswith("/") or return_path.startswith("//"):
+            return_path = "/payroll"
+        success_url = f"{origin_url}{return_path}?session_id={{CHECKOUT_SESSION_ID}}&status=success&payslip_id={payslip_id}"
+        cancel_url = f"{origin_url}{return_path}?status=cancelled"
         webhook_url = f"{origin_url}/api/webhook/stripe"
 
         stripe_checkout = StripeCheckout(

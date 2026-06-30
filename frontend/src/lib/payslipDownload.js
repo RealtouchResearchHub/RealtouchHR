@@ -101,6 +101,7 @@ export async function downloadPayslipWithPaywall({
                     {
                         payslip_id: selfService ? payrunId : `${payrunId}:${employeeId}`,
                         origin_url: originUrl,
+                        return_path: window.location.pathname,
                     },
                     { headers, withCredentials: true }
                 );
