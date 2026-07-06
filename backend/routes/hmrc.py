@@ -24,6 +24,7 @@ ROOT_DIR = Path(__file__).parent.parent
 load_dotenv(ROOT_DIR / '.env')
 
 from database import db
+from feature_flags import get_flag, log_payroll_event
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'default-secret-change-in-production')
 JWT_ALGORITHM = "HS256"
@@ -166,6 +167,7 @@ class RTIStatus:
     VALIDATED = "validated"
     SUBMITTING = "submitting"
     SUBMITTED = "submitted"
+    SIMULATED = "simulated"  # sandbox mock — never a real HMRC transmission
     POLLING = "polling"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
@@ -296,8 +298,11 @@ class HMRCService:
             "success": True,
             "correlation_id": correlation_id,
             "poll_url": f"{self.base_url}/poll/{correlation_id}",
-            "status": "submitted",
-            "message": "Submission received. This is a TEST submission.",
+            "status": "simulated",
+            "is_simulated": True,
+            "submission_channel": "sandbox_mock",
+            "live_submission": False,
+            "message": "Recorded as sandbox simulation — not sent to HMRC.",
             "timestamp": now_iso()
         }
     
@@ -430,7 +435,9 @@ class HMRCService:
         # For test mode, we return a mock accepted response
         return {
             "status": "accepted",
-            "message": "Submission accepted by HMRC (TEST MODE)",
+            "is_simulated": True,
+            "live_submission": False,
+            "message": "Sandbox simulation — not a real HMRC acceptance (TEST MODE)",
             "timestamp": now_iso()
         }
 
@@ -676,7 +683,19 @@ async def submit_fps(
     """
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
+    if await get_flag("rti_legacy_hmrc_disabled"):
+        await log_payroll_event(
+            "legacy_hmrc_submission_blocked",
+            {"submission_type": "FPS", "payrun_id": request.payrun_id},
+            company_id=user.company_id,
+            user_id=user.user_id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Live HMRC submission is not enabled. Use RTI Sync sandbox mode or connect an embedded payroll provider."
+        )
+
     # Get pay run
     payrun = await db.pay_runs.find_one(
         {"payrun_id": request.payrun_id, "company_id": user.company_id},
@@ -684,7 +703,7 @@ async def submit_fps(
     )
     if not payrun:
         raise HTTPException(status_code=404, detail="Pay run not found")
-    
+
     # Check if already submitted
     if payrun.get("rti_submitted"):
         raise HTTPException(
@@ -765,7 +784,10 @@ async def submit_fps(
                     {"submission_id": submission_id},
                     {
                         "$set": {
-                            "status": RTIStatus.SUBMITTED,
+                            "status": RTIStatus.SIMULATED,
+                            "is_simulated": True,
+                            "submission_channel": "sandbox_mock",
+                            "live_submission": False,
                             "correlation_id": result.get("correlation_id"),
                             "poll_url": result.get("poll_url"),
                             "hmrc_response": result,
@@ -773,23 +795,32 @@ async def submit_fps(
                         }
                     }
                 )
-                
-                # Mark pay run as submitted
+
+                # rti_submitted is never set to True here — this is a sandbox
+                # simulation, not a real HMRC Gateway/embedded-provider response.
                 await db.pay_runs.update_one(
                     {"payrun_id": request.payrun_id},
                     {
                         "$set": {
-                            "rti_submitted": True,
-                            "rti_submission_id": submission_id,
-                            "status": "submitted"
+                            "rti_submission_simulated": True,
+                            "rti_submission_id": submission_id
                         }
                     }
                 )
-                
+
+                await log_payroll_event(
+                    "rti_sandbox_simulation",
+                    {"submission_type": "FPS", "submission_id": submission_id, "payrun_id": request.payrun_id},
+                    company_id=user.company_id,
+                    user_id=user.user_id,
+                )
+
                 return {
                     "success": True,
                     "submission_id": submission_id,
-                    "status": "submitted",
+                    "status": "simulated",
+                    "is_simulated": True,
+                    "live_submission": False,
                     "correlation_id": result.get("correlation_id"),
                     "message": result.get("message"),
                     "test_mode": request.test_mode
@@ -840,19 +871,31 @@ async def submit_eps(
     """
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
+    if await get_flag("rti_legacy_hmrc_disabled"):
+        await log_payroll_event(
+            "legacy_hmrc_submission_blocked",
+            {"submission_type": "EPS"},
+            company_id=user.company_id,
+            user_id=user.user_id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Live HMRC submission is not enabled. Use RTI Sync sandbox mode or connect an embedded payroll provider."
+        )
+
     # Get company
     company = await db.companies.find_one(
         {"company_id": user.company_id},
         {"_id": 0}
     )
-    
+
     if not company.get("paye_reference"):
         raise HTTPException(
             status_code=400,
             detail="PAYE reference is required for EPS submission"
         )
-    
+
     # Create submission record
     submission_id = generate_submission_id()
     now = now_utc()
@@ -891,26 +934,38 @@ async def submit_eps(
             {"$set": {"xml_content": xml_content, "payload_hash": payload_hash, "status": RTIStatus.VALIDATED}}
         )
         
-        # Submit (test mode only for now)
+        # Submit (sandbox simulation only — legacy live path is disabled by default)
         result = await hmrc_service.submit_to_hmrc(xml_content, "EPS")
-        
+
         if result["success"]:
             await db.rti_submissions.update_one(
                 {"submission_id": submission_id},
                 {
                     "$set": {
-                        "status": RTIStatus.SUBMITTED,
+                        "status": RTIStatus.SIMULATED,
+                        "is_simulated": True,
+                        "submission_channel": "sandbox_mock",
+                        "live_submission": False,
                         "correlation_id": result.get("correlation_id"),
                         "hmrc_response": result,
                         "submitted_at": now.isoformat()
                     }
                 }
             )
-            
+
+            await log_payroll_event(
+                "rti_sandbox_simulation",
+                {"submission_type": "EPS", "submission_id": submission_id},
+                company_id=user.company_id,
+                user_id=user.user_id,
+            )
+
             return {
                 "success": True,
                 "submission_id": submission_id,
-                "status": "submitted",
+                "status": "simulated",
+                "is_simulated": True,
+                "live_submission": False,
                 "tax_month": tax_month,
                 "tax_year": tax_year,
                 "message": result.get("message")
@@ -980,7 +1035,13 @@ async def poll_submission_status(
     """Poll HMRC for submission status update"""
     if not user.company_id:
         raise HTTPException(status_code=400, detail="No company setup")
-    
+
+    if await get_flag("rti_legacy_hmrc_disabled"):
+        raise HTTPException(
+            status_code=403,
+            detail="Live HMRC submission is not enabled. Use RTI Sync sandbox mode or connect an embedded payroll provider."
+        )
+
     submission = await db.rti_submissions.find_one(
         {"submission_id": submission_id, "company_id": user.company_id},
         {"_id": 0}

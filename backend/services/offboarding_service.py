@@ -169,11 +169,11 @@ class OffboardingService:
             {"employee_id": employee_id, "company_id": company_id},
             {"_id": 0}
         )
-        if existing_enrolment and existing_enrolment.get("enrolment_status") == "enrolled":
+        if existing_enrolment and existing_enrolment.get("status") == "enrolled":
             await db.pension_enrolments.update_one(
                 {"employee_id": employee_id, "company_id": company_id},
                 {"$set": {
-                    "enrolment_status": "ceased",
+                    "status": "ceased",
                     "cessation_date": leaving_date,
                     "cessation_reason": "employment_terminated",
                     "updated_at": now.isoformat(),

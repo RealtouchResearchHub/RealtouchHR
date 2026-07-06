@@ -34,7 +34,7 @@ import SettingsPage from './components/pages/SettingsPage';
 import BulkImportPage from './components/pages/BulkImportPage';
 import OnboardingWizard from './components/pages/OnboardingWizard';
 import SelfServicePortal from './components/pages/SelfServicePortal';
-import HMRCDashboard from './components/pages/HMRCDashboard';
+import LegacyRTINotice from './components/pages/LegacyRTINotice';
 import HMRCSubmissionPage from './components/pages/HMRCSubmissionPage';
 import UKVICompliancePage from './components/pages/UKVICompliancePage';
 import EnterprisePage from './components/pages/EnterprisePage';
@@ -235,7 +235,7 @@ function AppRouter() {
             <Route path="/settings" element={<EmployeeRestrictedRoute><SettingsPage /></EmployeeRestrictedRoute>} />
             <Route path="/import" element={<ProtectedRoute><BulkImportPage /></ProtectedRoute>} />
             <Route path="/self-service" element={<ProtectedRoute><SelfServicePortal /></ProtectedRoute>} />
-            <Route path="/hmrc" element={<EmployeeRestrictedRoute><HMRCDashboard /></EmployeeRestrictedRoute>} />
+            <Route path="/hmrc" element={<EmployeeRestrictedRoute><LegacyRTINotice /></EmployeeRestrictedRoute>} />
             <Route path="/rti-sync" element={<ProtectedRoute><HMRCSubmissionPage /></ProtectedRoute>} />
             <Route path="/ukvi" element={<ProtectedRoute><UKVICompliancePage /></ProtectedRoute>} />
             <Route path="/enterprise" element={<ProtectedRoute><EnterprisePage /></ProtectedRoute>} />

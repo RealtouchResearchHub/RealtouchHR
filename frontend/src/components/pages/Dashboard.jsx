@@ -494,7 +494,7 @@ export default function Dashboard() {
                         {[
                             { date: 'Jun 2026', title: 'UKVI Compliance Scanner', desc: '2 scans/month on all plans.', tag: 'New' },
                             { date: 'Jun 2026', title: 'Employee Lifecycle Statuses', desc: 'Draft → Onboarding → Active → Archived.', tag: 'New' },
-                            { date: 'Jun 2026', title: 'RTI Sandbox Go-Live Checklist', desc: '15-item production readiness gate.', tag: 'Improved' },
+                            { date: 'Jun 2026', title: 'RTI Sandbox/Test Mode', desc: 'Payroll readiness workflow — live HMRC submission not yet enabled.', tag: 'Improved' },
                             { date: 'Jun 2026', title: 'Updated Plan Pricing', desc: 'Starter £29 · Pro £39 · Enterprise £129.', tag: 'Updated' },
                         ].map((item, i) => (
                             <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg border text-sm">

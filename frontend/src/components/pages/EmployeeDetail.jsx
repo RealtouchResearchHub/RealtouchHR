@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -713,6 +714,15 @@ export default function EmployeeDetail() {
                                     <Input type="date" value={formData.payroll_start_date?.slice(0, 10) || ''} onChange={e => setFormData({ ...formData, payroll_start_date: e.target.value })} />
                                 </div>
                             </div>
+                            <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                <AlertTitle className="text-amber-800 dark:text-amber-200">Pension auto-enrolment — internal record only</AlertTitle>
+                                <AlertDescription className="text-amber-700 dark:text-amber-300">
+                                    RealtouchHR currently records pension auto-enrolment readiness internally. Live pension provider
+                                    submission and Declaration of Compliance remain the employer's responsibility until provider
+                                    integration is enabled.
+                                </AlertDescription>
+                            </Alert>
                             <SaveButton section="payroll" />
                         </CardContent>
                     </Card>

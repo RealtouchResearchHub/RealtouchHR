@@ -128,8 +128,15 @@ async def get_rti_sync_status(user: User = Depends(get_current_user)):
     
     return {
         "engine_mode": rti_sync_engine.mode.value,
+        "is_simulated": rti_sync_engine.mode.value != "live",
+        "live_submission": rti_sync_engine.mode.value == "live" and rti_sync_engine._feature_flags["live_submission"],
         "company_configured": settings.get("paye_reference_configured") and settings.get("accounts_office_reference_configured"),
         "settings": settings,
+        "disclaimer": (
+            "HMRC does not endorse, approve or certify payroll software. Compliance is the employer's "
+            "legal responsibility. All live submissions require explicit approval and a connected live "
+            "payroll provider or HMRC integration."
+        ),
         "disclaimers": {
             "hmrc_alignment": "This software is RTI-compatible. HMRC does not endorse or certify payroll software.",
             "employer_responsibility": "Compliance with RTI regulations is the employer's legal responsibility.",
@@ -437,21 +444,40 @@ async def submit_to_hmrc(
     
     try:
         result = await rti_sync_engine.submit_to_hmrc(submission_id, user.user_id)
-        
-        # Update pay run RTI status
+
+        # Update pay run RTI status — rti_submitted is only ever set to True for a
+        # real (non-simulated) HMRC Gateway response. Sandbox simulations record
+        # rti_submission_simulated instead so nothing downstream can mistake a
+        # mock for a live filing.
         if result.get("status") == "submitted" and submission.get("payrun_id"):
-            await db.pay_runs.update_one(
-                {"payrun_id": submission["payrun_id"]},
-                {"$set": {
-                    "rti_submitted": True,
-                    "rti_submission_id": submission_id,
-                    "rti_correlation_id": result.get("correlation_id")
-                }}
-            )
-        
+            if result.get("is_simulated", True):
+                await db.pay_runs.update_one(
+                    {"payrun_id": submission["payrun_id"]},
+                    {"$set": {
+                        "rti_submission_simulated": True,
+                        "rti_submission_id": submission_id,
+                        "rti_correlation_id": result.get("correlation_id")
+                    }}
+                )
+            else:
+                await db.pay_runs.update_one(
+                    {"payrun_id": submission["payrun_id"]},
+                    {"$set": {
+                        "rti_submitted": True,
+                        "rti_submission_id": submission_id,
+                        "rti_correlation_id": result.get("correlation_id")
+                    }}
+                )
+
+        disclaimer = (
+            "This submission was made to HMRC in compliance with RTI regulations. Retain the correlation ID for your records."
+            if not result.get("is_simulated", True)
+            else "This was a sandbox simulation — not sent to live HMRC systems. Compliance is the employer's legal responsibility until live submission is enabled."
+        )
+
         return {
             **result,
-            "disclaimer": "This submission was made to HMRC in compliance with RTI regulations. Retain the correlation ID for your records."
+            "disclaimer": disclaimer
         }
         
     except ValueError as e:

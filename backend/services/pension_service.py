@@ -87,13 +87,13 @@ class PensionScheme:
     provider: str
     employer_reference: str  # Employer's reference with provider
     pension_type: PensionSchemeType
-    employer_contribution_pct: float
-    employee_contribution_pct: float
+    employer_rate: float
+    employee_rate: float
     qualifying_basis: QualifyingBasis
     is_default: bool = False
     staging_date: Optional[date] = None  # Company's AE duties start date
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    
+
     def to_dict(self) -> dict:
         return {
             "scheme_id": self.scheme_id,
@@ -102,8 +102,8 @@ class PensionScheme:
             "provider": self.provider,
             "employer_reference": self.employer_reference,
             "pension_type": self.pension_type.value if isinstance(self.pension_type, PensionSchemeType) else self.pension_type,
-            "employer_contribution_pct": self.employer_contribution_pct,
-            "employee_contribution_pct": self.employee_contribution_pct,
+            "employer_rate": self.employer_rate,
+            "employee_rate": self.employee_rate,
             "qualifying_basis": self.qualifying_basis.value if isinstance(self.qualifying_basis, QualifyingBasis) else self.qualifying_basis,
             "is_default": self.is_default,
             "staging_date": self.staging_date.isoformat() if self.staging_date else None,
@@ -117,34 +117,40 @@ class EmployeePensionEnrolment:
     enrolment_id: str
     employee_id: str
     company_id: str
-    pension_scheme_id: str
-    enrolment_status: EnrolmentStatus
+    scheme_id: str
+    status: EnrolmentStatus
     enrolment_date: Optional[date] = None
     opt_out_date: Optional[date] = None
     opt_out_reference: Optional[str] = None
     postponement_end_date: Optional[date] = None
     re_enrolment_due_date: Optional[date] = None  # 3-yearly
-    employee_contribution_pct: Optional[float] = None  # Override
-    employer_contribution_pct: Optional[float] = None  # Override
+    employee_rate: Optional[float] = None  # Override
+    employer_rate: Optional[float] = None  # Override
     worker_category: Optional[WorkerCategory] = None
+    # Enrolment is recorded internally only — no live pension provider (e.g. NEST) or
+    # Pensions Regulator Declaration of Compliance integration exists yet.
+    enrolment_recorded_locally: bool = True
+    provider_confirmed: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
-    
+
     def to_dict(self) -> dict:
         return {
             "enrolment_id": self.enrolment_id,
             "employee_id": self.employee_id,
             "company_id": self.company_id,
-            "pension_scheme_id": self.pension_scheme_id,
-            "enrolment_status": self.enrolment_status.value if isinstance(self.enrolment_status, EnrolmentStatus) else self.enrolment_status,
+            "scheme_id": self.scheme_id,
+            "status": self.status.value if isinstance(self.status, EnrolmentStatus) else self.status,
             "enrolment_date": self.enrolment_date.isoformat() if self.enrolment_date else None,
             "opt_out_date": self.opt_out_date.isoformat() if self.opt_out_date else None,
             "opt_out_reference": self.opt_out_reference,
             "postponement_end_date": self.postponement_end_date.isoformat() if self.postponement_end_date else None,
             "re_enrolment_due_date": self.re_enrolment_due_date.isoformat() if self.re_enrolment_due_date else None,
-            "employee_contribution_pct": self.employee_contribution_pct,
-            "employer_contribution_pct": self.employer_contribution_pct,
+            "employee_rate": self.employee_rate,
+            "employer_rate": self.employer_rate,
             "worker_category": self.worker_category.value if isinstance(self.worker_category, WorkerCategory) else self.worker_category,
+            "enrolment_recorded_locally": self.enrolment_recorded_locally,
+            "provider_confirmed": self.provider_confirmed,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
@@ -198,8 +204,8 @@ class PensionService:
             provider=provider,
             employer_reference=employer_reference,
             pension_type=PensionSchemeType(pension_type),
-            employer_contribution_pct=employer_contribution_pct,
-            employee_contribution_pct=employee_contribution_pct,
+            employer_rate=employer_contribution_pct,
+            employee_rate=employee_contribution_pct,
             qualifying_basis=QualifyingBasis(qualifying_basis),
             is_default=is_default,
             staging_date=staging_date
@@ -323,12 +329,12 @@ class PensionService:
         
         # Determine action
         if category == WorkerCategory.ELIGIBLE_JOBHOLDER:
-            if not current_enrolment or current_enrolment.get("enrolment_status") in [
+            if not current_enrolment or current_enrolment.get("status") in [
                 EnrolmentStatus.NOT_ELIGIBLE.value, None
             ]:
                 action = "auto_enrol"
                 message = "Employee must be auto-enrolled"
-            elif current_enrolment.get("enrolment_status") == EnrolmentStatus.OPTED_OUT.value:
+            elif current_enrolment.get("status") == EnrolmentStatus.OPTED_OUT.value:
                 # Check if opt-out window has expired (can re-enrol after 3 years)
                 opt_out_date_str = current_enrolment.get("opt_out_date")
                 if opt_out_date_str:
@@ -358,7 +364,7 @@ class PensionService:
             "age": age,
             "annual_earnings": annual_earnings,
             "worker_category": category.value,
-            "current_status": current_enrolment.get("enrolment_status") if current_enrolment else None,
+            "current_status": current_enrolment.get("status") if current_enrolment else None,
             "action": action,
             "message": message
         }
@@ -456,12 +462,12 @@ class PensionService:
             enrolment_id=f"enrol_{uuid.uuid4().hex[:12]}",
             employee_id=employee_id,
             company_id=company_id,
-            pension_scheme_id=scheme["scheme_id"],
-            enrolment_status=EnrolmentStatus.ENROLLED,
+            scheme_id=scheme["scheme_id"],
+            status=EnrolmentStatus.ENROLLED,
             enrolment_date=today,
             re_enrolment_due_date=re_enrolment_date,
-            employee_contribution_pct=employee_contribution_override,
-            employer_contribution_pct=employer_contribution_override,
+            employee_rate=employee_contribution_override,
+            employer_rate=employer_contribution_override,
             worker_category=WorkerCategory.ELIGIBLE_JOBHOLDER
         )
         
@@ -473,36 +479,43 @@ class PensionService:
         else:
             await db.pension_enrolments.insert_one(enrolment.to_dict())
         
-        # Update employee record
+        # Update employee record — recorded internally only. No live pension provider
+        # (e.g. NEST) or Pensions Regulator Declaration of Compliance integration exists
+        # yet, so provider_confirmed stays False until that integration is connected.
         await db.employees.update_one(
             {"employee_id": employee_id},
             {"$set": {
                 "pension_enrolled": True,
                 "pension_scheme_id": scheme["scheme_id"],
-                "pension_enrolment_date": today.isoformat()
+                "pension_enrolment_date": today.isoformat(),
+                "pension_enrolment_recorded_locally": True,
+                "pension_provider_confirmed": False
             }}
         )
 
-        # Send enrolment confirmation email (best-effort)
-        try:
-            emp = await db.employees.find_one({"employee_id": employee_id}, {"_id": 0}) or {}
-            if emp.get("email"):
-                from services.email_service import email_service
-                opt_out_end = (today + timedelta(days=30)).isoformat()
-                await email_service.send_pension_enrolment(
-                    to=emp["email"],
-                    employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
-                    scheme_name=scheme.get("name", scheme.get("scheme_name", "Workplace Pension")),
-                    enrolment_date=today.isoformat(),
-                    employee_contribution_pct=(employee_contribution_override
-                                               or scheme.get("employee_contribution_pct", 5.0)),
-                    employer_contribution_pct=(employer_contribution_override
-                                               or scheme.get("employer_contribution_pct", 3.0)),
-                    opt_out_window_end=opt_out_end,
-                )
-        except Exception as exc:
-            import logging as _logging
-            _logging.getLogger(__name__).warning(f"Pension enrolment email failed: {exc}")
+        # Send enrolment confirmation email (best-effort) — only once a real pension
+        # provider has confirmed enrolment. Until then, sending a "you are enrolled"
+        # email would misrepresent an internal record as a completed legal enrolment.
+        if enrolment.provider_confirmed:
+            try:
+                emp = await db.employees.find_one({"employee_id": employee_id}, {"_id": 0}) or {}
+                if emp.get("email"):
+                    from services.email_service import email_service
+                    opt_out_end = (today + timedelta(days=30)).isoformat()
+                    await email_service.send_pension_enrolment(
+                        to=emp["email"],
+                        employee_name=f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip(),
+                        scheme_name=scheme.get("name", scheme.get("scheme_name", "Workplace Pension")),
+                        enrolment_date=today.isoformat(),
+                        employee_contribution_pct=(employee_contribution_override
+                                                   or scheme.get("employee_rate", 5.0)),
+                        employer_contribution_pct=(employer_contribution_override
+                                                   or scheme.get("employer_rate", 3.0)),
+                        opt_out_window_end=opt_out_end,
+                    )
+            except Exception as exc:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(f"Pension enrolment email failed: {exc}")
 
         return enrolment
     
@@ -536,7 +549,7 @@ class PensionService:
         await db.pension_enrolments.update_one(
             {"employee_id": employee_id, "company_id": company_id},
             {"$set": {
-                "enrolment_status": EnrolmentStatus.OPTED_OUT.value,
+                "status": EnrolmentStatus.OPTED_OUT.value,
                 "opt_out_date": today.isoformat(),
                 "opt_out_reference": opt_out_reference,
                 "updated_at": now.isoformat()
@@ -563,7 +576,7 @@ class PensionService:
         """Get all pension enrolments for a company"""
         query = {"company_id": company_id}
         if status:
-            query["enrolment_status"] = status
+            query["status"] = status
         
         enrolments = await db.pension_enrolments.find(
             query, {"_id": 0}
@@ -605,8 +618,8 @@ class PensionService:
         else:  # pensionable_pay (basic pay)
             pensionable = gross_pay
         
-        employee_pct = scheme.get("employee_contribution_pct", MIN_EMPLOYEE_CONTRIBUTION)
-        employer_pct = scheme.get("employer_contribution_pct", MIN_EMPLOYER_CONTRIBUTION)
+        employee_pct = scheme.get("employee_rate", MIN_EMPLOYEE_CONTRIBUTION)
+        employer_pct = scheme.get("employer_rate", MIN_EMPLOYER_CONTRIBUTION)
         
         employee_contribution = round(pensionable * (employee_pct / 100), 2)
         employer_contribution = round(pensionable * (employer_pct / 100), 2)
@@ -629,48 +642,54 @@ class PensionService:
         """Generate pension contribution report for a pay run"""
         # Get pay run
         pay_run = await db.pay_runs.find_one(
-            {"pay_run_id": pay_run_id, "company_id": company_id},
+            {"payrun_id": pay_run_id, "company_id": company_id},
             {"_id": 0}
         )
-        
+
         if not pay_run:
             raise ValueError("Pay run not found")
-        
+
         # Get default scheme
         scheme = await self.get_default_scheme(company_id)
-        
+
         if not scheme:
             return {
                 "pay_run_id": pay_run_id,
                 "error": "No pension scheme configured"
             }
-        
+
         # Get enrolled employees
         enrolled = await self.get_enrolments(company_id, EnrolmentStatus.ENROLLED.value)
         enrolled_ids = {e["employee_id"] for e in enrolled}
-        
+
         # Calculate contributions for each enrolled employee in pay run
+        payslips = await db.payslips.find({"payrun_id": pay_run_id}, {"_id": 0}).to_list(10000)
         contributions = []
         total_employee = 0
         total_employer = 0
-        
-        for payslip in pay_run.get("payslips", []):
+
+        for payslip in payslips:
             if payslip.get("employee_id") in enrolled_ids:
                 gross = payslip.get("gross_pay", 0)
                 calc = self.calculate_contributions(gross, scheme)
-                
+                emp = await db.employees.find_one(
+                    {"employee_id": payslip["employee_id"]},
+                    {"first_name": 1, "last_name": 1, "_id": 0}
+                )
+                employee_name = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip() if emp else ""
+
                 contributions.append({
                     "employee_id": payslip["employee_id"],
-                    "employee_name": payslip.get("employee_name", ""),
+                    "employee_name": employee_name,
                     **calc
                 })
-                
+
                 total_employee += calc["employee_contribution"]
                 total_employer += calc["employer_contribution"]
-        
+
         return {
             "pay_run_id": pay_run_id,
-            "period": pay_run.get("period"),
+            "period": f"{pay_run.get('period_start', '')} - {pay_run.get('period_end', '')}",
             "scheme_name": scheme["scheme_name"],
             "provider": scheme["provider"],
             "employee_contributions_total": round(total_employee, 2),

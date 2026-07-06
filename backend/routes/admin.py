@@ -246,3 +246,66 @@ async def verify_danger_zone(body: ReauthRequest, user: CurrentUser = Depends(re
     if not ok:
         raise HTTPException(status_code=403, detail="Incorrect password.")
     return {"verified": True}
+
+
+# ---------------------------------------------------------------------------
+# Payroll engine status — sandbox / provider / live RTI & pension state
+# ---------------------------------------------------------------------------
+
+@router.get("/payroll-engine-status")
+async def get_payroll_engine_status(user: CurrentUser = Depends(require_admin_role)):
+    """
+    Status of the payroll/RTI/pension safety engine for this company.
+
+    Reflects whether live HMRC RTI submission and pension provider integration
+    are enabled — both default off until a real embedded payroll provider or
+    HMRC Gateway integration is connected.
+    """
+    from feature_flags import get_all_flags
+    from services.rti_sync_service import rti_sync_engine
+
+    flags = await get_all_flags()
+    company_id = user.company_id
+
+    last_error = None
+    last_live_submission = None
+    last_simulated = None
+    if company_id:
+        last_error = await db.rti_submissions.find_one(
+            {"company_id": company_id, "status": {"$in": ["error", "rejected", "validation_failed"]}},
+            {"_id": 0, "submission_id": 1, "status": 1, "created_at": 1, "submission_type": 1},
+            sort=[("created_at", -1)]
+        )
+        last_live_submission = await db.rti_receipts.find_one(
+            {"company_id": company_id, "is_simulated": False},
+            {"_id": 0, "submission_id": 1, "created_at": 1},
+            sort=[("created_at", -1)]
+        )
+        last_simulated = await db.rti_submissions.find_one(
+            {"company_id": company_id, "is_simulated": True},
+            {"_id": 0, "submission_id": 1, "created_at": 1, "submission_type": 1},
+            sort=[("created_at", -1)]
+        )
+
+    live_rti_enabled = rti_sync_engine._feature_flags["live_submission"] and rti_sync_engine.mode.value == "live"
+
+    if live_rti_enabled and flags["payroll_embedded_provider"]:
+        current_mode = "live-enabled"
+    elif flags["payroll_embedded_provider"]:
+        current_mode = "provider-connected"
+    else:
+        current_mode = "sandbox"
+
+    return {
+        "payroll_native_sandbox_active": flags["payroll_native_sandbox"],
+        "embedded_provider_connected": flags["payroll_embedded_provider"],
+        "live_rti_enabled": live_rti_enabled,
+        "pension_integration_enabled": flags["pension_integration_enabled"],
+        "legacy_hmrc_route_disabled": flags["rti_legacy_hmrc_disabled"],
+        "provider_name": None,
+        "last_provider_sync": None,
+        "last_live_submission": last_live_submission,
+        "last_simulated_submission": last_simulated,
+        "last_error": last_error,
+        "current_mode": current_mode,
+    }

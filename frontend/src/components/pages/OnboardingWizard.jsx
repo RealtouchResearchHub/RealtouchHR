@@ -417,7 +417,7 @@ export default function OnboardingWizard() {
                                     <h3 className="font-semibold mb-3">Explore what's next:</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {[
-                                            { label: 'HMRC RTI submissions', desc: 'Submit FPS/EPS to HMRC', href: '/hmrc' },
+                                            { label: 'RTI Sync', desc: 'Prepare FPS/EPS for HMRC (manual submission for now)', href: '/rti-sync' },
                                             { label: 'UKVI compliance', desc: 'Track visas + sponsor licence', href: '/ukvi' },
                                             { label: 'Statutory Pay', desc: 'SSP/SMP/SPP/ShPP/SAP calculators', href: '/statutory' },
                                             { label: 'Time & Scheduling', desc: 'Clock-ins, shifts, timesheets', href: '/time-tracking' },

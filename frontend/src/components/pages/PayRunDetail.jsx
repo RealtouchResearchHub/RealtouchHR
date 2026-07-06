@@ -342,11 +342,11 @@ export default function PayRunDetail() {
                     <div className="flex flex-wrap gap-3">
                         <Button variant="outline" onClick={handleExportFPS} data-testid="export-fps-btn">
                             <Download className="w-4 h-4 mr-2" />
-                            FPS (Full Payment Submission)
+                            Export FPS data (CSV)
                         </Button>
                         <Button variant="outline" onClick={handleExportEPS} data-testid="export-eps-btn">
                             <Download className="w-4 h-4 mr-2" />
-                            EPS (Employer Payment Summary)
+                            Export EPS data (CSV)
                         </Button>
                         <Button variant="outline" onClick={handleExportP32} data-testid="export-p32-btn">
                             <Download className="w-4 h-4 mr-2" />

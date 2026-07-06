@@ -378,7 +378,7 @@ export default function BillingPage() {
                                 {billing?.current_plan?.id === 'starter' && (
                                     <div className="mt-2 p-2 rounded bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100">
                                         <p className="text-xs text-indigo-700 font-medium">Upgrade to Professional for enhanced UKVI compliance</p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Professional (£39/mo) includes full HR analytics, RTI submissions, and unlimited UKVI support. Starter already includes 2 scans/month + PDF/DOCX reports.</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Professional (£39/mo) includes full HR analytics, RTI readiness workflow, and unlimited UKVI support. Starter already includes 2 scans/month + PDF/DOCX reports.</p>
                                         <button
                                             className="mt-1.5 text-xs text-indigo-700 underline font-medium"
                                             onClick={() => document.getElementById('plans-section')?.scrollIntoView({ behavior: 'smooth' })}

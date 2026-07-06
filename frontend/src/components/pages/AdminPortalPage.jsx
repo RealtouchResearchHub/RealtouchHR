@@ -104,7 +104,7 @@ const ROLES = [
 
 const MODULES = [
     { key: 'payroll', label: 'Payroll', desc: 'Pay runs, payslips, PAYE calculations' },
-    { key: 'hmrc_rti', label: 'HMRC RTI', desc: 'Real Time Information FPS/EPS submissions' },
+    { key: 'hmrc_rti', label: 'HMRC RTI', desc: 'Real Time Information FPS/EPS preparation and export; live HMRC transmission requires provider activation' },
     { key: 'ukvi_compliance', label: 'UKVI Compliance', desc: 'Visa tracking, RTW checks, CoS register' },
     { key: 'leave_management', label: 'Leave Management', desc: 'Leave requests, balances, approvals' },
     { key: 'performance', label: 'Performance', desc: 'Appraisals, objectives, reviews' },
@@ -118,7 +118,7 @@ const MODULES = [
 const PREMIUM_FEATURES = [
     { key: 'ukvi_compliance_scanner', label: 'UKVI Compliance Scanner', desc: '2 automated scans per billing month', plans: 'Professional & Enterprise' },
     { key: 'ukvi_report_download', label: 'UKVI Report Downloads', desc: 'PDF/DOCX compliance reports', plans: 'Professional + Enterprise' },
-    { key: 'hmrc_rti', label: 'HMRC RTI Submissions', desc: 'FPS/EPS live submission to HMRC', plans: 'Professional + Enterprise' },
+    { key: 'hmrc_rti', label: 'HMRC RTI Submissions', desc: 'FPS/EPS preparation and export; live HMRC transmission requires provider activation', plans: 'Professional + Enterprise' },
     { key: 'enterprise_multi_entity', label: 'Multi-Entity Support', desc: 'Manage multiple companies', plans: 'Enterprise' },
     { key: 'enterprise_sso', label: 'SSO / SAML', desc: 'Single sign-on via SCIM/SAML', plans: 'Enterprise' },
     { key: 'ai_copilot', label: 'AI Copilot', desc: 'AI-powered HR assistant', plans: 'All plans' },
@@ -138,6 +138,7 @@ export default function AdminPortalPage() {
     const [companyModules, setCompanyModules] = useState([]);
     const [moduleTogglingKey, setModuleTogglingKey] = useState(null);
     const [dangerDialog, setDangerDialog] = useState(null); // { title, desc, action }
+    const [payrollEngineStatus, setPayrollEngineStatus] = useState(null);
 
     const token = () => authToken;
 
@@ -145,18 +146,20 @@ export default function AdminPortalPage() {
         setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token()}` };
-            const [uRes, iRes, aRes, sRes, mRes] = await Promise.all([
+            const [uRes, iRes, aRes, sRes, mRes, peRes] = await Promise.all([
                 axios.get(`${API_URL}/api/users`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/users/invites`, { headers, withCredentials: true }),
                 axios.get(`${API_URL}/api/enterprise/audit-log?limit=50`, { headers, withCredentials: true }).catch(() => ({ data: { audit_log: [] } })),
                 axios.get(`${API_URL}/api/company/security-policy`, { headers, withCredentials: true }).catch(() => null),
                 axios.get(`${API_URL}/api/admin/modules`, { headers, withCredentials: true }).catch(() => ({ data: { modules: [] } })),
+                axios.get(`${API_URL}/api/admin/payroll-engine-status`, { headers, withCredentials: true }).catch(() => null),
             ]);
             setUsers(uRes.data.users || []);
             setInvites(iRes.data.invites || []);
             setAuditLog(aRes.data.audit_log || aRes.data.logs || []);
             if (sRes) setSecurityPolicy(sRes.data);
             setCompanyModules(mRes.data.modules || []);
+            if (peRes) setPayrollEngineStatus(peRes.data);
         } catch (err) {
             toast.error(err.response?.data?.detail || 'Failed to load admin data');
         } finally {
@@ -519,6 +522,41 @@ export default function AdminPortalPage() {
 
                     {/* MODULES & FEATURES TAB */}
                     <TabsContent value="modules">
+                        {payrollEngineStatus && (
+                            <Card className="mb-4 border-amber-200">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-base">
+                                        <Package className="w-4 h-4" /> Payroll Engine Status
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Live HMRC RTI submission and pension provider integration are disabled by default until a real
+                                        embedded payroll provider or HMRC Gateway integration is connected.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                        {[
+                                            { label: 'Native sandbox mode', value: payrollEngineStatus.payroll_native_sandbox_active },
+                                            { label: 'Embedded provider connected', value: payrollEngineStatus.embedded_provider_connected },
+                                            { label: 'Live RTI enabled', value: payrollEngineStatus.live_rti_enabled },
+                                            { label: 'Pension integration enabled', value: payrollEngineStatus.pension_integration_enabled },
+                                            { label: 'Legacy HMRC route disabled', value: payrollEngineStatus.legacy_hmrc_route_disabled },
+                                        ].map((row) => (
+                                            <div key={row.label} className="flex items-center justify-between p-3 rounded-lg border">
+                                                <span>{row.label}</span>
+                                                {row.value
+                                                    ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                                    : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-3">
+                                        Current mode: <strong>{payrollEngineStatus.current_mode}</strong>
+                                        {payrollEngineStatus.last_error && ' · Last error recorded'}
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        )}
                         <Card>
                             <CardHeader>
                                 <CardTitle>Modules & Features</CardTitle>
@@ -766,7 +804,7 @@ export default function AdminPortalPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     {[
                                         { label: 'Starter', price: '£29', employees: '10', features: 'Core HR, Payroll, UKVI Scanner' },
-                                        { label: 'Professional', price: '£39', employees: '50', features: '+ HMRC RTI, UKVI Reports, Analytics' },
+                                        { label: 'Professional', price: '£39', employees: '50', features: '+ HMRC RTI-ready exports, UKVI Reports, Analytics' },
                                         { label: 'Enterprise', price: '£129', employees: 'Unlimited', features: '+ Multi-entity, SSO, Dedicated support' },
                                     ].map((plan) => (
                                         <div key={plan.label} className="p-4 rounded-lg border text-center">

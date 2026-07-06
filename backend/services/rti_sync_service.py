@@ -847,6 +847,8 @@ class RTISyncEngine:
                 else RTISubmissionState.ERROR.value
             )
             
+            is_simulated = result.get("is_simulated", self.mode != RTISyncMode.LIVE)
+
             await db.rti_submissions.update_one(
                 {"submission_id": submission_id},
                 {"$set": {
@@ -854,11 +856,13 @@ class RTISyncEngine:
                     "hmrc_correlation_id": receipt.correlation_id,
                     "hmrc_poll_url": receipt.poll_url,
                     "hmrc_response_code": receipt.response_code,
+                    "is_simulated": is_simulated,
+                    "live_submission": not is_simulated,
                     "submitted_at": now.isoformat(),
                     "updated_at": now.isoformat()
                 }}
             )
-            
+
             # Store receipt in immutable ledger
             await db.rti_receipts.insert_one({
                 "receipt_id": f"rcpt_{uuid.uuid4().hex[:12]}",
@@ -870,10 +874,11 @@ class RTISyncEngine:
                 "response_code": receipt.response_code,
                 "response_message": receipt.response_message,
                 "mode": self.mode.value,
+                "is_simulated": is_simulated,
                 "submitted_by": submitted_by,
                 "timestamp": now.isoformat()
             })
-            
+
             # Immutable audit entry
             await self._create_audit_entry(
                 submission_id=submission_id,
@@ -884,14 +889,26 @@ class RTISyncEngine:
                     "correlation_id": receipt.correlation_id,
                     "payload_hash": submission.get("payload_hash"),
                     "mode": self.mode.value,
+                    "is_simulated": is_simulated,
                     "success": result.get("success", False)
                 },
                 immutable=True
             )
-            
+
+            if is_simulated:
+                from feature_flags import log_payroll_event
+                await log_payroll_event(
+                    "rti_sandbox_simulation",
+                    {"submission_id": submission_id, "mode": self.mode.value},
+                    company_id=submission["company_id"],
+                    user_id=submitted_by,
+                )
+
             return {
                 "status": "submitted" if result.get("success") else "error",
                 "submission_id": submission_id,
+                "is_simulated": is_simulated,
+                "live_submission": not is_simulated,
                 "correlation_id": receipt.correlation_id,
                 "poll_url": receipt.poll_url,
                 "mode": self.mode.value,
@@ -934,8 +951,10 @@ class RTISyncEngine:
                 "correlation_id": correlation_id,
                 "poll_url": f"https://test-transaction-engine.tax.service.gov.uk/poll/{correlation_id}",
                 "response_code": "200",
-                "message": f"{submission_type} received by HMRC sandbox. Correlation ID: {correlation_id}",
-                "mode": "sandbox"
+                "message": f"{submission_type} recorded as sandbox simulation — not sent to HMRC. Correlation ID: {correlation_id}",
+                "mode": "sandbox",
+                "is_simulated": True,
+                "live_submission": False
             }
         
         elif self.mode == RTISyncMode.LIVE:
@@ -1000,7 +1019,9 @@ class RTISyncEngine:
                         "response_code": str(response.status_code),
                         "message": hmrc_result.get("message", "Submission processed by HMRC"),
                         "hmrc_qualifier": hmrc_result.get("qualifier"),
-                        "mode": "live"
+                        "mode": "live",
+                        "is_simulated": False,
+                        "live_submission": True
                     }
                 else:
                     return {
@@ -1201,8 +1222,10 @@ class RTISyncEngine:
             return {
                 "status": "accepted",
                 "correlation_id": correlation_id,
-                "message": "Sandbox submission accepted",
-                "mode": "sandbox"
+                "message": "Sandbox simulation accepted — not a real HMRC acceptance",
+                "mode": "sandbox",
+                "is_simulated": True,
+                "live_submission": False
             }
         
         if self.mode != RTISyncMode.LIVE:
@@ -1507,6 +1530,7 @@ async def get_company_rti_settings(company_id: str) -> dict:
         "accounts_office_reference_configured": bool(company.get("accounts_office_reference")),
         "hmrc_credentials_configured": bool(os.environ.get("HMRC_GATEWAY_ID")),
         "rti_mode": rti_sync_engine.mode.value,
+        "is_simulated": rti_sync_engine.mode != RTISyncMode.LIVE,
         "live_submission_enabled": rti_sync_engine._feature_flags["live_submission"],
         "auto_prepare_enabled": rti_sync_engine._feature_flags["auto_prepare"]
     }

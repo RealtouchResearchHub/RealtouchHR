@@ -715,7 +715,7 @@ async def remove_platform_operator(operator_id: str, admin: CurrentUser = Depend
 DEFAULT_FEATURE_FLAGS = [
     {"flag_key": "ukvi_compliance_scanner", "display_name": "UKVI Compliance Scanner", "description": "Allow companies to run UKVI compliance scans"},
     {"flag_key": "ukvi_report_download", "display_name": "UKVI Report Download", "description": "Allow PDF/DOCX report downloads from compliance scans"},
-    {"flag_key": "hmrc_rti", "display_name": "HMRC RTI", "description": "HMRC Real Time Information FPS/EPS submissions"},
+    {"flag_key": "hmrc_rti", "display_name": "HMRC RTI", "description": "HMRC RTI FPS/EPS preparation and export; live transmission requires provider activation (see /super-admin/payroll-engine-status)"},
     {"flag_key": "payroll_processing", "display_name": "Payroll Processing", "description": "Full payroll and pay run processing"},
     {"flag_key": "payslip_paid_download", "display_name": "Payslip Paid Download", "description": "£5 per-payslip PDF download"},
     {"flag_key": "enterprise_multi_entity", "display_name": "Multi-Entity Support", "description": "Multi-company enterprise feature"},
@@ -1121,6 +1121,50 @@ async def get_system_health(admin: CurrentUser = Depends(get_platform_admin)):
             "active_companies": active_companies,
             "active_sessions": active_sessions,
             "audit_events_24h": audit_24h,
+        },
+    }
+
+
+@router.get("/payroll-engine-status")
+async def get_platform_payroll_engine_status(admin: CurrentUser = Depends(get_platform_admin)):
+    """
+    Platform-wide payroll/RTI/pension engine status.
+
+    Live HMRC RTI submission and pension provider integration are disabled
+    platform-wide until a real embedded payroll provider or HMRC Gateway
+    integration is connected and explicitly enabled.
+    """
+    from feature_flags import get_all_flags
+    from services.rti_sync_service import rti_sync_engine
+
+    flags = await get_all_flags()
+
+    total_simulated = await db.rti_submissions.count_documents({"is_simulated": True})
+    total_live = await db.rti_receipts.count_documents({"is_simulated": False})
+    total_legacy_blocked = await db.audit_log.count_documents({"action": "legacy_hmrc_submission_blocked"})
+
+    live_rti_enabled = rti_sync_engine._feature_flags["live_submission"] and rti_sync_engine.mode.value == "live"
+
+    if live_rti_enabled and flags["payroll_embedded_provider"]:
+        current_mode = "live-enabled"
+    elif flags["payroll_embedded_provider"]:
+        current_mode = "provider-connected"
+    else:
+        current_mode = "sandbox"
+
+    return {
+        "payroll_native_sandbox_active": flags["payroll_native_sandbox"],
+        "embedded_provider_connected": flags["payroll_embedded_provider"],
+        "live_rti_enabled": live_rti_enabled,
+        "pension_integration_enabled": flags["pension_integration_enabled"],
+        "legacy_hmrc_route_disabled": flags["rti_legacy_hmrc_disabled"],
+        "provider_name": None,
+        "last_provider_sync": None,
+        "current_mode": current_mode,
+        "totals": {
+            "simulated_rti_submissions": total_simulated,
+            "live_rti_submissions": total_live,
+            "legacy_hmrc_attempts_blocked": total_legacy_blocked,
         },
     }
 

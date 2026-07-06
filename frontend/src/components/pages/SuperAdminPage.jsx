@@ -57,6 +57,7 @@ export default function SuperAdminPage() {
     const [savingSecSettings, setSavingSecSettings] = useState(false);
     const [systemHealth, setSystemHealth]     = useState(null);
     const [healthLoading, setHealthLoading]   = useState(false);
+    const [payrollEngineStatus, setPayrollEngineStatus] = useState(null);
     const [discountUsages, setDiscountUsages] = useState([]);
     const [discountSummary, setDiscountSummary] = useState([]);
     const [emailTpl, setEmailTpl] = useState({ subject: '', html_body: '', from_name: 'RealtouchHR', from_email: '', is_default: true });
@@ -80,7 +81,7 @@ export default function SuperAdminPage() {
     const load = useCallback(async () => {
         setLoading(true);
         const safe = async (promise) => { try { return await promise; } catch (e) { return { error: e }; } };
-        const [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes, paRes, secRes, hlthRes, discRes, tplRes] = await Promise.all([
+        const [mRes, cRes, aRes, pRes, uRes, fRes, opRes, emgRes, paRes, secRes, hlthRes, discRes, tplRes, peRes] = await Promise.all([
             safe(ax('get', '/api/super-admin/metrics')),
             safe(ax('get', '/api/super-admin/companies')),
             safe(ax('get', '/api/super-admin/audit-log?limit=100')),
@@ -94,6 +95,7 @@ export default function SuperAdminPage() {
             safe(ax('get', '/api/super-admin/system/health')),
             safe(ax('get', '/api/super-admin/discount-codes')),
             safe(ax('get', '/api/super-admin/email-templates/welcome')),
+            safe(ax('get', '/api/super-admin/payroll-engine-status')),
         ]);
 
         const firstAuthErr = [mRes, cRes].find(r => r?.error?.response?.status === 403);
@@ -118,6 +120,7 @@ export default function SuperAdminPage() {
             setDesignatedAdmins(secRes.data.designated_admins || []);
         }
         if (!hlthRes.error) setSystemHealth(hlthRes.data);
+        if (!peRes.error) setPayrollEngineStatus(peRes.data);
         if (!discRes.error) {
             setDiscountUsages(discRes.data.usages || []);
             setDiscountSummary(discRes.data.summary || []);
@@ -326,8 +329,12 @@ export default function SuperAdminPage() {
     const refreshHealth = async () => {
         setHealthLoading(true);
         try {
-            const res = await ax('get', '/api/super-admin/system/health');
+            const [res, peRes] = await Promise.all([
+                ax('get', '/api/super-admin/system/health'),
+                ax('get', '/api/super-admin/payroll-engine-status').catch(() => null),
+            ]);
             setSystemHealth(res.data);
+            if (peRes) setPayrollEngineStatus(peRes.data);
         } catch { toast.error('Failed to refresh health'); }
         finally { setHealthLoading(false); }
     };
@@ -1095,6 +1102,36 @@ export default function SuperAdminPage() {
                                         );
                                     })}
                                 </div>
+
+                                {payrollEngineStatus && (
+                                    <Card className="p-4 border-amber-200">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Server className="w-4 h-4 text-muted-foreground" />
+                                            <span className="font-medium text-sm">Payroll Engine Status</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mb-3">
+                                            Live HMRC RTI submission and pension provider integration are disabled platform-wide until a
+                                            real embedded payroll provider or HMRC Gateway integration is connected.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                            {[
+                                                ['Native sandbox mode', payrollEngineStatus.payroll_native_sandbox_active],
+                                                ['Embedded provider connected', payrollEngineStatus.embedded_provider_connected],
+                                                ['Live RTI enabled', payrollEngineStatus.live_rti_enabled],
+                                                ['Pension integration enabled', payrollEngineStatus.pension_integration_enabled],
+                                                ['Legacy HMRC route disabled', payrollEngineStatus.legacy_hmrc_route_disabled],
+                                            ].map(([label, val]) => (
+                                                <div key={label} className="flex items-center justify-between p-2 rounded border">
+                                                    <span>{label}</span>
+                                                    {val ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-3">
+                                            Current mode: <strong>{payrollEngineStatus.current_mode}</strong> · Simulated submissions: {payrollEngineStatus.totals?.simulated_rti_submissions ?? 0} · Live submissions: {payrollEngineStatus.totals?.live_rti_submissions ?? 0} · Legacy attempts blocked: {payrollEngineStatus.totals?.legacy_hmrc_attempts_blocked ?? 0}
+                                        </p>
+                                    </Card>
+                                )}
 
                                 <p className="text-xs text-muted-foreground text-right">
                                     Last refreshed: {new Date(systemHealth.timestamp).toLocaleString()}

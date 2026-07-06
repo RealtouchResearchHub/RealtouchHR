@@ -63,7 +63,7 @@ export default function YearEndPage() {
                 <div>
                     <h1 className="text-3xl font-bold font-['Plus_Jakarta_Sans']">Year-End Close</h1>
                     <p className="text-muted-foreground mt-1">
-                        Finalize FPS, generate P60s and queue the EPS submission for HMRC.
+                        Finalize FPS, generate P60s and prepare EPS data/export for HMRC workflow. Live HMRC submission is not yet enabled.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -177,7 +177,7 @@ export default function YearEndPage() {
                                             Year-end {closeResult.tax_year} closed
                                         </p>
                                         <p className="text-sm text-emerald-800 dark:text-emerald-200 mt-1">
-                                            {closeResult.p60_queued} P60s queued · EPS submission {closeResult.eps_id} created
+                                            {closeResult.p60_queued} P60s queued · EPS {closeResult.eps_id} created (local/simulated record)
                                             {closeResult.final_fps_marked && ' · last FPS marked as final'}
                                         </p>
                                     </div>

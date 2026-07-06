@@ -170,7 +170,7 @@ SUBSCRIPTION_PLANS = {
         "features": [
             "Up to 50 employees",
             "Full HR suite",
-            "Payroll + HMRC RTI submissions",
+            "Payroll + HMRC RTI-ready exports",
             "2 UKVI compliance scans/month",
             "UKVI compliance report downloads",
             "Payslip preview (free)",

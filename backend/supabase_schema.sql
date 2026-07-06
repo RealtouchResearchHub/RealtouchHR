@@ -1479,3 +1479,65 @@ alter table if exists er_cases add column if not exists events           jsonb d
 alter table if exists er_cases add column if not exists documents        jsonb default '[]';
 alter table if exists er_cases add column if not exists created_by       text;
 alter table if exists er_cases add column if not exists created_by_name  text;
+
+-- RTI sandbox/live labeling — lets the app distinguish a sandbox simulation
+-- from a real HMRC Gateway/embedded-provider submission, instead of relying
+-- on the "submitted"/"accepted" status alone.
+alter table if exists rti_submissions add column if not exists is_simulated        boolean default true;
+alter table if exists rti_submissions add column if not exists submission_channel  text;
+alter table if exists rti_submissions add column if not exists live_submission     boolean default false;
+alter table if exists rti_receipts    add column if not exists is_simulated        boolean default true;
+
+-- rti_submissions/rti_receipts: application code has always looked submissions up
+-- by "submission_id" (the app-generated ID, e.g. "rti_xxxx"), but that column was
+-- missing from the original schema (only the internal record_id PK existed) —
+-- every lookup by submission_id crashed with "column does not exist". Backfilling
+-- it here since it is required for both the legacy HMRC routes and the RTI Sync
+-- engine's prepare/approve/submit/poll flow to function at all.
+alter table if exists rti_submissions add column if not exists submission_id text;
+create index if not exists rti_submissions_submission_id_idx on rti_submissions(submission_id);
+create index if not exists rti_receipts_submission_id_idx on rti_receipts(submission_id);
+
+-- pay_runs: sandbox-simulated RTI submission marker, separate from a real
+-- rti_submitted flag (which must only ever be set by a live response).
+alter table if exists pay_runs add column if not exists rti_submitted             boolean default false;
+alter table if exists pay_runs add column if not exists rti_submission_simulated  boolean default false;
+alter table if exists pay_runs add column if not exists rti_submission_id         text;
+alter table if exists pay_runs add column if not exists rti_correlation_id        text;
+
+-- pension_enrolments / employees: pension enrolment is recorded internally only
+-- until a real pension provider / Pensions Regulator integration exists.
+alter table if exists pension_enrolments add column if not exists enrolment_recorded_locally  boolean default true;
+alter table if exists pension_enrolments add column if not exists provider_confirmed          boolean default false;
+alter table if exists employees add column if not exists pension_enrolment_recorded_locally   boolean default true;
+alter table if exists employees add column if not exists pension_provider_confirmed           boolean default false;
+
+-- pension_schemes: application code has always used scheme_id (external ID) and
+-- several metadata fields that were missing from the original schema — filtering
+-- by scheme_id or is_default crashed with "column does not exist", meaning
+-- get_default_scheme()/update_scheme() (and therefore the whole enrol_employee()
+-- flow) could never actually run.
+alter table if exists pension_schemes add column if not exists scheme_id          text;
+alter table if exists pension_schemes add column if not exists is_default        boolean default false;
+alter table if exists pension_schemes add column if not exists pension_type      text;
+alter table if exists pension_schemes add column if not exists qualifying_basis  text;
+alter table if exists pension_schemes add column if not exists employer_reference text;
+alter table if exists pension_schemes add column if not exists staging_date      date;
+create index if not exists pension_schemes_scheme_id_idx on pension_schemes(scheme_id);
+
+-- pension_enrolments: same pattern — enrolment_id (external ID) and several
+-- compliance-relevant fields (opt-out audit trail, re-enrolment due date, worker
+-- category, cessation on offboarding) were missing from the original schema.
+alter table if exists pension_enrolments add column if not exists enrolment_id          text;
+alter table if exists pension_enrolments add column if not exists opt_out_reference     text;
+alter table if exists pension_enrolments add column if not exists postponement_end_date date;
+alter table if exists pension_enrolments add column if not exists re_enrolment_due_date date;
+alter table if exists pension_enrolments add column if not exists worker_category       text;
+alter table if exists pension_enrolments add column if not exists updated_at            timestamptz;
+alter table if exists pension_enrolments add column if not exists cessation_date        text;
+alter table if exists pension_enrolments add column if not exists cessation_reason      text;
+create index if not exists pension_enrolments_enrolment_id_idx on pension_enrolments(enrolment_id);
+
+-- employees: link back to the scheme an employee was enrolled into (set by
+-- enrol_employee(), was previously silently dropped — no such column existed).
+alter table if exists employees add column if not exists pension_scheme_id text;

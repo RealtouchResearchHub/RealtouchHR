@@ -83,7 +83,7 @@ export default function LandingPage() {
 
                 <div className="relative">
                     <Badge className="mb-6 bg-white/10 hover:bg-white/15 border border-white/20 backdrop-blur" data-testid="landing-hero-badge">
-                        <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Tax year 2025-26 ready. HMRC RTI. UKVI.
+                        <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Tax year 2025-26 ready. HMRC RTI-ready exports. UKVI.
                     </Badge>
                     <h1 className="text-5xl md:text-7xl font-bold tracking-tight max-w-4xl leading-[1.05]" data-testid="landing-hero-title">
                         UK Payroll, HR &{' '}
@@ -92,7 +92,7 @@ export default function LandingPage() {
                         </span>
                     </h1>
                     <p className="mt-6 text-lg md:text-xl text-white/85 max-w-2xl leading-relaxed">
-                        HMRC RTI readiness support, UKVI compliance support, statutory pay calculators
+                        RTI readiness workflow, UKVI compliance support, statutory pay calculators
                         and payroll all in one place. RealtouchHR replaces spreadsheets and
                         consultants for under £29/month.
                     </p>
@@ -152,7 +152,7 @@ export default function LandingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {[
                         { icon: Users, title: 'HR and Self-Service', desc: 'Employee records, leave, documents and onboarding. Role-based access and a full audit log included.' },
-                        { icon: PoundSterling, title: 'Payroll', desc: 'PAYE, NI, pension and student loans (Plans 1/2/4/5 + Postgrad). Payslip PDFs and HMRC RTI/FPS readiness support.' },
+                        { icon: PoundSterling, title: 'Payroll', desc: 'PAYE, NI, pension and student loans (Plans 1/2/4/5 + Postgrad). Payslip PDFs and FPS/EPS preparation and export; live HMRC transmission requires provider activation.' },
                         { icon: ShieldCheck, title: 'UKVI Compliance Support', desc: 'Right-to-Work evidence capture, visa expiry alerts, CoS tracking and salary threshold compliance reminders.' },
                         { icon: HeartPulse, title: 'Statutory Payments', desc: 'SSP, SMP, SPP, ShPP and SAP calculators with 92% and 103% recovery rates.' },
                         { icon: FileCheck2, title: 'P45, P60 and P11D', desc: 'Tax documents generated automatically at offboarding, on demand or at year end.' },
@@ -184,7 +184,7 @@ export default function LandingPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
                     {[
-                        { name: 'Starter', price: 29, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI', 'UKVI checks', 'Email support'] },
+                        { name: 'Starter', price: 29, employees: '10', features: ['Core HR + Payroll', 'HMRC RTI-ready exports', 'UKVI checks', 'Email support'] },
                         { name: 'Professional', price: 39, employees: '50', featured: true, features: ['Everything in Starter', 'Statutory pay automation', 'HR Assistant', 'Priority chat support'] },
                         { name: 'Enterprise', price: 129, employees: 'Unlimited', features: ['Multi-entity', 'SCIM/SAML SSO', 'Dedicated CSM', 'Sponsor licence health'] },
                     ].map((p) => (
@@ -246,7 +246,7 @@ export default function LandingPage() {
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                             {[
-                                'HMRC RTI/FPS/EPS readiness support', 'UKVI compliance support & alerts',
+                                'FPS/EPS preparation and export (live HMRC transmission requires provider activation)', 'UKVI compliance support & alerts',
                                 'Right-to-Work evidence capture', 'GDPR-grade audit log',
                                 'P45/P60/P11D auto-generation', '7-year HMRC record retention',
                             ].map((c) => (

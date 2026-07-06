@@ -700,8 +700,8 @@ DEFAULT_WELCOME_HTML_BODY = """\
                 <td width="48%" valign="top" style="padding:0 0 16px 8px;">
                   <div style="background:#f0fdf4;border-radius:10px;padding:18px;">
                     <p style="font-size:22px;margin:0 0 8px 0;">💰</p>
-                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">HMRC-Ready Payroll</p>
-                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Run payroll, generate payslips and submit RTI directly to HMRC — all from one screen.</p>
+                    <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px 0;">HMRC RTI-Ready Payroll</p>
+                    <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">Run payroll, generate payslips and prepare FPS/EPS for HMRC — all from one screen.</p>
                   </div>
                 </td>
               </tr>

@@ -211,7 +211,11 @@ export default function HMRCSubmissionPage() {
       const result = await response.json();
       
       if (response.ok && result.status === 'submitted') {
-        toast.success(`Submitted to HMRC (${result.mode}). Correlation ID: ${result.correlation_id}`);
+        if (result.is_simulated) {
+          toast.success(`Recorded as sandbox simulation — not sent to HMRC. Correlation ID: ${result.correlation_id}`);
+        } else {
+          toast.success(`Submitted to HMRC (LIVE). Correlation ID: ${result.correlation_id}`);
+        }
         setWizardStep(6);
         fetchData();
       } else {
@@ -288,11 +292,10 @@ export default function HMRCSubmissionPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-            status?.engine_mode === 'live' ? 'bg-green-100 text-green-800' :
-            status?.engine_mode === 'sandbox' ? 'bg-amber-100 text-amber-800' :
-            'bg-gray-100 text-gray-800'
+            status?.live_submission ? 'bg-green-100 text-green-800' :
+            'bg-amber-100 text-amber-800'
           }`}>
-            {status?.engine_mode?.toUpperCase()} Mode
+            {status?.live_submission ? 'LIVE Mode' : 'Sandbox / Simulated — Not sent to HMRC'}
           </span>
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="h-4 w-4" />
@@ -305,10 +308,13 @@ export default function HMRCSubmissionPage() {
         <Info className="h-4 w-4 text-blue-600" />
         <AlertTitle className="text-blue-800 dark:text-blue-200">RTI Compliance Information</AlertTitle>
         <AlertDescription className="text-blue-700 dark:text-blue-300">
-          <p className="mb-2">This software is <strong>HMRC RTI-compatible</strong> and <strong>HMRC-aligned</strong>.</p>
+          <p className="mb-2">
+            HMRC does not endorse, approve or certify payroll software. Compliance is the employer's legal
+            responsibility. All live submissions require explicit approval and a connected live payroll
+            provider or HMRC integration.
+          </p>
           <ul className="text-sm space-y-1 list-disc ml-4">
-            <li>HMRC does not endorse, approve, or certify payroll software</li>
-            <li>Compliance with RTI regulations is the employer's legal responsibility</li>
+            <li>{status?.live_submission ? 'Live submission is currently enabled for this account' : 'Live HMRC submission is not yet enabled — this is sandbox/test mode'}</li>
             <li>All submissions require explicit human approval</li>
             <li>Submission receipts and audit trails are retained for your records</li>
           </ul>
@@ -579,11 +585,15 @@ export default function HMRCSubmissionPage() {
                 <CardTitle className="flex items-center gap-2 text-green-600"><CheckCircle className="h-6 w-6" />Submission Complete</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Alert className="bg-green-50 border-green-200">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <AlertTitle className="text-green-800">FPS Submitted Successfully</AlertTitle>
-                  <AlertDescription className="text-green-700">
-                    Your FPS has been sent to HMRC.{status?.engine_mode === 'sandbox' && ' (Sandbox Mode)'}
+                <Alert className={status?.live_submission ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}>
+                  <CheckCircle className={`h-4 w-4 ${status?.live_submission ? 'text-green-600' : 'text-amber-600'}`} />
+                  <AlertTitle className={status?.live_submission ? 'text-green-800' : 'text-amber-800'}>
+                    {status?.live_submission ? 'FPS Submitted to HMRC' : 'Recorded as Sandbox Simulation'}
+                  </AlertTitle>
+                  <AlertDescription className={status?.live_submission ? 'text-green-700' : 'text-amber-700'}>
+                    {status?.live_submission
+                      ? 'Your FPS has been sent to HMRC live systems.'
+                      : 'This was a sandbox simulation — not sent to live HMRC systems. Live RTI requires embedded payroll provider activation.'}
                   </AlertDescription>
                 </Alert>
                 <Button onClick={() => { setWizardStep(1); setSelectedPayRun(null); setSelectedSubmission(null); setHealthCheck(null); setAcknowledgeDisclaimer(false); }} className="w-full">
